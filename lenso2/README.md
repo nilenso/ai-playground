@@ -40,29 +40,16 @@ CF_APP_TOKEN=your_app_token
 
 Get these from your [Cloudflare Dashboard](https://dash.cloudflare.com/) → Calls → Your App → Settings.
 
-## Run
+## Scripts
 
-```bash
-bun run start
-```
+| Command | Description |
+|---------|-------------|
+| `bun run start` | Start the production server |
+| `bun run dev` | Start development server with watch mode |
+| `bun run tunnel` | Expose local server via Cloudflare Tunnel (HTTPS) |
+| `bun run lint` | Run Biome CI checks (formatting + linting) |
 
-## Development
-
-```bash
-bun run dev
-```
-
-## Cloudflare Tunnel
-
-WebRTC requires HTTPS in production. To expose your local server publicly during development:
-
-```bash
-bun run tunnel
-```
-
-This creates a public HTTPS URL via Cloudflare Tunnel, useful for testing on mobile devices or sharing with others.
-
-> **Note**: `cloudflared` is included in the Nix shell. Alternatively, install it via `brew install cloudflared` (macOS) or see [Cloudflare docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
+> **Note**: `cloudflared` (for tunnel) is included in the Nix shell. Alternatively, install it via `brew install cloudflared` (macOS) or see [Cloudflare docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
 
 ## Tech Stack
 

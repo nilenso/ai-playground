@@ -1,124 +1,128 @@
-import { Hono } from 'hono'
-import { createBunWebSocket } from 'hono/bun'
-import type { WSContext } from 'hono/ws'
+import { Hono } from "hono";
+import { createBunWebSocket } from "hono/bun";
+import type { WSContext } from "hono/ws";
 
-const { upgradeWebSocket, websocket } = createBunWebSocket()
+const { upgradeWebSocket, websocket } = createBunWebSocket();
 
 // Cloudflare Calls credentials from environment
-const CF_APP_ID = process.env.CF_APP_ID || ''
-const CF_APP_TOKEN = process.env.CF_APP_TOKEN || ''
-const CF_API_BASE = `https://rtc.live.cloudflare.com/v1/apps/${CF_APP_ID}`
+const CF_APP_ID = process.env.CF_APP_ID || "";
+const CF_APP_TOKEN = process.env.CF_APP_TOKEN || "";
+const CF_API_BASE = `https://rtc.live.cloudflare.com/v1/apps/${CF_APP_ID}`;
 
 if (!CF_APP_ID || !CF_APP_TOKEN) {
-  console.warn('Warning: CF_APP_ID and CF_APP_TOKEN not set. Cloudflare Calls will not work.')
+	console.warn("Warning: CF_APP_ID and CF_APP_TOKEN not set. Cloudflare Calls will not work.");
 }
 
-const app = new Hono()
+const app = new Hono();
 
 // Store connected peers - keyed by peerId, not ws internals
 interface Peer {
-  id: string
-  ws: WSContext
-  sessionId?: string
-  trackNames: string[]
+	id: string;
+	ws: WSContext;
+	sessionId?: string;
+	trackNames: string[];
 }
 
-const peers = new Map<string, Peer>()
-const wsToId = new WeakMap<WSContext, string>() // Map WSContext to peerId
+const peers = new Map<string, Peer>();
+const wsToId = new WeakMap<WSContext, string>(); // Map WSContext to peerId
 
 // Cloudflare Calls API helpers
 async function cfFetch(endpoint: string, method: string, body?: unknown) {
-  const res = await fetch(`${CF_API_BASE}${endpoint}`, {
-    method,
-    headers: {
-      'Authorization': `Bearer ${CF_APP_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    console.error('Cloudflare API error:', data)
-    throw new Error(`CF API error: ${res.status}`)
-  }
-  return data
+	const res = await fetch(`${CF_API_BASE}${endpoint}`, {
+		method,
+		headers: {
+			Authorization: `Bearer ${CF_APP_TOKEN}`,
+			"Content-Type": "application/json",
+		},
+		body: body ? JSON.stringify(body) : undefined,
+	});
+	const data = await res.json();
+	if (!res.ok) {
+		console.error("Cloudflare API error:", data);
+		throw new Error(`CF API error: ${res.status}`);
+	}
+	return data;
 }
 
 async function createSession(): Promise<string> {
-  const data = await cfFetch('/sessions/new', 'POST')
-  return data.sessionId
+	const data = await cfFetch("/sessions/new", "POST");
+	return data.sessionId;
 }
 
-async function pushTracks(sessionId: string, offer: RTCSessionDescriptionInit, tracks: { location: string, trackName: string }[]) {
-  const data = await cfFetch(`/sessions/${sessionId}/tracks/new`, 'POST', {
-    sessionDescription: { type: 'offer', sdp: offer.sdp },
-    tracks,
-  })
-  return data
+async function pushTracks(
+	sessionId: string,
+	offer: RTCSessionDescriptionInit,
+	tracks: { location: string; trackName: string }[],
+) {
+	const data = await cfFetch(`/sessions/${sessionId}/tracks/new`, "POST", {
+		sessionDescription: { type: "offer", sdp: offer.sdp },
+		tracks,
+	});
+	return data;
 }
 
-async function pullTracks(sessionId: string, tracks: { location: string, trackName: string, sessionId: string }[]) {
-  const data = await cfFetch(`/sessions/${sessionId}/tracks/new`, 'POST', {
-    tracks,
-  })
-  return data
+async function pullTracks(sessionId: string, tracks: { location: string; trackName: string; sessionId: string }[]) {
+	const data = await cfFetch(`/sessions/${sessionId}/tracks/new`, "POST", {
+		tracks,
+	});
+	return data;
 }
 
 async function renegotiate(sessionId: string, sdp: string) {
-  const data = await cfFetch(`/sessions/${sessionId}/renegotiate`, 'PUT', {
-    sessionDescription: { type: 'answer', sdp },
-  })
-  return data
+	const data = await cfFetch(`/sessions/${sessionId}/renegotiate`, "PUT", {
+		sessionDescription: { type: "answer", sdp },
+	});
+	return data;
 }
 
 // API endpoints for Cloudflare Calls
-app.post('/api/session/new', async (c) => {
-  try {
-    const sessionId = await createSession()
-    return c.json({ sessionId })
-  } catch (e) {
-    return c.json({ error: 'Failed to create session' }, 500)
-  }
-})
+app.post("/api/session/new", async (c) => {
+	try {
+		const sessionId = await createSession();
+		return c.json({ sessionId });
+	} catch (_e) {
+		return c.json({ error: "Failed to create session" }, 500);
+	}
+});
 
-app.post('/api/session/:sessionId/push', async (c) => {
-  try {
-    const { sessionId } = c.req.param()
-    const { offer, tracks } = await c.req.json()
-    const result = await pushTracks(sessionId, offer, tracks)
-    return c.json(result)
-  } catch (e) {
-    console.error('Push tracks error:', e)
-    return c.json({ error: 'Failed to push tracks' }, 500)
-  }
-})
+app.post("/api/session/:sessionId/push", async (c) => {
+	try {
+		const { sessionId } = c.req.param();
+		const { offer, tracks } = await c.req.json();
+		const result = await pushTracks(sessionId, offer, tracks);
+		return c.json(result);
+	} catch (e) {
+		console.error("Push tracks error:", e);
+		return c.json({ error: "Failed to push tracks" }, 500);
+	}
+});
 
-app.post('/api/session/:sessionId/pull', async (c) => {
-  try {
-    const { sessionId } = c.req.param()
-    const { tracks } = await c.req.json()
-    const result = await pullTracks(sessionId, tracks)
-    return c.json(result)
-  } catch (e) {
-    console.error('Pull tracks error:', e)
-    return c.json({ error: 'Failed to pull tracks' }, 500)
-  }
-})
+app.post("/api/session/:sessionId/pull", async (c) => {
+	try {
+		const { sessionId } = c.req.param();
+		const { tracks } = await c.req.json();
+		const result = await pullTracks(sessionId, tracks);
+		return c.json(result);
+	} catch (e) {
+		console.error("Pull tracks error:", e);
+		return c.json({ error: "Failed to pull tracks" }, 500);
+	}
+});
 
-app.put('/api/session/:sessionId/renegotiate', async (c) => {
-  try {
-    const { sessionId } = c.req.param()
-    const { sdp } = await c.req.json()
-    const result = await renegotiate(sessionId, sdp)
-    return c.json(result)
-  } catch (e) {
-    console.error('Renegotiate error:', e)
-    return c.json({ error: 'Failed to renegotiate' }, 500)
-  }
-})
+app.put("/api/session/:sessionId/renegotiate", async (c) => {
+	try {
+		const { sessionId } = c.req.param();
+		const { sdp } = await c.req.json();
+		const result = await renegotiate(sessionId, sdp);
+		return c.json(result);
+	} catch (e) {
+		console.error("Renegotiate error:", e);
+		return c.json({ error: "Failed to renegotiate" }, 500);
+	}
+});
 
-app.get('/', (c) => {
-  return c.html(`
+app.get("/", (c) => {
+	return c.html(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -581,78 +585,83 @@ app.get('/', (c) => {
   </script>
 </body>
 </html>
-  `)
-})
+  `);
+});
 
-// WebSocket signaling endpoint  
-app.get('/ws', upgradeWebSocket((c) => {
-  const id = crypto.randomUUID()
-  
-  return {
-    onOpen(event, ws) {
-      // Store mapping from ws to id using WeakMap (no mutation of ws.raw.data)
-      wsToId.set(ws, id)
-      
-      ws.send(JSON.stringify({ type: 'welcome', id }))
-      console.log(`Peer ${id} connected.`)
-    },
-    
-    onMessage(event, ws) {
-      const peerId = wsToId.get(ws)
-      if (!peerId) return
-      
-      const data = JSON.parse(event.data.toString())
-      
-      if (data.type === 'join') {
-        const peer: Peer = {
-          id: peerId,
-          ws,
-          sessionId: data.sessionId,
-          trackNames: data.tracks || [],
-        }
-        
-        // Send existing peers to new peer
-        const existingPeers = Array.from(peers.values()).map(p => ({
-          id: p.id,
-          sessionId: p.sessionId,
-          tracks: p.trackNames,
-        }))
-        
-        if (existingPeers.length > 0) {
-          ws.send(JSON.stringify({ type: 'existing-peers', peers: existingPeers }))
-        }
-        
-        // Notify existing peers about new peer
-        peers.forEach((p) => {
-          p.ws.send(JSON.stringify({
-            type: 'peer-joined',
-            id: peerId,
-            sessionId: data.sessionId,
-            tracks: data.tracks,
-          }))
-        })
-        
-        peers.set(peerId, peer)
-        console.log(`Peer ${peerId} joined with session ${data.sessionId}. Total peers: ${peers.size}`)
-      }
-    },
-    
-    onClose(event, ws) {
-      const peerId = wsToId.get(ws)
-      if (peerId) {
-        peers.delete(peerId)
-        
-        peers.forEach((p) => {
-          p.ws.send(JSON.stringify({ type: 'peer-left', id: peerId }))
-        })
-        
-        console.log(`Peer ${peerId} disconnected. Total peers: ${peers.size}`)
-      }
-    }
-  }
-}))
+// WebSocket signaling endpoint
+app.get(
+	"/ws",
+	upgradeWebSocket((_c) => {
+		const id = crypto.randomUUID();
+
+		return {
+			onOpen(_event, ws) {
+				// Store mapping from ws to id using WeakMap (no mutation of ws.raw.data)
+				wsToId.set(ws, id);
+
+				ws.send(JSON.stringify({ type: "welcome", id }));
+				console.log(`Peer ${id} connected.`);
+			},
+
+			onMessage(event, ws) {
+				const peerId = wsToId.get(ws);
+				if (!peerId) return;
+
+				const data = JSON.parse(event.data.toString());
+
+				if (data.type === "join") {
+					const peer: Peer = {
+						id: peerId,
+						ws,
+						sessionId: data.sessionId,
+						trackNames: data.tracks || [],
+					};
+
+					// Send existing peers to new peer
+					const existingPeers = Array.from(peers.values()).map((p) => ({
+						id: p.id,
+						sessionId: p.sessionId,
+						tracks: p.trackNames,
+					}));
+
+					if (existingPeers.length > 0) {
+						ws.send(JSON.stringify({ type: "existing-peers", peers: existingPeers }));
+					}
+
+					// Notify existing peers about new peer
+					peers.forEach((p) => {
+						p.ws.send(
+							JSON.stringify({
+								type: "peer-joined",
+								id: peerId,
+								sessionId: data.sessionId,
+								tracks: data.tracks,
+							}),
+						);
+					});
+
+					peers.set(peerId, peer);
+					console.log(`Peer ${peerId} joined with session ${data.sessionId}. Total peers: ${peers.size}`);
+				}
+			},
+
+			onClose(_event, ws) {
+				const peerId = wsToId.get(ws);
+				if (peerId) {
+					peers.delete(peerId);
+
+					peers.forEach((p) => {
+						p.ws.send(JSON.stringify({ type: "peer-left", id: peerId }));
+					});
+
+					console.log(`Peer ${peerId} disconnected. Total peers: ${peers.size}`);
+				}
+			},
+		};
+	}),
+);
 
 export default {
-  fetch: app.fetch,
-  websocket
-}
+	fetch: app.fetch,
+	websocket,
+};

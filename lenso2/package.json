@@ -5,9 +5,11 @@
   "scripts": {
     "start": "bun run index.ts",
     "dev": "bun --watch index.ts",
-    "tunnel": "cloudflared tunnel --url http://localhost:3000"
+    "tunnel": "cloudflared tunnel --url http://localhost:3000",
+    "lint": "bunx @biomejs/biome ci"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.10",
     "@types/bun": "latest"
   },
   "module": "index.ts",
