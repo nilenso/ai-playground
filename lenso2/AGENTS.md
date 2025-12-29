@@ -159,18 +159,34 @@ app.get('/stream', (c) => {
 ### WebSocket (via Bun adapter)
 
 ```ts
-import { upgradeWebSocket, websocket } from 'hono/bun'
+import { createBunWebSocket } from 'hono/bun'
+import type { WSContext } from 'hono/ws'
 
-app.get('/ws', upgradeWebSocket((c) => ({
-  onMessage(event, ws) {
-    ws.send(`Echo: ${event.data}`)
-  },
-})))
+const { upgradeWebSocket, websocket } = createBunWebSocket()
 
-export default {
-  fetch: app.fetch,
-  websocket,
-}
+// Track state externally - NEVER touch ws.raw.data
+const wsToId = new WeakMap<WSContext, string>()
+const peers = new Map<string, { id: string, ws: WSContext }>()
+
+app.get('/ws', upgradeWebSocket((c) => {
+  const id = crypto.randomUUID()
+  return {
+    onOpen(event, ws) {
+      wsToId.set(ws, id) // Use WeakMap, not ws.raw.data
+      peers.set(id, { id, ws })
+    },
+    onMessage(event, ws) {
+      const peerId = wsToId.get(ws)
+      ws.send(`Echo from ${peerId}: ${event.data}`)
+    },
+    onClose(event, ws) {
+      const peerId = wsToId.get(ws)
+      if (peerId) peers.delete(peerId)
+    },
+  }
+}))
+
+export default { fetch: app.fetch, websocket }
 ```
 
 ### Static Files (Bun)

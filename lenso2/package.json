@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "bun run index.ts",
-    "dev": "bun --watch index.ts"
+    "dev": "bun --watch index.ts",
+    "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -15,6 +16,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.7",
     "hono": "^4.11.3"
   }
 }

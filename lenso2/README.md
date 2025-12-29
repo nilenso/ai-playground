@@ -21,6 +21,17 @@ This is a reproduction of the original Lenso project built at nilenso. Read more
 bun install
 ```
 
+### Environment Variables
+
+Create a `.env` file with your Cloudflare Calls credentials:
+
+```bash
+CF_APP_ID=your_app_id
+CF_APP_TOKEN=your_app_token
+```
+
+Get these from your [Cloudflare Dashboard](https://dash.cloudflare.com/) → Calls → Your App → Settings.
+
 ## Run
 
 ```bash
@@ -32,6 +43,18 @@ bun run start
 ```bash
 bun run dev
 ```
+
+## Cloudflare Tunnel
+
+To expose your local server publicly (useful for testing on other devices or sharing):
+
+```bash
+bun run tunnel
+```
+
+This requires `cloudflared` to be installed. Install it via:
+- **macOS**: `brew install cloudflared`
+- **Linux**: See [Cloudflare docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
 
 ## Tech Stack
 
