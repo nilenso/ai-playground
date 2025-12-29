@@ -1,0 +1,457 @@
+Started development server: http://localhost:3000
+[SERVER WS] Peer ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d connected.
+[SERVER] Push request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0mlocation[2m:[0m [0m[32m[0m[32m"local"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"0"[0m[0m[0m[2m,[0m
+    }[0m[2m,[0m {
+      [0mlocation[2m:[0m [0m[32m[0m[32m"local"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"1"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0mofferSdpLength[2m:[0m [0m[33m3785[0m[0m[2m,[0m
+}
+[SERVER] Push response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0mmid[2m:[0m [0m[32m[0m[32m"0"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video"[0m[0m[0m[2m,[0m
+    }[0m[2m,[0m {
+      [0mmid[2m:[0m [0m[32m[0m[32m"1"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER WS] onMessage from peer ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d: {"type":"join","sessionId":"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d","tracks":["ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video","ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"]}
+[SERVER WS] Parsed message type: join
+[SERVER WS] Processing join: {
+  [0mpeerId[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d"[0m[0m[0m[2m,[0m
+  [0msessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [ [0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video"[0m[0m[0m[2m,[0m [0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"[0m[0m ][0m[2m,[0m
+}
+[SERVER WS] Existing peers to send: []
+[SERVER WS] Notifying [0m[33m0[0m existing peers about new peer
+[SERVER WS] Peer ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d joined with session 7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d. Total peers: 1
+[SERVER WS] Peer 6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556 connected.
+[SERVER] Push request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0mlocation[2m:[0m [0m[32m[0m[32m"local"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-video"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"0"[0m[0m[0m[2m,[0m
+    }[0m[2m,[0m {
+      [0mlocation[2m:[0m [0m[32m[0m[32m"local"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-audio"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"1"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0mofferSdpLength[2m:[0m [0m[33m3787[0m[0m[2m,[0m
+}
+[SERVER] Push response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0mmid[2m:[0m [0m[32m[0m[32m"0"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-video"[0m[0m[0m[2m,[0m
+    }[0m[2m,[0m {
+      [0mmid[2m:[0m [0m[32m[0m[32m"1"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-audio"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER WS] onMessage from peer 6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556: {"type":"join","sessionId":"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f","tracks":["6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-video","6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-audio"]}
+[SERVER WS] Parsed message type: join
+[SERVER WS] Processing join: {
+  [0mpeerId[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556"[0m[0m[0m[2m,[0m
+  [0msessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [ [0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-video"[0m[0m[0m[2m,[0m [0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-audio"[0m[0m ][0m[2m,[0m
+}
+[SERVER WS] Existing peers to send: [
+  {
+    [0mid[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d"[0m[0m[0m[2m,[0m
+    [0msessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+    [0mtracks[2m:[0m [ [0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video"[0m[0m[0m[2m,[0m [0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"[0m[0m ][0m[2m,[0m
+  }
+]
+[SERVER WS] Sending existing-peers to new peer: {"type":"existing-peers","peers":[{"id":"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d","sessionId":"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d","tracks":["ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video","ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"]}]}
+[SERVER WS] Notifying [0m[33m1[0m existing peers about new peer
+[SERVER WS] Sending peer-joined to ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d : {"type":"peer-joined","id":"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556","sessionId":"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f","tracks":["6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-video",
+[SERVER WS] Peer 6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556 joined with session 621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f. Total peers: 2
+[SERVER] Pull request: {
+  [0mmySessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+  [0mremoteSessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+  [0mtrackName[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-video"[0m[0m[0m[2m,[0m
+}
+[SERVER] Sending to CF API: {
+  "tracks": [
+    {
+      "location": "remote",
+      "sessionId": "621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f",
+      "trackName": "6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-video"
+    }
+  ]
+}
+[SERVER] Pull request: {
+  [0mmySessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+  [0mremoteSessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+  [0mtrackName[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video"[0m[0m[0m[2m,[0m
+}
+[SERVER] Sending to CF API: {
+  "tracks": [
+    {
+      "location": "remote",
+      "sessionId": "7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d",
+      "trackName": "ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video"
+    }
+  ]
+}
+[SERVER] CF API response: {
+  [0mrequiresImmediateRenegotiation[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0msessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-video"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"2"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+  [0merrorDescription[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] CF API response: {
+  [0mrequiresImmediateRenegotiation[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0msessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-video"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"2"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+  [0merrorDescription[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+  [0msdpLength[2m:[0m [0m[33m3970[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+  [0msdpLength[2m:[0m [0m[33m3972[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mfalse[0m[0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mfalse[0m[0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Pull request: {
+  [0mmySessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+  [0mremoteSessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+  [0mtrackName[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-audio"[0m[0m[0m[2m,[0m
+}
+[SERVER] Sending to CF API: {
+  "tracks": [
+    {
+      "location": "remote",
+      "sessionId": "621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f",
+      "trackName": "6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-audio"
+    }
+  ]
+}
+[SERVER] CF API response: {
+  [0mrequiresImmediateRenegotiation[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0msessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556-audio"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"3"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+  [0merrorDescription[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Pull request: {
+  [0mmySessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+  [0mremoteSessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+  [0mtrackName[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"[0m[0m[0m[2m,[0m
+}
+[SERVER] Sending to CF API: {
+  "tracks": [
+    {
+      "location": "remote",
+      "sessionId": "7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d",
+      "trackName": "ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"
+    }
+  ]
+}
+[SERVER] CF API response: {
+  [0mrequiresImmediateRenegotiation[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0msessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d-audio"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"3"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+  [0merrorDescription[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"7227152377c10a6e31c9e7b95d051594b4f6509adca90bf3d46d2659d617575d"[0m[0m[0m[2m,[0m
+  [0msdpLength[2m:[0m [0m[33m4335[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mfalse[0m[0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"621e345abc95db1adea9110a00cc6b19151bc23184aa828be86ac5102ee2056f"[0m[0m[0m[2m,[0m
+  [0msdpLength[2m:[0m [0m[33m4337[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mfalse[0m[0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER WS] Peer 6399a2de-e7fd-4a43-8dc0-8ca8bf4f1556 disconnected.
+[SERVER WS] Total peers remaining: 1
+[SERVER WS] Peer ca4b2af3-2aa2-4c63-aca7-1aa8d799e27d disconnected.
+[SERVER WS] Total peers remaining: 0
+[SERVER WS] Peer 7860c2af-819c-40de-8c77-29a53d757b7b connected.
+[SERVER] Push request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0mlocation[2m:[0m [0m[32m[0m[32m"local"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-video"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"0"[0m[0m[0m[2m,[0m
+    }[0m[2m,[0m {
+      [0mlocation[2m:[0m [0m[32m[0m[32m"local"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-audio"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"1"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0mofferSdpLength[2m:[0m [0m[33m3787[0m[0m[2m,[0m
+}
+[SERVER] Push response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0mmid[2m:[0m [0m[32m[0m[32m"0"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-video"[0m[0m[0m[2m,[0m
+    }[0m[2m,[0m {
+      [0mmid[2m:[0m [0m[32m[0m[32m"1"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-audio"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER WS] onMessage from peer 7860c2af-819c-40de-8c77-29a53d757b7b: {"type":"join","sessionId":"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5","tracks":["7860c2af-819c-40de-8c77-29a53d757b7b-video","7860c2af-819c-40de-8c77-29a53d757b7b-audio"]}
+[SERVER WS] Parsed message type: join
+[SERVER WS] Processing join: {
+  [0mpeerId[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b"[0m[0m[0m[2m,[0m
+  [0msessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [ [0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-video"[0m[0m[0m[2m,[0m [0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-audio"[0m[0m ][0m[2m,[0m
+}
+[SERVER WS] Existing peers to send: []
+[SERVER WS] Notifying [0m[33m0[0m existing peers about new peer
+[SERVER WS] Peer 7860c2af-819c-40de-8c77-29a53d757b7b joined with session 91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5. Total peers: 1
+[SERVER WS] Peer b0c9320a-6c6a-429d-9422-1908056f595c connected.
+[SERVER] Push request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0mlocation[2m:[0m [0m[32m[0m[32m"local"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-video"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"0"[0m[0m[0m[2m,[0m
+    }[0m[2m,[0m {
+      [0mlocation[2m:[0m [0m[32m[0m[32m"local"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-audio"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"1"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0mofferSdpLength[2m:[0m [0m[33m3784[0m[0m[2m,[0m
+}
+[SERVER] Push response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0mmid[2m:[0m [0m[32m[0m[32m"0"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-video"[0m[0m[0m[2m,[0m
+    }[0m[2m,[0m {
+      [0mmid[2m:[0m [0m[32m[0m[32m"1"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-audio"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER WS] onMessage from peer b0c9320a-6c6a-429d-9422-1908056f595c: {"type":"join","sessionId":"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78","tracks":["b0c9320a-6c6a-429d-9422-1908056f595c-video","b0c9320a-6c6a-429d-9422-1908056f595c-audio"]}
+[SERVER WS] Parsed message type: join
+[SERVER WS] Processing join: {
+  [0mpeerId[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c"[0m[0m[0m[2m,[0m
+  [0msessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [ [0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-video"[0m[0m[0m[2m,[0m [0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-audio"[0m[0m ][0m[2m,[0m
+}
+[SERVER WS] Existing peers to send: [
+  {
+    [0mid[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b"[0m[0m[0m[2m,[0m
+    [0msessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+    [0mtracks[2m:[0m [ [0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-video"[0m[0m[0m[2m,[0m [0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-audio"[0m[0m ][0m[2m,[0m
+  }
+]
+[SERVER WS] Sending existing-peers to new peer: {"type":"existing-peers","peers":[{"id":"7860c2af-819c-40de-8c77-29a53d757b7b","sessionId":"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5","tracks":["7860c2af-819c-40de-8c77-29a53d757b7b-video","7860c2af-819c-40de-8c77-29a53d757b7b-audio"]}]}
+[SERVER WS] Notifying [0m[33m1[0m existing peers about new peer
+[SERVER WS] Sending peer-joined to 7860c2af-819c-40de-8c77-29a53d757b7b : {"type":"peer-joined","id":"b0c9320a-6c6a-429d-9422-1908056f595c","sessionId":"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78","tracks":["b0c9320a-6c6a-429d-9422-1908056f595c-video",
+[SERVER WS] Peer b0c9320a-6c6a-429d-9422-1908056f595c joined with session f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78. Total peers: 2
+[SERVER] Pull request: {
+  [0mmySessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+  [0mremoteSessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+  [0mtrackName[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-video"[0m[0m[0m[2m,[0m
+}
+[SERVER] Sending to CF API: {
+  "tracks": [
+    {
+      "location": "remote",
+      "sessionId": "91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5",
+      "trackName": "7860c2af-819c-40de-8c77-29a53d757b7b-video"
+    }
+  ]
+}
+[SERVER] Pull request: {
+  [0mmySessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+  [0mremoteSessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+  [0mtrackName[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-video"[0m[0m[0m[2m,[0m
+}
+[SERVER] Sending to CF API: {
+  "tracks": [
+    {
+      "location": "remote",
+      "sessionId": "f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78",
+      "trackName": "b0c9320a-6c6a-429d-9422-1908056f595c-video"
+    }
+  ]
+}
+[SERVER] CF API response: {
+  [0mrequiresImmediateRenegotiation[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0msessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-video"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"2"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+  [0merrorDescription[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+  [0msdpLength[2m:[0m [0m[33m3972[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mfalse[0m[0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] CF API response: {
+  [0mrequiresImmediateRenegotiation[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0msessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-video"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"2"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+  [0merrorDescription[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Pull request: {
+  [0mmySessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+  [0mremoteSessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+  [0mtrackName[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-audio"[0m[0m[0m[2m,[0m
+}
+[SERVER] Sending to CF API: {
+  "tracks": [
+    {
+      "location": "remote",
+      "sessionId": "f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78",
+      "trackName": "b0c9320a-6c6a-429d-9422-1908056f595c-audio"
+    }
+  ]
+}
+[SERVER] Renegotiate request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+  [0msdpLength[2m:[0m [0m[33m4069[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mfalse[0m[0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Pull request: {
+  [0mmySessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+  [0mremoteSessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+  [0mtrackName[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-audio"[0m[0m[0m[2m,[0m
+}
+[SERVER] Sending to CF API: {
+  "tracks": [
+    {
+      "location": "remote",
+      "sessionId": "91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5",
+      "trackName": "7860c2af-819c-40de-8c77-29a53d757b7b-audio"
+    }
+  ]
+}
+[SERVER] CF API response: {
+  [0mrequiresImmediateRenegotiation[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0msessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"b0c9320a-6c6a-429d-9422-1908056f595c-audio"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"3"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+  [0merrorDescription[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+  [0msdpLength[2m:[0m [0m[33m4335[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mfalse[0m[0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] CF API response: {
+  [0mrequiresImmediateRenegotiation[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mhasSessionDescription[2m:[0m [0m[33mtrue[0m[0m[2m,[0m
+  [0mtracks[2m:[0m [
+    {
+      [0msessionId[2m:[0m [0m[32m[0m[32m"91fbb8cfa6ac32036c50c227fe978698383e9944f26edf925846efc3a3b297b5"[0m[0m[0m[2m,[0m
+      [0mtrackName[2m:[0m [0m[32m[0m[32m"7860c2af-819c-40de-8c77-29a53d757b7b-audio"[0m[0m[0m[2m,[0m
+      [0mmid[2m:[0m [0m[32m[0m[32m"3"[0m[0m[0m[2m,[0m
+    }
+  ][0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+  [0merrorDescription[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate request: {
+  [0msessionId[2m:[0m [0m[32m[0m[32m"f80775905bf8d813479a1f6f03afae8b7849c80edb72e1217c764824eaa69e78"[0m[0m[0m[2m,[0m
+  [0msdpLength[2m:[0m [0m[33m4434[0m[0m[2m,[0m
+}
+[SERVER] Renegotiate response: {
+  [0mhasSessionDescription[2m:[0m [0m[33mfalse[0m[0m[2m,[0m
+  [0merrorCode[2m:[0m [0m[2mundefined[0m[0m[2m,[0m
+}

@@ -89,10 +89,24 @@ app.post("/api/session/:sessionId/push", async (c) => {
 	try {
 		const { sessionId } = c.req.param();
 		const { offer, tracks } = await c.req.json();
+		
+		console.log("[SERVER] Push request:", {
+			sessionId,
+			tracks,
+			offerSdpLength: offer?.sdp?.length
+		});
+		
 		const result = await pushTracks(sessionId, offer, tracks);
+		
+		console.log("[SERVER] Push response:", {
+			hasSessionDescription: !!result.sessionDescription,
+			tracks: result.tracks,
+			errorCode: result.errorCode
+		});
+		
 		return c.json(result);
 	} catch (e) {
-		console.error("Push tracks error:", e);
+		console.error("[SERVER] Push tracks error:", e);
 		return c.json({ error: "Failed to push tracks" }, 500);
 	}
 });
@@ -100,11 +114,36 @@ app.post("/api/session/:sessionId/push", async (c) => {
 app.post("/api/session/:sessionId/pull", async (c) => {
 	try {
 		const { sessionId } = c.req.param();
-		const { tracks } = await c.req.json();
+		const { remoteSessionId, trackName } = await c.req.json();
+		
+		console.log("[SERVER] Pull request:", {
+			mySessionId: sessionId,
+			remoteSessionId,
+			trackName
+		});
+		
+		// Build the tracks array for Cloudflare API
+		const tracks = [{
+			location: "remote",
+			sessionId: remoteSessionId,
+			trackName: trackName
+		}];
+		
+		console.log("[SERVER] Sending to CF API:", JSON.stringify({ tracks }, null, 2));
+		
 		const result = await pullTracks(sessionId, tracks);
+		
+		console.log("[SERVER] CF API response:", {
+			requiresImmediateRenegotiation: result.requiresImmediateRenegotiation,
+			hasSessionDescription: !!result.sessionDescription,
+			tracks: result.tracks,
+			errorCode: result.errorCode,
+			errorDescription: result.errorDescription
+		});
+		
 		return c.json(result);
 	} catch (e) {
-		console.error("Pull tracks error:", e);
+		console.error("[SERVER] Pull tracks error:", e);
 		return c.json({ error: "Failed to pull tracks" }, 500);
 	}
 });
@@ -113,10 +152,22 @@ app.put("/api/session/:sessionId/renegotiate", async (c) => {
 	try {
 		const { sessionId } = c.req.param();
 		const { sdp } = await c.req.json();
+		
+		console.log("[SERVER] Renegotiate request:", {
+			sessionId,
+			sdpLength: sdp?.length
+		});
+		
 		const result = await renegotiate(sessionId, sdp);
+		
+		console.log("[SERVER] Renegotiate response:", {
+			hasSessionDescription: !!result.sessionDescription,
+			errorCode: result.errorCode
+		});
+		
 		return c.json(result);
 	} catch (e) {
-		console.error("Renegotiate error:", e);
+		console.error("[SERVER] Renegotiate error:", e);
 		return c.json({ error: "Failed to renegotiate" }, 500);
 	}
 });
@@ -305,6 +356,8 @@ app.get("/", (c) => {
     let videoEnabled = true;
     let audioEnabled = true;
     let localTrackNames = { video: null, audio: null };
+    // Map transceiver mid to peerId for incoming tracks
+    let midToPeerId = new Map();
 
     function updatePeerCount() {
       const count = remotePeers.size + 1;
@@ -349,13 +402,66 @@ app.get("/", (c) => {
     }
 
     async function pushLocalTracks() {
+      console.log('[CLIENT] pushLocalTracks: Creating RTCPeerConnection');
       peerConnection = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
         bundlePolicy: 'max-bundle',
       });
 
+      // Set up ontrack handler once - this will receive all incoming tracks
+      peerConnection.ontrack = (event) => {
+        const mid = event.transceiver.mid;
+        const peerId = midToPeerId.get(mid);
+        console.log('[CLIENT] ontrack fired:', {
+          trackKind: event.track.kind,
+          trackId: event.track.id,
+          mid: mid,
+          peerId: peerId,
+          allMidMappings: Object.fromEntries(midToPeerId)
+        });
+        
+        if (!peerId) {
+          console.warn('[CLIENT] Unknown mid:', mid, 'known mids:', [...midToPeerId.keys()]);
+          return;
+        }
+
+        let peerVideo = document.getElementById('video-' + peerId);
+        if (!peerVideo) {
+          console.log('[CLIENT] Creating video element for peer:', peerId);
+          peerVideo = createVideoElement(peerId);
+        }
+        
+        if (!peerVideo.srcObject) {
+          peerVideo.srcObject = new MediaStream();
+        }
+        
+        const stream = peerVideo.srcObject;
+        const existingTrack = stream.getTracks().find(t => t.id === event.track.id);
+        if (!existingTrack) {
+          stream.addTrack(event.track);
+          console.log('[CLIENT] Added track to peer', peerId, ':', event.track.kind, 'stream now has', stream.getTracks().length, 'tracks');
+        }
+      };
+
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log('[CLIENT] ICE state:', peerConnection.iceConnectionState);
+      };
+      
+      peerConnection.onconnectionstatechange = () => {
+        console.log('[CLIENT] Connection state:', peerConnection.connectionState);
+      };
+      
+      peerConnection.onsignalingstatechange = () => {
+        console.log('[CLIENT] Signaling state:', peerConnection.signalingState);
+      };
+
       const videoTrack = localStream.getVideoTracks()[0];
       const audioTrack = localStream.getAudioTracks()[0];
+      
+      console.log('[CLIENT] Local tracks:', {
+        video: videoTrack ? videoTrack.id : null,
+        audio: audioTrack ? audioTrack.id : null
+      });
       
       let videoTransceiver = null;
       let audioTransceiver = null;
@@ -363,14 +469,17 @@ app.get("/", (c) => {
       if (videoTrack) {
         videoTransceiver = peerConnection.addTransceiver(videoTrack, { direction: 'sendonly' });
         localTrackNames.video = myId + '-video';
+        console.log('[CLIENT] Added video transceiver, trackName:', localTrackNames.video);
       }
       if (audioTrack) {
         audioTransceiver = peerConnection.addTransceiver(audioTrack, { direction: 'sendonly' });
         localTrackNames.audio = myId + '-audio';
+        console.log('[CLIENT] Added audio transceiver, trackName:', localTrackNames.audio);
       }
 
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
+      console.log('[CLIENT] Created and set local offer, SDP length:', offer.sdp.length);
 
       // Build tracks array with mid from transceivers (available after setLocalDescription)
       const tracks = [];
@@ -381,75 +490,121 @@ app.get("/", (c) => {
         tracks.push({ location: 'local', trackName: localTrackNames.audio, mid: audioTransceiver.mid });
       }
 
+      console.log('[CLIENT] Pushing tracks to CF:', tracks);
+      
       const res = await fetch('/api/session/' + sessionId + '/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ offer: { sdp: offer.sdp }, tracks }),
       });
       const data = await res.json();
+      console.log('[CLIENT] Push response:', {
+        error: data.error,
+        hasSessionDescription: !!data.sessionDescription,
+        tracks: data.tracks
+      });
       if (data.error) throw new Error(data.error);
 
       await peerConnection.setRemoteDescription({ type: 'answer', sdp: data.sessionDescription.sdp });
-      console.log('Pushed local tracks:', data.tracks);
-      
-      peerConnection.oniceconnectionstatechange = () => {
-        console.log('ICE state:', peerConnection.iceConnectionState);
-      };
+      console.log('[CLIENT] Set remote description (answer), push complete');
     }
 
     async function pullRemoteTracks(peerId, trackNames) {
-      console.log('Pulling tracks for peer', peerId, ':', trackNames);
+      console.log('[CLIENT] pullRemoteTracks called:', { peerId, trackNames });
       
-      // Add transceivers and track them
-      const transceivers = [];
-      for (const trackName of trackNames) {
-        const kind = trackName.endsWith('-video') ? 'video' : 'audio';
-        const transceiver = peerConnection.addTransceiver(kind, { direction: 'recvonly' });
-        transceivers.push({ trackName, transceiver });
-      }
-
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-
       const remotePeer = remotePeers.get(peerId);
-      if (!remotePeer) return;
-
-      // Build tracks with mid from transceivers
-      const tracks = transceivers.map(({ trackName, transceiver }) => ({
-        location: 'remote',
-        trackName,
-        sessionId: remotePeer.sessionId,
-        mid: transceiver.mid,
-      }));
-
-      const res = await fetch('/api/session/' + sessionId + '/pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tracks }),
+      if (!remotePeer) {
+        console.log('[CLIENT] Remote peer not found:', peerId);
+        return;
+      }
+      
+      console.log('[CLIENT] Remote peer info:', {
+        peerId,
+        remoteSessionId: remotePeer.sessionId,
+        trackNames: remotePeer.trackNames
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
 
-      await peerConnection.setRemoteDescription({ type: 'answer', sdp: data.sessionDescription.sdp });
+      // Create video element for this peer ahead of time
+      const video = createVideoElement(peerId);
+      const mediaStream = new MediaStream();
+      video.srcObject = mediaStream;
 
-      peerConnection.ontrack = (event) => {
-        console.log('Received track:', event.track.kind);
+      // Pull each track one at a time (the CF API + renegotiation flow works per-track)
+      for (const trackName of trackNames) {
+        console.log('[CLIENT] Pulling track:', trackName, 'from session:', remotePeer.sessionId);
+        console.log('[CLIENT] Current signaling state before pull:', peerConnection.signalingState);
         
-        for (const [pid, peer] of remotePeers) {
-          if (peer.trackNames.some(t => t.includes(pid))) {
-            let video = document.getElementById('video-' + pid);
-            if (!video) {
-              video = createVideoElement(pid);
-            }
-            
-            if (!video.srcObject) {
-              video.srcObject = new MediaStream();
-            }
-            video.srcObject.addTrack(event.track);
-            break;
-          }
+        // Just request to pull the track - no local offer needed
+        // Cloudflare will return an offer that we need to answer
+        const res = await fetch('/api/session/' + sessionId + '/pull', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            remoteSessionId: remotePeer.sessionId,
+            trackName: trackName
+          }),
+        });
+        const data = await res.json();
+        
+        console.log('[CLIENT] Pull response:', {
+          error: data.error,
+          errorCode: data.errorCode,
+          errorDescription: data.errorDescription,
+          requiresImmediateRenegotiation: data.requiresImmediateRenegotiation,
+          hasSessionDescription: !!data.sessionDescription,
+          tracks: data.tracks
+        });
+        
+        if (data.error || data.errorCode) {
+          console.error('[CLIENT] Pull track error:', data.error || data.errorDescription);
+          continue;
         }
-      };
+
+        if (data.requiresImmediateRenegotiation && data.sessionDescription) {
+          console.log('[CLIENT] Renegotiation required, parsing SDP for mids...');
+          
+          // Parse the SDP to find the new mid(s) for this track
+          // SDP uses CRLF line endings
+          let foundMids = [];
+          data.sessionDescription.sdp.split(/\\r?\\n/).forEach(line => {
+            if (line.startsWith('a=mid:')) {
+              const mid = line.split(':')[1].trim();
+              foundMids.push(mid);
+              // Map this mid to the peer so ontrack can route it correctly
+              midToPeerId.set(mid, peerId);
+            }
+          });
+          console.log('[CLIENT] Found mids in SDP:', foundMids, 'mapped to peer:', peerId);
+          console.log('[CLIENT] All mid mappings now:', Object.fromEntries(midToPeerId));
+          
+          // Cloudflare sends us an OFFER - we need to set it and create an answer
+          console.log('[CLIENT] Setting remote description (offer)...');
+          await peerConnection.setRemoteDescription({ 
+            type: 'offer', 
+            sdp: data.sessionDescription.sdp 
+          });
+          console.log('[CLIENT] Remote description set, signaling state:', peerConnection.signalingState);
+          
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          console.log('[CLIENT] Created and set local answer, signaling state:', peerConnection.signalingState);
+          
+          // Send our answer back via renegotiate endpoint
+          console.log('[CLIENT] Sending renegotiate with answer...');
+          const renego = await fetch('/api/session/' + sessionId + '/renegotiate', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sdp: answer.sdp }),
+          });
+          const renegoData = await renego.json();
+          console.log('[CLIENT] Renegotiate response:', renegoData);
+        } else {
+          console.log('[CLIENT] No renegotiation required for this track');
+        }
+      }
+      
+      console.log('[CLIENT] Finished pulling all tracks for peer:', peerId);
+      console.log('[CLIENT] Final mid mappings:', Object.fromEntries(midToPeerId));
     }
 
     async function joinRoom() {
@@ -470,18 +625,19 @@ app.get("/", (c) => {
 
         ws.onmessage = async (event) => {
           const message = JSON.parse(event.data);
-          console.log('Received message:', message.type, message);
+          console.log('[CLIENT] WS message received:', message.type, message);
 
           switch (message.type) {
             case 'welcome':
               myId = message.id;
               localTrackNames.video = myId + '-video';
               localTrackNames.audio = myId + '-audio';
+              console.log('[CLIENT] Got welcome, myId:', myId);
               
               // Now create session and push tracks
               statusMessage.textContent = 'Creating session...';
               sessionId = await createSession();
-              console.log('Created session:', sessionId);
+              console.log('[CLIENT] Created CF session:', sessionId);
               
               joinSection.style.display = 'none';
               videoGrid.classList.add('active');
@@ -492,39 +648,48 @@ app.get("/", (c) => {
 
               await pushLocalTracks();
 
-              ws.send(JSON.stringify({
+              const joinMsg = {
                 type: 'join',
                 sessionId,
                 tracks: [localTrackNames.video, localTrackNames.audio].filter(Boolean),
-              }));
+              };
+              console.log('[CLIENT] Sending join message:', joinMsg);
+              ws.send(JSON.stringify(joinMsg));
 
               updatePeerCount();
               break;
 
             case 'peer-joined':
+              console.log('[CLIENT] Peer joined:', message.id, 'sessionId:', message.sessionId, 'tracks:', message.tracks);
               remotePeers.set(message.id, {
                 sessionId: message.sessionId,
                 trackNames: message.tracks,
               });
+              console.log('[CLIENT] remotePeers now:', Object.fromEntries(remotePeers));
               updatePeerCount();
               if (message.tracks && message.tracks.length > 0) {
+                console.log('[CLIENT] Will pull tracks for new peer:', message.id);
                 await pullRemoteTracks(message.id, message.tracks);
               }
               break;
 
             case 'peer-left':
+              console.log('[CLIENT] Peer left:', message.id);
               remotePeers.delete(message.id);
               removeVideoElement(message.id);
               updatePeerCount();
               break;
 
             case 'existing-peers':
+              console.log('[CLIENT] Existing peers:', message.peers);
               for (const peer of message.peers) {
+                console.log('[CLIENT] Processing existing peer:', peer.id, 'sessionId:', peer.sessionId);
                 remotePeers.set(peer.id, {
                   sessionId: peer.sessionId,
                   trackNames: peer.tracks,
                 });
                 if (peer.tracks && peer.tracks.length > 0) {
+                  console.log('[CLIENT] Will pull tracks for existing peer:', peer.id);
                   await pullRemoteTracks(peer.id, peer.tracks);
                 }
               }
@@ -553,6 +718,7 @@ app.get("/", (c) => {
 
     function leaveRoom() {
       remotePeers.clear();
+      midToPeerId.clear();
       if (peerConnection) { peerConnection.close(); peerConnection = null; }
       if (localStream) { localStream.getTracks().forEach(track => track.stop()); localStream = null; }
       if (ws) { ws.close(); ws = null; }
@@ -592,24 +758,30 @@ app.get("/", (c) => {
 app.get(
 	"/ws",
 	upgradeWebSocket((_c) => {
-		const id = crypto.randomUUID();
+		// Generate ID here - captured by closure for all handlers
+		const peerId = crypto.randomUUID();
 
 		return {
 			onOpen(_event, ws) {
-				// Store mapping from ws to id using WeakMap (no mutation of ws.raw.data)
-				wsToId.set(ws, id);
-
-				ws.send(JSON.stringify({ type: "welcome", id }));
-				console.log(`Peer ${id} connected.`);
+				// peerId is captured from closure, no need for WeakMap
+				ws.send(JSON.stringify({ type: "welcome", id: peerId }));
+				console.log(`[SERVER WS] Peer ${peerId} connected.`);
 			},
 
 			onMessage(event, ws) {
-				const peerId = wsToId.get(ws);
-				if (!peerId) return;
+				// peerId is captured from closure
+				console.log(`[SERVER WS] onMessage from peer ${peerId}:`, event.data.toString().substring(0, 200));
 
 				const data = JSON.parse(event.data.toString());
+				console.log("[SERVER WS] Parsed message type:", data.type);
 
 				if (data.type === "join") {
+					console.log("[SERVER WS] Processing join:", {
+						peerId,
+						sessionId: data.sessionId,
+						tracks: data.tracks
+					});
+					
 					const peer: Peer = {
 						id: peerId,
 						ws,
@@ -624,38 +796,42 @@ app.get(
 						tracks: p.trackNames,
 					}));
 
+					console.log("[SERVER WS] Existing peers to send:", existingPeers);
+					
 					if (existingPeers.length > 0) {
-						ws.send(JSON.stringify({ type: "existing-peers", peers: existingPeers }));
+						const msg = JSON.stringify({ type: "existing-peers", peers: existingPeers });
+						console.log("[SERVER WS] Sending existing-peers to new peer:", msg.substring(0, 300));
+						ws.send(msg);
 					}
 
 					// Notify existing peers about new peer
+					console.log("[SERVER WS] Notifying", peers.size, "existing peers about new peer");
 					peers.forEach((p) => {
-						p.ws.send(
-							JSON.stringify({
-								type: "peer-joined",
-								id: peerId,
-								sessionId: data.sessionId,
-								tracks: data.tracks,
-							}),
-						);
+						const msg = JSON.stringify({
+							type: "peer-joined",
+							id: peerId,
+							sessionId: data.sessionId,
+							tracks: data.tracks,
+						});
+						console.log("[SERVER WS] Sending peer-joined to", p.id, ":", msg.substring(0, 200));
+						p.ws.send(msg);
 					});
 
 					peers.set(peerId, peer);
-					console.log(`Peer ${peerId} joined with session ${data.sessionId}. Total peers: ${peers.size}`);
+					console.log(`[SERVER WS] Peer ${peerId} joined with session ${data.sessionId}. Total peers: ${peers.size}`);
 				}
 			},
 
-			onClose(_event, ws) {
-				const peerId = wsToId.get(ws);
-				if (peerId) {
-					peers.delete(peerId);
+			onClose(_event, _ws) {
+				// peerId is captured from closure
+				console.log(`[SERVER WS] Peer ${peerId} disconnected.`);
+				peers.delete(peerId);
 
-					peers.forEach((p) => {
-						p.ws.send(JSON.stringify({ type: "peer-left", id: peerId }));
-					});
+				peers.forEach((p) => {
+					p.ws.send(JSON.stringify({ type: "peer-left", id: peerId }));
+				});
 
-					console.log(`Peer ${peerId} disconnected. Total peers: ${peers.size}`);
-				}
+				console.log(`[SERVER WS] Total peers remaining: ${peers.size}`);
 			},
 		};
 	}),
