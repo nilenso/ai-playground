@@ -8,5 +8,13 @@
   },
   "devDependencies": {
     "@types/bun": "latest"
+  },
+  "module": "index.ts",
+  "private": true,
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "hono": "^4.11.3"
   }
 }
