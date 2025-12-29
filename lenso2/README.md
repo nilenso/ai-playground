@@ -17,6 +17,14 @@ This is a reproduction of the original Lenso project built at nilenso. Read more
 
 ## Setup
 
+Get a shell with `bun` and `cloudflared` using Nix:
+
+```bash
+nix develop
+```
+
+Then install dependencies:
+
 ```bash
 bun install
 ```
@@ -46,15 +54,15 @@ bun run dev
 
 ## Cloudflare Tunnel
 
-To expose your local server publicly (useful for testing on other devices or sharing):
+WebRTC requires HTTPS in production. To expose your local server publicly during development:
 
 ```bash
 bun run tunnel
 ```
 
-This requires `cloudflared` to be installed. Install it via:
-- **macOS**: `brew install cloudflared`
-- **Linux**: See [Cloudflare docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+This creates a public HTTPS URL via Cloudflare Tunnel, useful for testing on mobile devices or sharing with others.
+
+> **Note**: `cloudflared` is included in the Nix shell. Alternatively, install it via `brew install cloudflared` (macOS) or see [Cloudflare docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
 
 ## Tech Stack
 
