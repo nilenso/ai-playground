@@ -1,6 +1,15 @@
 import { Hono } from "hono";
 import { createBunWebSocket } from "hono/bun";
 import type { WSContext } from "hono/ws";
+import {
+	addTranscript,
+	getOrCreateMeeting,
+	getTranscripts,
+	isLensoActive,
+	setLensoActive,
+	type TranscriptEntry,
+} from "./db";
+import { handleLensoQuery, transcribeWithGemini } from "./gemini";
 
 const { upgradeWebSocket, websocket } = createBunWebSocket();
 
@@ -21,10 +30,12 @@ interface Peer {
 	ws: WSContext;
 	sessionId?: string;
 	trackNames: string[];
+	name: string;
+	roomId: string;
 }
 
 const peers = new Map<string, Peer>();
-const wsToId = new WeakMap<WSContext, string>(); // Map WSContext to peerId
+const rooms = new Map<string, Set<string>>(); // roomId -> Set of peerIds
 
 // Cloudflare Calls API helpers
 async function cfFetch(endpoint: string, method: string, body?: unknown) {
@@ -89,21 +100,21 @@ app.post("/api/session/:sessionId/push", async (c) => {
 	try {
 		const { sessionId } = c.req.param();
 		const { offer, tracks } = await c.req.json();
-		
+
 		console.log("[SERVER] Push request:", {
 			sessionId,
 			tracks,
-			offerSdpLength: offer?.sdp?.length
+			offerSdpLength: offer?.sdp?.length,
 		});
-		
+
 		const result = await pushTracks(sessionId, offer, tracks);
-		
+
 		console.log("[SERVER] Push response:", {
 			hasSessionDescription: !!result.sessionDescription,
 			tracks: result.tracks,
-			errorCode: result.errorCode
+			errorCode: result.errorCode,
 		});
-		
+
 		return c.json(result);
 	} catch (e) {
 		console.error("[SERVER] Push tracks error:", e);
@@ -115,32 +126,33 @@ app.post("/api/session/:sessionId/pull", async (c) => {
 	try {
 		const { sessionId } = c.req.param();
 		const { remoteSessionId, trackName } = await c.req.json();
-		
+
 		console.log("[SERVER] Pull request:", {
 			mySessionId: sessionId,
 			remoteSessionId,
-			trackName
+			trackName,
 		});
-		
-		// Build the tracks array for Cloudflare API
-		const tracks = [{
-			location: "remote",
-			sessionId: remoteSessionId,
-			trackName: trackName
-		}];
-		
+
+		const tracks = [
+			{
+				location: "remote",
+				sessionId: remoteSessionId,
+				trackName: trackName,
+			},
+		];
+
 		console.log("[SERVER] Sending to CF API:", JSON.stringify({ tracks }, null, 2));
-		
+
 		const result = await pullTracks(sessionId, tracks);
-		
+
 		console.log("[SERVER] CF API response:", {
 			requiresImmediateRenegotiation: result.requiresImmediateRenegotiation,
 			hasSessionDescription: !!result.sessionDescription,
 			tracks: result.tracks,
 			errorCode: result.errorCode,
-			errorDescription: result.errorDescription
+			errorDescription: result.errorDescription,
 		});
-		
+
 		return c.json(result);
 	} catch (e) {
 		console.error("[SERVER] Pull tracks error:", e);
@@ -152,23 +164,180 @@ app.put("/api/session/:sessionId/renegotiate", async (c) => {
 	try {
 		const { sessionId } = c.req.param();
 		const { sdp } = await c.req.json();
-		
+
 		console.log("[SERVER] Renegotiate request:", {
 			sessionId,
-			sdpLength: sdp?.length
+			sdpLength: sdp?.length,
 		});
-		
+
 		const result = await renegotiate(sessionId, sdp);
-		
+
 		console.log("[SERVER] Renegotiate response:", {
 			hasSessionDescription: !!result.sessionDescription,
-			errorCode: result.errorCode
+			errorCode: result.errorCode,
 		});
-		
+
 		return c.json(result);
 	} catch (e) {
 		console.error("[SERVER] Renegotiate error:", e);
 		return c.json({ error: "Failed to renegotiate" }, 500);
+	}
+});
+
+// Lenso API endpoints
+app.post("/api/lenso/query", async (c) => {
+	try {
+		const { roomId, query } = await c.req.json();
+
+		if (!roomId || !query) {
+			return c.json({ error: "roomId and query are required" }, 400);
+		}
+
+		// Check if Lenso is active for this room
+		if (!isLensoActive(roomId)) {
+			return c.json({ error: "Lenso is not active for this room" }, 403);
+		}
+
+		const response = await handleLensoQuery(roomId, query);
+		return c.json({ response });
+	} catch (e) {
+		console.error("[SERVER] Lenso query error:", e);
+		return c.json({ error: "Failed to process query" }, 500);
+	}
+});
+
+app.post("/api/lenso/toggle", async (c) => {
+	try {
+		const { roomId, active } = await c.req.json();
+
+		if (!roomId || typeof active !== "boolean") {
+			return c.json({ error: "roomId and active (boolean) are required" }, 400);
+		}
+
+		getOrCreateMeeting(roomId);
+		setLensoActive(roomId, active);
+
+		// Broadcast to all peers in the room
+		const roomPeers = rooms.get(roomId);
+		if (roomPeers) {
+			roomPeers.forEach((peerId) => {
+				const peer = peers.get(peerId);
+				if (peer) {
+					peer.ws.send(JSON.stringify({ type: "lenso-status", active }));
+				}
+			});
+		}
+
+		return c.json({ success: true, active });
+	} catch (e) {
+		console.error("[SERVER] Lenso toggle error:", e);
+		return c.json({ error: "Failed to toggle Lenso" }, 500);
+	}
+});
+
+app.get("/api/lenso/status/:roomId", async (c) => {
+	try {
+		const { roomId } = c.req.param();
+		const active = isLensoActive(roomId);
+		return c.json({ active });
+	} catch (e) {
+		return c.json({ error: "Failed to get status" }, 500);
+	}
+});
+
+app.post("/api/transcript", async (c) => {
+	try {
+		const { roomId, speakerName, content } = await c.req.json();
+
+		if (!roomId || !speakerName || !content) {
+			return c.json({ error: "roomId, speakerName, and content are required" }, 400);
+		}
+
+		const entry = addTranscript(roomId, speakerName, content);
+
+		// Broadcast transcript to all peers in the room
+		const roomPeers = rooms.get(roomId);
+		if (roomPeers) {
+			roomPeers.forEach((peerId) => {
+				const peer = peers.get(peerId);
+				if (peer) {
+					peer.ws.send(
+						JSON.stringify({
+							type: "transcript",
+							entry: {
+								speakerName: entry.speaker_name,
+								content: entry.content,
+								timestamp: entry.timestamp,
+							},
+						}),
+					);
+				}
+			});
+		}
+
+		return c.json({ success: true, entry });
+	} catch (e) {
+		console.error("[SERVER] Transcript error:", e);
+		return c.json({ error: "Failed to add transcript" }, 500);
+	}
+});
+
+app.get("/api/transcripts/:roomId", async (c) => {
+	try {
+		const { roomId } = c.req.param();
+		const limit = parseInt(c.req.query("limit") || "100");
+		const transcripts = getTranscripts(roomId, limit);
+		return c.json({ transcripts });
+	} catch (e) {
+		return c.json({ error: "Failed to get transcripts" }, 500);
+	}
+});
+
+// Transcription endpoint for audio
+app.post("/api/transcribe", async (c) => {
+	try {
+		const { audioBase64, mimeType, roomId, speakerName } = await c.req.json();
+
+		if (!audioBase64 || !mimeType) {
+			return c.json({ error: "audioBase64 and mimeType are required" }, 400);
+		}
+
+		// Check if Lenso is active
+		if (roomId && !isLensoActive(roomId)) {
+			return c.json({ text: "", skipped: true });
+		}
+
+		const text = await transcribeWithGemini(audioBase64, mimeType);
+
+		// If we got text and have room info, save to transcript
+		if (text && roomId && speakerName) {
+			addTranscript(roomId, speakerName, text);
+
+			// Broadcast to room
+			const roomPeers = rooms.get(roomId);
+			if (roomPeers) {
+				roomPeers.forEach((peerId) => {
+					const peer = peers.get(peerId);
+					if (peer) {
+						peer.ws.send(
+							JSON.stringify({
+								type: "transcript",
+								entry: {
+									speakerName,
+									content: text,
+									timestamp: Date.now(),
+								},
+							}),
+						);
+					}
+				});
+			}
+		}
+
+		return c.json({ text });
+	} catch (e) {
+		console.error("[SERVER] Transcription error:", e);
+		return c.json({ error: "Failed to transcribe audio" }, 500);
 	}
 });
 
@@ -203,6 +372,29 @@ app.get("/", (c) => {
       border-radius: 20px;
       font-size: 0.9rem;
     }
+    .lenso-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,255,255,0.1);
+      padding: 8px 15px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .lenso-toggle:hover { background: rgba(255,255,255,0.2); }
+    .lenso-toggle.active { background: rgba(76, 175, 80, 0.5); }
+    .lenso-toggle .indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #666;
+      transition: all 0.3s;
+    }
+    .lenso-toggle.active .indicator {
+      background: #4CAF50;
+      box-shadow: 0 0 10px #4CAF50;
+    }
     .join-section {
       display: flex;
       flex-direction: column;
@@ -221,6 +413,30 @@ app.get("/", (c) => {
     }
     .join-card h2 { margin-bottom: 10px; }
     .join-card p { color: #888; margin-bottom: 30px; }
+    .input-group {
+      margin-bottom: 20px;
+    }
+    .input-group label {
+      display: block;
+      text-align: left;
+      margin-bottom: 8px;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+    .input-group input {
+      width: 100%;
+      padding: 15px 20px;
+      font-size: 1rem;
+      border: 2px solid #333;
+      border-radius: 10px;
+      background: #0f0f23;
+      color: white;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+    .input-group input:focus {
+      border-color: #667eea;
+    }
     .btn {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
@@ -236,16 +452,28 @@ app.get("/", (c) => {
       transform: translateY(-2px);
       box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
     }
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .video-grid {
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .main-content {
       display: none;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 15px;
+      grid-template-columns: 1fr 350px;
+      gap: 20px;
       padding: 20px;
       max-width: 1800px;
       margin: 0 auto;
+      height: calc(100vh - 70px);
     }
-    .video-grid.active { display: grid; }
+    .main-content.active { display: grid; }
+    .video-section {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 15px;
+      flex: 1;
+    }
     .video-container {
       position: relative;
       background: #16213e;
@@ -267,6 +495,123 @@ app.get("/", (c) => {
       padding: 5px 12px;
       border-radius: 20px;
       font-size: 0.85rem;
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      height: 100%;
+    }
+    .transcript-panel {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 15px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .transcript-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #333;
+    }
+    .transcript-header h3 { font-size: 1rem; }
+    .transcript-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .transcript-entry {
+      background: #0f0f23;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .transcript-entry .speaker {
+      color: #667eea;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .transcript-entry .time {
+      color: #666;
+      font-size: 0.75rem;
+      margin-left: 10px;
+    }
+    .transcript-entry .content {
+      color: #ddd;
+      line-height: 1.4;
+    }
+    .lenso-panel {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 15px;
+    }
+    .lenso-panel h3 {
+      font-size: 1rem;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .lenso-panel h3 .bot-icon {
+      font-size: 1.2rem;
+    }
+    .lenso-input-group {
+      display: flex;
+      gap: 10px;
+    }
+    .lenso-input {
+      flex: 1;
+      padding: 12px 15px;
+      border: 2px solid #333;
+      border-radius: 10px;
+      background: #0f0f23;
+      color: white;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .lenso-input:focus { border-color: #667eea; }
+    .lenso-input:disabled { opacity: 0.5; }
+    .lenso-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: opacity 0.2s;
+    }
+    .lenso-btn:hover { opacity: 0.9; }
+    .lenso-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .lenso-response {
+      margin-top: 15px;
+      padding: 12px;
+      background: #0f0f23;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+    }
+    .lenso-response.visible { display: block; }
+    .lenso-response .response-label {
+      color: #4CAF50;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .lenso-inactive-msg {
+      color: #888;
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 20px;
     }
     .controls {
       position: fixed;
@@ -297,6 +642,17 @@ app.get("/", (c) => {
     .control-btn.inactive { background: #dc3545; color: white; }
     .control-btn.leave { background: #dc3545; color: white; }
     .status-message { color: #888; margin-top: 20px; font-size: 0.9rem; }
+    
+    @media (max-width: 900px) {
+      .main-content.active {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+      }
+      .sidebar {
+        height: auto;
+        max-height: 300px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -304,6 +660,10 @@ app.get("/", (c) => {
     <h1>🎥 Lenso2</h1>
     <div class="room-info">
       <span class="peer-count" id="peerCount">0 participants</span>
+      <div class="lenso-toggle" id="lensoToggle" style="display: none;">
+        <div class="indicator"></div>
+        <span>Lenso</span>
+      </div>
     </div>
   </header>
 
@@ -311,12 +671,48 @@ app.get("/", (c) => {
     <div class="join-card">
       <h2>Join Video Chat</h2>
       <p>Connect with others via Cloudflare Calls</p>
-      <button class="btn" id="joinBtn">Join Room</button>
+      <div class="input-group">
+        <label for="nameInput">Your Name</label>
+        <input type="text" id="nameInput" placeholder="Enter your name..." maxlength="30" />
+      </div>
+      <div class="input-group">
+        <label for="roomInput">Room ID (optional)</label>
+        <input type="text" id="roomInput" placeholder="Leave empty for default room" maxlength="50" />
+      </div>
+      <button class="btn" id="joinBtn" disabled>Join Room</button>
       <p class="status-message" id="statusMessage"></p>
     </div>
   </section>
 
-  <div class="video-grid" id="videoGrid"></div>
+  <div class="main-content" id="mainContent">
+    <div class="video-section">
+      <div class="video-grid" id="videoGrid"></div>
+    </div>
+    <div class="sidebar">
+      <div class="transcript-panel">
+        <div class="transcript-header">
+          <h3>📝 Live Transcript</h3>
+        </div>
+        <div class="transcript-list" id="transcriptList">
+          <div class="lenso-inactive-msg" id="transcriptPlaceholder">
+            Enable Lenso to start transcription
+          </div>
+        </div>
+      </div>
+      <div class="lenso-panel">
+        <h3><span class="bot-icon">🤖</span> Ask Lenso</h3>
+        <div class="lenso-input-group">
+          <input type="text" class="lenso-input" id="lensoInput" 
+                 placeholder="e.g., What did John say about colors?" disabled />
+          <button class="lenso-btn" id="lensoAskBtn" disabled>Ask</button>
+        </div>
+        <div class="lenso-response" id="lensoResponse">
+          <div class="response-label">Lenso:</div>
+          <div class="response-content" id="lensoResponseContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="controls" id="controls">
     <button class="control-btn active" id="toggleVideo" title="Toggle Video">
@@ -338,6 +734,7 @@ app.get("/", (c) => {
 
   <script>
     const joinSection = document.getElementById('joinSection');
+    const mainContent = document.getElementById('mainContent');
     const videoGrid = document.getElementById('videoGrid');
     const controls = document.getElementById('controls');
     const joinBtn = document.getElementById('joinBtn');
@@ -346,25 +743,56 @@ app.get("/", (c) => {
     const toggleAudio = document.getElementById('toggleAudio');
     const peerCount = document.getElementById('peerCount');
     const statusMessage = document.getElementById('statusMessage');
+    const nameInput = document.getElementById('nameInput');
+    const roomInput = document.getElementById('roomInput');
+    const lensoToggle = document.getElementById('lensoToggle');
+    const lensoInput = document.getElementById('lensoInput');
+    const lensoAskBtn = document.getElementById('lensoAskBtn');
+    const lensoResponse = document.getElementById('lensoResponse');
+    const lensoResponseContent = document.getElementById('lensoResponseContent');
+    const transcriptList = document.getElementById('transcriptList');
+    const transcriptPlaceholder = document.getElementById('transcriptPlaceholder');
 
     let localStream = null;
     let ws = null;
     let myId = null;
+    let myName = '';
+    let roomId = 'default';
     let sessionId = null;
     let peerConnection = null;
     let remotePeers = new Map();
     let videoEnabled = true;
     let audioEnabled = true;
     let localTrackNames = { video: null, audio: null };
-    // Map transceiver mid to peerId for incoming tracks
     let midToPeerId = new Map();
+    let lensoActive = false;
+    let mediaRecorder = null;
+    let audioChunks = [];
+
+    // Enable join button when name is entered
+    nameInput.addEventListener('input', () => {
+      joinBtn.disabled = nameInput.value.trim().length === 0;
+    });
+
+    // Allow Enter key to join
+    nameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !joinBtn.disabled) {
+        joinRoom();
+      }
+    });
+
+    roomInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !joinBtn.disabled) {
+        joinRoom();
+      }
+    });
 
     function updatePeerCount() {
       const count = remotePeers.size + 1;
       peerCount.textContent = count + ' participant' + (count !== 1 ? 's' : '');
     }
 
-    function createVideoElement(id, isLocal = false) {
+    function createVideoElement(id, label, isLocal = false) {
       const existing = document.getElementById('container-' + id);
       if (existing) return document.getElementById('video-' + id);
 
@@ -378,12 +806,13 @@ app.get("/", (c) => {
       video.playsInline = true;
       if (isLocal) video.muted = true;
       
-      const label = document.createElement('div');
-      label.className = 'video-label';
-      label.textContent = isLocal ? 'You' : 'Peer ' + id.slice(0, 6);
+      const labelEl = document.createElement('div');
+      labelEl.className = 'video-label';
+      labelEl.textContent = label;
+      labelEl.id = 'label-' + id;
       
       container.appendChild(video);
-      container.appendChild(label);
+      container.appendChild(labelEl);
       videoGrid.appendChild(container);
       
       return video;
@@ -393,6 +822,182 @@ app.get("/", (c) => {
       const container = document.getElementById('container-' + id);
       if (container) container.remove();
     }
+
+    function addTranscriptEntry(speakerName, content, timestamp) {
+      transcriptPlaceholder.style.display = 'none';
+      
+      const entry = document.createElement('div');
+      entry.className = 'transcript-entry';
+      
+      const time = new Date(timestamp).toLocaleTimeString();
+      entry.innerHTML = \`
+        <div class="speaker">\${speakerName}<span class="time">\${time}</span></div>
+        <div class="content">\${content}</div>
+      \`;
+      
+      transcriptList.appendChild(entry);
+      transcriptList.scrollTop = transcriptList.scrollHeight;
+    }
+
+    function updateLensoUI() {
+      lensoToggle.classList.toggle('active', lensoActive);
+      lensoInput.disabled = !lensoActive;
+      lensoAskBtn.disabled = !lensoActive;
+      
+      if (lensoActive) {
+        transcriptPlaceholder.textContent = 'Listening for speech...';
+        startAudioCapture();
+      } else {
+        transcriptPlaceholder.textContent = 'Enable Lenso to start transcription';
+        stopAudioCapture();
+      }
+    }
+
+    async function toggleLenso() {
+      try {
+        const res = await fetch('/api/lenso/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId, active: !lensoActive }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          lensoActive = data.active;
+          updateLensoUI();
+        }
+      } catch (e) {
+        console.error('Failed to toggle Lenso:', e);
+      }
+    }
+
+    async function askLenso() {
+      const query = lensoInput.value.trim();
+      if (!query || !lensoActive) return;
+
+      lensoAskBtn.disabled = true;
+      lensoInput.disabled = true;
+      lensoResponseContent.textContent = 'Thinking...';
+      lensoResponse.classList.add('visible');
+
+      try {
+        const res = await fetch('/api/lenso/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId, query }),
+        });
+        const data = await res.json();
+        
+        if (data.error) {
+          lensoResponseContent.textContent = 'Error: ' + data.error;
+        } else {
+          lensoResponseContent.textContent = data.response;
+        }
+      } catch (e) {
+        lensoResponseContent.textContent = 'Failed to get response. Please try again.';
+      } finally {
+        lensoAskBtn.disabled = false;
+        lensoInput.disabled = false;
+        lensoInput.value = '';
+      }
+    }
+
+    // Audio capture for transcription
+    function startAudioCapture() {
+      if (!localStream || mediaRecorder) return;
+
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (!audioTrack) return;
+
+      const audioStream = new MediaStream([audioTrack]);
+      
+      try {
+        mediaRecorder = new MediaRecorder(audioStream, {
+          mimeType: 'audio/webm;codecs=opus'
+        });
+      } catch (e) {
+        console.warn('audio/webm not supported, trying audio/mp4');
+        try {
+          mediaRecorder = new MediaRecorder(audioStream, {
+            mimeType: 'audio/mp4'
+          });
+        } catch (e2) {
+          console.error('No supported audio format for MediaRecorder');
+          return;
+        }
+      }
+
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        if (audioChunks.length === 0 || !lensoActive) return;
+
+        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+        audioChunks = [];
+
+        // Convert to base64
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = reader.result.split(',')[1];
+          
+          try {
+            const res = await fetch('/api/transcribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                audioBase64: base64,
+                mimeType: mediaRecorder.mimeType,
+                roomId: roomId,
+                speakerName: myName,
+              }),
+            });
+            // Transcript will come via WebSocket
+          } catch (e) {
+            console.error('Transcription error:', e);
+          }
+        };
+        reader.readAsDataURL(blob);
+
+        // Start next recording if still active
+        if (lensoActive && mediaRecorder) {
+          mediaRecorder.start();
+          setTimeout(() => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+              mediaRecorder.stop();
+            }
+          }, 5000); // 5 second chunks
+        }
+      };
+
+      // Start recording
+      mediaRecorder.start();
+      setTimeout(() => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+        }
+      }, 5000);
+    }
+
+    function stopAudioCapture() {
+      if (mediaRecorder) {
+        if (mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+        }
+        mediaRecorder = null;
+      }
+      audioChunks = [];
+    }
+
+    lensoToggle.addEventListener('click', toggleLenso);
+    lensoAskBtn.addEventListener('click', askLenso);
+    lensoInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') askLenso();
+    });
 
     async function createSession() {
       const res = await fetch('/api/session/new', { method: 'POST' });
@@ -408,27 +1013,25 @@ app.get("/", (c) => {
         bundlePolicy: 'max-bundle',
       });
 
-      // Set up ontrack handler once - this will receive all incoming tracks
       peerConnection.ontrack = (event) => {
         const mid = event.transceiver.mid;
         const peerId = midToPeerId.get(mid);
         console.log('[CLIENT] ontrack fired:', {
           trackKind: event.track.kind,
-          trackId: event.track.id,
           mid: mid,
           peerId: peerId,
-          allMidMappings: Object.fromEntries(midToPeerId)
         });
         
         if (!peerId) {
-          console.warn('[CLIENT] Unknown mid:', mid, 'known mids:', [...midToPeerId.keys()]);
+          console.warn('[CLIENT] Unknown mid:', mid);
           return;
         }
 
         let peerVideo = document.getElementById('video-' + peerId);
         if (!peerVideo) {
-          console.log('[CLIENT] Creating video element for peer:', peerId);
-          peerVideo = createVideoElement(peerId);
+          const peerInfo = remotePeers.get(peerId);
+          const peerName = peerInfo?.name || 'Peer ' + peerId.slice(0, 6);
+          peerVideo = createVideoElement(peerId, peerName);
         }
         
         if (!peerVideo.srcObject) {
@@ -439,29 +1042,15 @@ app.get("/", (c) => {
         const existingTrack = stream.getTracks().find(t => t.id === event.track.id);
         if (!existingTrack) {
           stream.addTrack(event.track);
-          console.log('[CLIENT] Added track to peer', peerId, ':', event.track.kind, 'stream now has', stream.getTracks().length, 'tracks');
         }
       };
 
       peerConnection.oniceconnectionstatechange = () => {
         console.log('[CLIENT] ICE state:', peerConnection.iceConnectionState);
       };
-      
-      peerConnection.onconnectionstatechange = () => {
-        console.log('[CLIENT] Connection state:', peerConnection.connectionState);
-      };
-      
-      peerConnection.onsignalingstatechange = () => {
-        console.log('[CLIENT] Signaling state:', peerConnection.signalingState);
-      };
 
       const videoTrack = localStream.getVideoTracks()[0];
       const audioTrack = localStream.getAudioTracks()[0];
-      
-      console.log('[CLIENT] Local tracks:', {
-        video: videoTrack ? videoTrack.id : null,
-        audio: audioTrack ? audioTrack.id : null
-      });
       
       let videoTransceiver = null;
       let audioTransceiver = null;
@@ -469,19 +1058,15 @@ app.get("/", (c) => {
       if (videoTrack) {
         videoTransceiver = peerConnection.addTransceiver(videoTrack, { direction: 'sendonly' });
         localTrackNames.video = myId + '-video';
-        console.log('[CLIENT] Added video transceiver, trackName:', localTrackNames.video);
       }
       if (audioTrack) {
         audioTransceiver = peerConnection.addTransceiver(audioTrack, { direction: 'sendonly' });
         localTrackNames.audio = myId + '-audio';
-        console.log('[CLIENT] Added audio transceiver, trackName:', localTrackNames.audio);
       }
 
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
-      console.log('[CLIENT] Created and set local offer, SDP length:', offer.sdp.length);
 
-      // Build tracks array with mid from transceivers (available after setLocalDescription)
       const tracks = [];
       if (videoTransceiver && localTrackNames.video) {
         tracks.push({ location: 'local', trackName: localTrackNames.video, mid: videoTransceiver.mid });
@@ -490,52 +1075,27 @@ app.get("/", (c) => {
         tracks.push({ location: 'local', trackName: localTrackNames.audio, mid: audioTransceiver.mid });
       }
 
-      console.log('[CLIENT] Pushing tracks to CF:', tracks);
-      
       const res = await fetch('/api/session/' + sessionId + '/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ offer: { sdp: offer.sdp }, tracks }),
       });
       const data = await res.json();
-      console.log('[CLIENT] Push response:', {
-        error: data.error,
-        hasSessionDescription: !!data.sessionDescription,
-        tracks: data.tracks
-      });
       if (data.error) throw new Error(data.error);
 
       await peerConnection.setRemoteDescription({ type: 'answer', sdp: data.sessionDescription.sdp });
-      console.log('[CLIENT] Set remote description (answer), push complete');
     }
 
     async function pullRemoteTracks(peerId, trackNames) {
-      console.log('[CLIENT] pullRemoteTracks called:', { peerId, trackNames });
-      
       const remotePeer = remotePeers.get(peerId);
-      if (!remotePeer) {
-        console.log('[CLIENT] Remote peer not found:', peerId);
-        return;
-      }
-      
-      console.log('[CLIENT] Remote peer info:', {
-        peerId,
-        remoteSessionId: remotePeer.sessionId,
-        trackNames: remotePeer.trackNames
-      });
+      if (!remotePeer) return;
 
-      // Create video element for this peer ahead of time
-      const video = createVideoElement(peerId);
+      const peerName = remotePeer.name || 'Peer ' + peerId.slice(0, 6);
+      const video = createVideoElement(peerId, peerName);
       const mediaStream = new MediaStream();
       video.srcObject = mediaStream;
 
-      // Pull each track one at a time (the CF API + renegotiation flow works per-track)
       for (const trackName of trackNames) {
-        console.log('[CLIENT] Pulling track:', trackName, 'from session:', remotePeer.sessionId);
-        console.log('[CLIENT] Current signaling state before pull:', peerConnection.signalingState);
-        
-        // Just request to pull the track - no local offer needed
-        // Cloudflare will return an offer that we need to answer
         const res = await fetch('/api/session/' + sessionId + '/pull', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -546,68 +1106,47 @@ app.get("/", (c) => {
         });
         const data = await res.json();
         
-        console.log('[CLIENT] Pull response:', {
-          error: data.error,
-          errorCode: data.errorCode,
-          errorDescription: data.errorDescription,
-          requiresImmediateRenegotiation: data.requiresImmediateRenegotiation,
-          hasSessionDescription: !!data.sessionDescription,
-          tracks: data.tracks
-        });
-        
         if (data.error || data.errorCode) {
           console.error('[CLIENT] Pull track error:', data.error || data.errorDescription);
           continue;
         }
 
         if (data.requiresImmediateRenegotiation && data.sessionDescription) {
-          console.log('[CLIENT] Renegotiation required, parsing SDP for mids...');
-          
-          // Parse the SDP to find the new mid(s) for this track
-          // SDP uses CRLF line endings
           let foundMids = [];
           data.sessionDescription.sdp.split(/\\r?\\n/).forEach(line => {
             if (line.startsWith('a=mid:')) {
               const mid = line.split(':')[1].trim();
               foundMids.push(mid);
-              // Map this mid to the peer so ontrack can route it correctly
               midToPeerId.set(mid, peerId);
             }
           });
-          console.log('[CLIENT] Found mids in SDP:', foundMids, 'mapped to peer:', peerId);
-          console.log('[CLIENT] All mid mappings now:', Object.fromEntries(midToPeerId));
           
-          // Cloudflare sends us an OFFER - we need to set it and create an answer
-          console.log('[CLIENT] Setting remote description (offer)...');
           await peerConnection.setRemoteDescription({ 
             type: 'offer', 
             sdp: data.sessionDescription.sdp 
           });
-          console.log('[CLIENT] Remote description set, signaling state:', peerConnection.signalingState);
           
           const answer = await peerConnection.createAnswer();
           await peerConnection.setLocalDescription(answer);
-          console.log('[CLIENT] Created and set local answer, signaling state:', peerConnection.signalingState);
           
-          // Send our answer back via renegotiate endpoint
-          console.log('[CLIENT] Sending renegotiate with answer...');
-          const renego = await fetch('/api/session/' + sessionId + '/renegotiate', {
+          await fetch('/api/session/' + sessionId + '/renegotiate', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sdp: answer.sdp }),
           });
-          const renegoData = await renego.json();
-          console.log('[CLIENT] Renegotiate response:', renegoData);
-        } else {
-          console.log('[CLIENT] No renegotiation required for this track');
         }
       }
-      
-      console.log('[CLIENT] Finished pulling all tracks for peer:', peerId);
-      console.log('[CLIENT] Final mid mappings:', Object.fromEntries(midToPeerId));
     }
 
     async function joinRoom() {
+      myName = nameInput.value.trim();
+      roomId = roomInput.value.trim() || 'default';
+      
+      if (!myName) {
+        statusMessage.textContent = 'Please enter your name';
+        return;
+      }
+
       joinBtn.disabled = true;
       statusMessage.textContent = 'Requesting camera and microphone access...';
 
@@ -625,75 +1164,101 @@ app.get("/", (c) => {
 
         ws.onmessage = async (event) => {
           const message = JSON.parse(event.data);
-          console.log('[CLIENT] WS message received:', message.type, message);
+          console.log('[CLIENT] WS message:', message.type);
 
           switch (message.type) {
             case 'welcome':
               myId = message.id;
               localTrackNames.video = myId + '-video';
               localTrackNames.audio = myId + '-audio';
-              console.log('[CLIENT] Got welcome, myId:', myId);
               
-              // Now create session and push tracks
               statusMessage.textContent = 'Creating session...';
               sessionId = await createSession();
-              console.log('[CLIENT] Created CF session:', sessionId);
               
               joinSection.style.display = 'none';
-              videoGrid.classList.add('active');
+              mainContent.classList.add('active');
               controls.classList.add('active');
+              lensoToggle.style.display = 'flex';
 
-              const localVideo = createVideoElement('local', true);
+              const localVideo = createVideoElement('local', myName + ' (You)', true);
               localVideo.srcObject = localStream;
 
               await pushLocalTracks();
 
+              // Check Lenso status
+              try {
+                const statusRes = await fetch('/api/lenso/status/' + roomId);
+                const statusData = await statusRes.json();
+                lensoActive = statusData.active;
+                updateLensoUI();
+              } catch (e) {
+                console.error('Failed to get Lenso status');
+              }
+
+              // Load existing transcripts
+              try {
+                const transcriptsRes = await fetch('/api/transcripts/' + roomId);
+                const transcriptsData = await transcriptsRes.json();
+                if (transcriptsData.transcripts) {
+                  transcriptsData.transcripts.reverse().forEach(t => {
+                    addTranscriptEntry(t.speaker_name, t.content, t.timestamp);
+                  });
+                }
+              } catch (e) {
+                console.error('Failed to load transcripts');
+              }
+
               const joinMsg = {
                 type: 'join',
                 sessionId,
+                roomId,
+                name: myName,
                 tracks: [localTrackNames.video, localTrackNames.audio].filter(Boolean),
               };
-              console.log('[CLIENT] Sending join message:', joinMsg);
               ws.send(JSON.stringify(joinMsg));
 
               updatePeerCount();
               break;
 
             case 'peer-joined':
-              console.log('[CLIENT] Peer joined:', message.id, 'sessionId:', message.sessionId, 'tracks:', message.tracks);
               remotePeers.set(message.id, {
                 sessionId: message.sessionId,
                 trackNames: message.tracks,
+                name: message.name,
               });
-              console.log('[CLIENT] remotePeers now:', Object.fromEntries(remotePeers));
               updatePeerCount();
               if (message.tracks && message.tracks.length > 0) {
-                console.log('[CLIENT] Will pull tracks for new peer:', message.id);
                 await pullRemoteTracks(message.id, message.tracks);
               }
               break;
 
             case 'peer-left':
-              console.log('[CLIENT] Peer left:', message.id);
               remotePeers.delete(message.id);
               removeVideoElement(message.id);
               updatePeerCount();
               break;
 
             case 'existing-peers':
-              console.log('[CLIENT] Existing peers:', message.peers);
               for (const peer of message.peers) {
-                console.log('[CLIENT] Processing existing peer:', peer.id, 'sessionId:', peer.sessionId);
                 remotePeers.set(peer.id, {
                   sessionId: peer.sessionId,
                   trackNames: peer.tracks,
+                  name: peer.name,
                 });
                 if (peer.tracks && peer.tracks.length > 0) {
-                  console.log('[CLIENT] Will pull tracks for existing peer:', peer.id);
                   await pullRemoteTracks(peer.id, peer.tracks);
                 }
               }
               updatePeerCount();
+              break;
+
+            case 'lenso-status':
+              lensoActive = message.active;
+              updateLensoUI();
+              break;
+
+            case 'transcript':
+              addTranscriptEntry(message.entry.speakerName, message.entry.content, message.entry.timestamp);
               break;
           }
         };
@@ -717,20 +1282,27 @@ app.get("/", (c) => {
     }
 
     function leaveRoom() {
+      stopAudioCapture();
       remotePeers.clear();
       midToPeerId.clear();
       if (peerConnection) { peerConnection.close(); peerConnection = null; }
       if (localStream) { localStream.getTracks().forEach(track => track.stop()); localStream = null; }
       if (ws) { ws.close(); ws = null; }
-      removeVideoElement('local');
-      remotePeers.forEach((_, id) => removeVideoElement(id));
+      
+      videoGrid.innerHTML = '';
+      transcriptList.innerHTML = '<div class="lenso-inactive-msg" id="transcriptPlaceholder">Enable Lenso to start transcription</div>';
+      
       joinSection.style.display = 'flex';
-      videoGrid.classList.remove('active');
+      mainContent.classList.remove('active');
       controls.classList.remove('active');
-      joinBtn.disabled = false;
+      lensoToggle.style.display = 'none';
+      lensoResponse.classList.remove('visible');
+      
+      joinBtn.disabled = nameInput.value.trim().length === 0;
       statusMessage.textContent = '';
       sessionId = null;
       myId = null;
+      lensoActive = false;
       updatePeerCount();
     }
 
@@ -758,79 +1330,103 @@ app.get("/", (c) => {
 app.get(
 	"/ws",
 	upgradeWebSocket((_c) => {
-		// Generate ID here - captured by closure for all handlers
 		const peerId = crypto.randomUUID();
 
 		return {
 			onOpen(_event, ws) {
-				// peerId is captured from closure, no need for WeakMap
 				ws.send(JSON.stringify({ type: "welcome", id: peerId }));
 				console.log(`[SERVER WS] Peer ${peerId} connected.`);
 			},
 
 			onMessage(event, ws) {
-				// peerId is captured from closure
-				console.log(`[SERVER WS] onMessage from peer ${peerId}:`, event.data.toString().substring(0, 200));
+				console.log(`[SERVER WS] onMessage from peer ${peerId}`);
 
 				const data = JSON.parse(event.data.toString());
-				console.log("[SERVER WS] Parsed message type:", data.type);
 
 				if (data.type === "join") {
-					console.log("[SERVER WS] Processing join:", {
-						peerId,
-						sessionId: data.sessionId,
-						tracks: data.tracks
-					});
-					
+					const peerRoomId = data.roomId || "default";
+
 					const peer: Peer = {
 						id: peerId,
 						ws,
 						sessionId: data.sessionId,
 						trackNames: data.tracks || [],
+						name: data.name || "Anonymous",
+						roomId: peerRoomId,
 					};
 
-					// Send existing peers to new peer
-					const existingPeers = Array.from(peers.values()).map((p) => ({
-						id: p.id,
-						sessionId: p.sessionId,
-						tracks: p.trackNames,
-					}));
+					// Create or get meeting for the room
+					getOrCreateMeeting(peerRoomId);
 
-					console.log("[SERVER WS] Existing peers to send:", existingPeers);
-					
+					// Add to room
+					if (!rooms.has(peerRoomId)) {
+						rooms.set(peerRoomId, new Set());
+					}
+					rooms.get(peerRoomId)!.add(peerId);
+
+					// Send existing peers in the same room to new peer
+					const existingPeers = Array.from(peers.values())
+						.filter((p) => p.roomId === peerRoomId)
+						.map((p) => ({
+							id: p.id,
+							sessionId: p.sessionId,
+							tracks: p.trackNames,
+							name: p.name,
+						}));
+
 					if (existingPeers.length > 0) {
-						const msg = JSON.stringify({ type: "existing-peers", peers: existingPeers });
-						console.log("[SERVER WS] Sending existing-peers to new peer:", msg.substring(0, 300));
-						ws.send(msg);
+						ws.send(JSON.stringify({ type: "existing-peers", peers: existingPeers }));
 					}
 
-					// Notify existing peers about new peer
-					console.log("[SERVER WS] Notifying", peers.size, "existing peers about new peer");
-					peers.forEach((p) => {
-						const msg = JSON.stringify({
-							type: "peer-joined",
-							id: peerId,
-							sessionId: data.sessionId,
-							tracks: data.tracks,
+					// Notify existing peers in the same room about new peer
+					const roomPeerIds = rooms.get(peerRoomId);
+					if (roomPeerIds) {
+						roomPeerIds.forEach((existingPeerId) => {
+							const existingPeer = peers.get(existingPeerId);
+							if (existingPeer && existingPeerId !== peerId) {
+								existingPeer.ws.send(
+									JSON.stringify({
+										type: "peer-joined",
+										id: peerId,
+										sessionId: data.sessionId,
+										tracks: data.tracks,
+										name: data.name,
+									}),
+								);
+							}
 						});
-						console.log("[SERVER WS] Sending peer-joined to", p.id, ":", msg.substring(0, 200));
-						p.ws.send(msg);
-					});
+					}
 
 					peers.set(peerId, peer);
-					console.log(`[SERVER WS] Peer ${peerId} joined with session ${data.sessionId}. Total peers: ${peers.size}`);
+					console.log(
+						`[SERVER WS] Peer ${peerId} (${data.name}) joined room ${peerRoomId}. Total peers: ${peers.size}`,
+					);
 				}
 			},
 
 			onClose(_event, _ws) {
-				// peerId is captured from closure
 				console.log(`[SERVER WS] Peer ${peerId} disconnected.`);
+				const peer = peers.get(peerId);
+
+				if (peer) {
+					// Remove from room
+					const roomPeerIds = rooms.get(peer.roomId);
+					if (roomPeerIds) {
+						roomPeerIds.delete(peerId);
+						if (roomPeerIds.size === 0) {
+							rooms.delete(peer.roomId);
+						}
+					}
+
+					// Notify others in the same room
+					peers.forEach((p) => {
+						if (p.roomId === peer.roomId && p.id !== peerId) {
+							p.ws.send(JSON.stringify({ type: "peer-left", id: peerId }));
+						}
+					});
+				}
+
 				peers.delete(peerId);
-
-				peers.forEach((p) => {
-					p.ws.send(JSON.stringify({ type: "peer-left", id: peerId }));
-				});
-
 				console.log(`[SERVER WS] Total peers remaining: ${peers.size}`);
 			},
 		};
