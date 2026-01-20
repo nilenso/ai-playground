@@ -1,0 +1,30 @@
+{
+  "name": "bun-react-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run build && bun --hot src/index.ts serve",
+    "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
+    "start": "NODE_ENV=production bun src/index.ts serve",
+    "mkconfig": "bun src/index.ts mkconfig",
+    "mkhuman": "bun src/index.ts mkhuman",
+    "mkagent": "bun src/index.ts mkagent",
+    "auth": "bun src/index.ts auth",
+    "setup-pi": "bun scripts/setup-pi.ts",
+    "tui": "bun src/tui/index.ts"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.62",
+    "hono": "^4.11.1",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.0.157",
+    "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  }
+}

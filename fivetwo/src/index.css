@@ -1,0 +1,547 @@
+:root {
+  --pico-font-family-sans-serif: "Public Sans", system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --pico-font-family: var(--pico-font-family-sans-serif);
+  font-family: "Public Sans", system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Ensure Public Sans is used everywhere */
+body, button, input, select, textarea, a, h1, h2, h3, h4, h5, h6, p, span, label {
+  font-family: "Public Sans", system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+/* Override Pico's container max-width for wider layouts */
+.container {
+  max-width: 1400px;
+}
+
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.05;
+  background: url("./logo.svg");
+  background-size: 256px;
+  transform: rotate(-12deg) scale(1.35);
+  animation: slide 30s linear infinite;
+  pointer-events: none;
+}
+@keyframes slide {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 256px 224px;
+  }
+}
+.app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+.logo-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 0.3s;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.bun-logo {
+  transform: scale(1.2);
+}
+.bun-logo:hover {
+  filter: drop-shadow(0 0 2em #fbf0dfaa);
+}
+.react-logo {
+  animation: spin 20s linear infinite;
+}
+.react-logo:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+@keyframes spin {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+code {
+  background-color: #1a1a1a;
+  padding: 0.2em 0.4em;
+  border-radius: 0.3em;
+  font-family: monospace;
+}
+.api-tester {
+  margin: 2rem auto 0;
+  width: 100%;
+  max-width: 600px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.endpoint-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #1a1a1a;
+  padding: 0.75rem;
+  border-radius: 12px;
+  font: monospace;
+  border: 2px solid #fbf0df;
+  transition: 0.3s;
+  width: 100%;
+  box-sizing: border-box;
+}
+.endpoint-row:focus-within {
+  border-color: #f3d5a3;
+}
+.method {
+  background: #fbf0df;
+  color: #1a1a1a;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.9em;
+  appearance: none;
+  margin: 0;
+  width: min-content;
+  display: block;
+  flex-shrink: 0;
+  border: none;
+}
+.method option {
+  text-align: left;
+}
+.url-input {
+  width: 100%;
+  flex: 1;
+  background: 0;
+  border: 0;
+  color: #fbf0df;
+  font: 1em monospace;
+  padding: 0.2rem;
+  outline: 0;
+}
+.url-input:focus {
+  color: #fff;
+}
+.url-input::placeholder {
+  color: rgba(251, 240, 223, 0.4);
+}
+.send-button {
+  background: #fbf0df;
+  color: #1a1a1a;
+  border: 0;
+  padding: 0.4rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 700;
+  transition: 0.1s;
+  cursor: var(--bun-cursor);
+}
+.send-button:hover {
+  background: #f3d5a3;
+  transform: translateY(-1px);
+  cursor: pointer;
+}
+.response-area {
+  width: 100%;
+  min-height: 120px;
+  background: #1a1a1a;
+  border: 2px solid #fbf0df;
+  border-radius: 12px;
+  padding: 0.75rem;
+  color: #fbf0df;
+  font: monospace;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.response-area:focus {
+  border-color: #f3d5a3;
+}
+.response-area::placeholder {
+  color: rgba(251, 240, 223, 0.4);
+}
+@media (prefers-reduced-motion) {
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+  }
+}
+
+/* Card Grid Layout */
+.card-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(1, 1fr);
+}
+
+@media (min-width: 768px) {
+  .card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1080px) {
+  .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Card Tile */
+.card-tile {
+  background: var(--pico-card-background-color, var(--card-background-color, #1a1a1a));
+  border: 1px solid var(--pico-muted-border-color, var(--muted-border-color, #333));
+  border-radius: var(--pico-border-radius, 8px);
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+}
+
+.card-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  border-color: var(--pico-primary, #1095c1);
+}
+
+.card-tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.card-tile-type {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.card-tile-title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin: 0;
+  flex: 1;
+  line-height: 1.4;
+  color: var(--pico-color, inherit);
+}
+
+.card-tile-id {
+  font-size: 0.7rem;
+  color: var(--pico-muted-color, #888);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.card-tile-description {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color, #aaa);
+  margin: 0.75rem 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.card-tile-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--pico-muted-border-color, #333);
+}
+
+.card-tile-status {
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--pico-secondary-background, #333);
+}
+
+/* Status-specific colors */
+.card-tile-status[data-status="in_progress"] {
+  background: #1095c1;
+  color: white;
+}
+
+.card-tile-status[data-status="review"] {
+  background: #9b59b6;
+  color: white;
+}
+
+.card-tile-status[data-status="blocked"] {
+  background: #e74c3c;
+  color: white;
+}
+
+.card-tile-status[data-status="done"] {
+  background: #27ae60;
+  color: white;
+}
+
+/* Side Panel */
+.side-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+}
+
+.side-panel-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 100%;
+  max-width: 500px;
+  height: 100vh;
+  background: var(--card-background-color, #1a1a1a);
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+  z-index: 1000;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+.side-panel.open {
+  transform: translateX(0);
+}
+
+.side-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--muted-border-color, #333);
+}
+
+.side-panel-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.side-panel-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  color: var(--color, #fff);
+}
+
+.side-panel-meta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--muted-color, #888);
+}
+
+/* Side Panel Metadata Table */
+.side-panel-meta-table {
+  width: 100%;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.side-panel-meta-table th {
+  text-align: left;
+  padding: 0.4rem 0.75rem 0.4rem 0;
+  font-weight: 500;
+  color: var(--pico-muted-color, #888);
+  width: 80px;
+  vertical-align: middle;
+}
+
+.side-panel-meta-table td {
+  padding: 0.4rem 0;
+  vertical-align: middle;
+}
+
+.side-panel-section {
+  margin-top: 1.5rem;
+}
+
+.side-panel-section h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  color: var(--muted-color, #888);
+}
+
+@media (max-width: 600px) {
+  .side-panel {
+    max-width: 100%;
+  }
+}
+
+/* Reference Items */
+.reference-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  font-size: 0.85rem;
+}
+
+.reference-type {
+  background: var(--secondary-background, #333);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.reference-card {
+  color: var(--primary, #1095c1);
+}
+
+/* Section Header */
+.section-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+/* View Toggle */
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--pico-muted-border-color, #333);
+  border-radius: var(--pico-border-radius, 8px);
+  overflow: hidden;
+}
+
+.view-toggle button {
+  background: transparent;
+  border: none;
+  padding: 0.4rem 0.75rem;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--pico-muted-color, #888);
+  transition: background 0.2s, color 0.2s;
+  margin: 0;
+  border-radius: 0;
+}
+
+.view-toggle button:hover {
+  background: var(--pico-secondary-background, #333);
+  color: var(--pico-color, #fff);
+}
+
+.view-toggle button.active {
+  background: var(--pico-primary, #1095c1);
+  color: white;
+}
+
+.view-toggle button:first-child {
+  border-right: 1px solid var(--pico-muted-border-color, #333);
+}
+
+/* Card Table View */
+.card-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.card-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pico-muted-color, #888);
+  border-bottom: 2px solid var(--pico-muted-border-color, #333);
+}
+
+.card-table-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.card-table-row:hover {
+  background: var(--pico-secondary-background, rgba(255, 255, 255, 0.05));
+}
+
+.card-table-row td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--pico-muted-border-color, #333);
+  vertical-align: middle;
+}
+
+.card-table-id {
+  font-size: 0.8rem;
+  color: var(--pico-muted-color, #888);
+  white-space: nowrap;
+  width: 60px;
+}
+
+.card-table-type {
+  width: 40px;
+  text-align: center;
+}
+
+.card-table-title {
+  font-weight: 500;
+}
+
+.card-table-priority {
+  width: 80px;
+  text-align: center;
+}
+
+.card-table-status {
+  width: 100px;
+}
