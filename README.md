@@ -9,3 +9,4 @@ It's a polyglot repository with services/projects organized in separate director
 | Project | Description | Stack |
 |---------|-------------|-------|
 | [lenso2](./lenso2) | | TypeScript, Bun |
+| [fivetwo](./fivetwo) | Long-term memory for AI coding agents via project tracking | TypeScript, Bun, Hono |
