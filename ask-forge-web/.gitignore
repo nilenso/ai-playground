@@ -39,6 +39,9 @@ data/
 # Working directory for cloned repos
 workdir/
 
-# Built client bundle
+# Built client bundles
 public/index.js
+public/visualizer.js
 AGENTS.local.md
+
+*.jsonl

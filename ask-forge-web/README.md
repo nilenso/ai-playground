@@ -69,8 +69,27 @@ services:
 
 The app will only start after migrations complete successfully.
 
+## Session Visualizer
+
+A separate tool for visualizing `.jsonl` session files (e.g., from pi coding agent sessions).
+
+```bash
+# Run visualizer (default: looks for .jsonl files in current directory)
+bun run dev:visualizer
+
+# Specify a directory containing session files
+SESSION_DIR=/path/to/sessions bun run dev:visualizer
+```
+
+The visualizer runs on port 3001 and provides:
+- Dropdown to select between multiple `.jsonl` files
+- Session metadata display (ID, timestamp, working directory)
+- Formatted conversation view with user messages, assistant responses, thinking blocks, and tool calls/results
+
 ## Scripts
 
 - `bun run dev` — Start dev server with hot reload
 - `bun run build` — Build client bundle
+- `bun run dev:visualizer` — Start session visualizer (port 3001)
+- `bun run build:visualizer` — Build visualizer client bundle
 - `bun run check` — Run biome lint/format

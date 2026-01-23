@@ -5,6 +5,8 @@
 	"scripts": {
 		"dev": "bun run build && bun run --hot src/server.ts",
 		"build": "bun build src/client/index.tsx --outdir public --minify",
+		"dev:visualizer": "bun run build:visualizer && bun run --hot src/visualizer-server.ts",
+		"build:visualizer": "bun build src/client/visualizer-index.tsx --outfile public/visualizer.js --minify",
 		"format": "biome format --write .",
 		"lint": "biome lint .",
 		"check": "biome check --write ."
