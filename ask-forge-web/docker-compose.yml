@@ -1,0 +1,8 @@
+services:
+  migrate:
+    image: ghcr.io/neenaoffline/litem8
+    restart: "no"
+    volumes:
+      - ./migrations:/migrations:ro
+      - ./data:/data
+    command: up --db /data/ask-forge.db --migrations /migrations
