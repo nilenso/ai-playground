@@ -7,6 +7,7 @@ import {
 	getRepositoryByGitUrl,
 	updateRepositorySummary,
 } from "../lib/db.ts";
+import { wrapSession } from "../lib/session-logger.ts";
 
 // Git environment to prevent interactive prompts and SSH key loading
 const GIT_ENV: Record<string, string> = {
@@ -103,7 +104,7 @@ api.post("/connect", async (c) => {
 	}
 
 	try {
-		const session = await connect(normalized, { commitish: commit });
+		const session = wrapSession(await connect(normalized, { commitish: commit }));
 
 		// Store the session
 		sessions.set(session.id, session);
@@ -164,7 +165,9 @@ api.post("/ask", async (c) => {
 	const stream = new ReadableStream({
 		async start(controller) {
 			const encoder = new TextEncoder();
+			let closed = false;
 			const send = (event: string, data: unknown) => {
+				if (closed) return;
 				controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
 			};
 
@@ -193,6 +196,7 @@ api.post("/ask", async (c) => {
 				send("error", { success: false, error: message });
 			} finally {
 				clearInterval(heartbeat);
+				closed = true;
 				controller.close();
 			}
 		},
