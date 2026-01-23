@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { connect, ask } from "ask-forge";
+import { connect } from "ask-forge";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
 import {
 	findOrCreateRepository,
@@ -7,6 +7,21 @@ import {
 	getRepositoryByGitUrl,
 	updateRepositorySummary,
 } from "../lib/db.ts";
+
+// Git environment to prevent interactive prompts and SSH key loading
+const GIT_ENV: Record<string, string> = {
+	// Disable SSH agent and key loading
+	SSH_AUTH_SOCK: "",
+	// Use a non-existent SSH key to prevent loading default keys
+	GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -o IdentityFile=/dev/null",
+	// Disable terminal prompts for credentials
+	GIT_TERMINAL_PROMPT: "0",
+	// Disable askpass programs
+	GIT_ASKPASS: "",
+	SSH_ASKPASS: "",
+	// Preserve PATH for git to work
+	PATH: process.env.PATH || "",
+};
 
 const api = new Hono();
 
@@ -36,6 +51,7 @@ api.post("/validate", async (c) => {
 	const proc = Bun.spawn(["git", "ls-remote", "--heads", normalized], {
 		stdout: "pipe",
 		stderr: "pipe",
+		env: GIT_ENV,
 	});
 
 	const stderr = await new Response(proc.stderr).text();
@@ -70,9 +86,9 @@ api.post("/connect", async (c) => {
 	}
 
 	try {
-		// Connect to the repository (this clones it)
+		// Connect to the repository (this clones it and creates a session)
 		// If commit is provided, use it; otherwise connect will use default branch
-		const repo = await connect(normalized, commit || undefined);
+		const session = await connect(normalized, { commitish: commit });
 
 		// Check if we already have a cached summary for this repo
 		const existingRepo = getRepositoryByGitUrl(normalized);
@@ -85,18 +101,20 @@ api.post("/connect", async (c) => {
 			shouldComputeSummary = false;
 		} else {
 			// Ask for a quick summary based on the README (faster than exploring the repo)
-			const result = await ask(
-				repo,
+			const result = await session.ask(
 				`Summarize the README file in markdown. Keep it brief. Do not include a title or header - start directly with the content.`
 			);
 			summary = result.response;
 		}
 
+		// Close the session
+		session.close();
+
 		// Save/update repository record
 		const repository = findOrCreateRepository({
 			userInputUrl: url,
 			gitUrl: normalized,
-			defaultCommit: repo.commitish,
+			defaultCommit: session.repo.commitish,
 			summary: shouldComputeSummary ? summary : undefined,
 		});
 
@@ -105,21 +123,21 @@ api.post("/connect", async (c) => {
 			updateRepositorySummary({
 				repositoryId: repository.id,
 				summary,
-				commit: repo.commitish,
+				commit: session.repo.commitish,
 			});
 		}
 
 		// Record this checkout
 		recordCheckout({
 			repositoryId: repository.id,
-			commitId: repo.commitish,
+			commitId: session.repo.commitish,
 		});
 
 		return c.json({
 			success: true,
 			normalized,
-			localPath: repo.localPath,
-			commitish: repo.commitish,
+			localPath: session.repo.localPath,
+			commitish: session.repo.commitish,
 			summary,
 			repositoryId: repository.id,
 		});
