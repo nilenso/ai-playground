@@ -21,6 +21,7 @@
 	"dependencies": {
 		"ask-forge": "file:../ask-forge",
 		"hono": "^4.7.10",
+		"marked": "^17.0.1",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
 		"react-markdown": "^10.1.0"

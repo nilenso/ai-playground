@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import Markdown from "react-markdown";
+import { marked } from "marked";
 
 type ValidationState = "idle" | "validating" | "valid" | "invalid";
 type ConnectionState = "idle" | "connecting" | "connected" | "error";
@@ -200,9 +200,11 @@ export function App() {
 								{connectionResult.commitish.slice(0, 7)}
 							</code>
 						</div>
-						<div style={styles.markdownContent} className="markdown-content">
-							<Markdown>{connectionResult.summary}</Markdown>
-						</div>
+						<div 
+							style={styles.markdownContent} 
+							className="markdown-content"
+							dangerouslySetInnerHTML={{ __html: marked(connectionResult.summary) as string }}
+						/>
 					</div>
 				)}
 			</div>
