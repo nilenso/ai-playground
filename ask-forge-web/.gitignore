@@ -35,3 +35,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Database
 data/
+
+# Working directory for cloned repos
+workdir/
+
+# Built client bundle
+public/index.js
