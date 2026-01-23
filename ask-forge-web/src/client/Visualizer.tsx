@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
 import { marked } from "marked";
+import { useEffect, useState } from "react";
 
 interface ToolCallRecord {
 	name: string;
@@ -11,6 +11,15 @@ interface AskEntry {
 	question: string;
 	toolCalls: ToolCallRecord[];
 	response: string;
+	// Optional fields for backwards compatibility
+	usage?: {
+		inputTokens: number;
+		outputTokens: number;
+		totalTokens: number;
+		cacheReadTokens: number;
+		cacheWriteTokens: number;
+	};
+	inferenceTimeMs?: number;
 }
 
 interface SessionLog {
@@ -30,6 +39,7 @@ export function Visualizer() {
 	const [loadingFiles, setLoadingFiles] = useState(true);
 	const [loadingSession, setLoadingSession] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [expandedToolCalls, setExpandedToolCalls] = useState<Set<number>>(new Set());
 
 	// Load list of session files
 	useEffect(() => {
@@ -92,12 +102,38 @@ export function Visualizer() {
 		return `${minutes}m ${remainingSeconds}s`;
 	};
 
+	const formatTokens = (tokens: number) => {
+		if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
+		return tokens.toString();
+	};
+
+	const formatInferenceTime = (ms: number) => {
+		if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+		return `${ms}ms`;
+	};
+
+	const toggleToolCalls = (index: number) => {
+		setExpandedToolCalls((prev) => {
+			const next = new Set(prev);
+			if (next.has(index)) {
+				next.delete(index);
+			} else {
+				next.add(index);
+			}
+			return next;
+		});
+	};
+
 	const endReasonLabel = (reason: string) => {
 		switch (reason) {
-			case "closed": return "✓ Closed";
-			case "error": return "✗ Error";
-			case "timeout": return "⏱ Timeout";
-			default: return reason;
+			case "closed":
+				return "✓ Closed";
+			case "error":
+				return "✗ Error";
+			case "timeout":
+				return "⏱ Timeout";
+			default:
+				return reason;
 		}
 	};
 
@@ -125,19 +161,17 @@ export function Visualizer() {
 				{session && (
 					<div style={styles.sessionInfo}>
 						<code style={styles.sessionId}>{session.sessionId.slice(0, 8)}</code>
-						<span style={styles.sessionMeta}>
-							{formatTime(session.startedAt)}
-						</span>
-						<span style={styles.sessionMeta}>
-							Duration: {formatDuration(session.startedAt, session.endedAt)}
-						</span>
-						<span style={{
-							...styles.endReasonBadge,
-							backgroundColor: session.endReason === "error" ? "#fecaca" :
-								session.endReason === "timeout" ? "#fef3c7" : "#d1fae5",
-							color: session.endReason === "error" ? "#dc2626" :
-								session.endReason === "timeout" ? "#92400e" : "#059669",
-						}}>
+						<span style={styles.sessionMeta}>{formatTime(session.startedAt)}</span>
+						<span style={styles.sessionMeta}>Duration: {formatDuration(session.startedAt, session.endedAt)}</span>
+						<span
+							style={{
+								...styles.endReasonBadge,
+								backgroundColor:
+									session.endReason === "error" ? "#fecaca" : session.endReason === "timeout" ? "#fef3c7" : "#d1fae5",
+								color:
+									session.endReason === "error" ? "#dc2626" : session.endReason === "timeout" ? "#92400e" : "#059669",
+							}}
+						>
 							{endReasonLabel(session.endReason)}
 						</span>
 					</div>
@@ -154,15 +188,9 @@ export function Visualizer() {
 
 			{/* Conversation */}
 			<main style={styles.main}>
-				{loadingSession && (
-					<div style={styles.loadingOverlay}>Loading session...</div>
-				)}
-				{error && (
-					<div style={styles.errorBanner}>Error: {error}</div>
-				)}
-				{session?.error && (
-					<div style={styles.errorBanner}>Session Error: {session.error}</div>
-				)}
+				{loadingSession && <div style={styles.loadingOverlay}>Loading session...</div>}
+				{error && <div style={styles.errorBanner}>Error: {error}</div>}
+				{session?.error && <div style={styles.errorBanner}>Session Error: {session.error}</div>}
 				{session?.asks.map((ask, index) => (
 					<div key={index} style={styles.askContainer}>
 						{/* User Question */}
@@ -174,23 +202,40 @@ export function Visualizer() {
 							<div style={styles.messageContent}>{ask.question}</div>
 						</div>
 
-						{/* Tool Calls */}
+						{/* Tool Calls - Collapsible */}
 						{ask.toolCalls.length > 0 && (
 							<div style={styles.toolCallsContainer}>
-								{ask.toolCalls.map((tc, tcIndex) => (
-									<div key={tcIndex} style={styles.toolCall}>
-										<span style={styles.toolName}>{tc.name}</span>
-										<code style={styles.toolArgs}>
-											{JSON.stringify(tc.arguments, null, 2)}
-										</code>
+								<div style={styles.toolCallsHeader} onClick={() => toggleToolCalls(index)}>
+									<span style={styles.toolCallsToggle}>{expandedToolCalls.has(index) ? "▼" : "▶"}</span>
+									<span style={styles.toolCallsCount}>
+										{ask.toolCalls.length} tool call{ask.toolCalls.length !== 1 ? "s" : ""}
+									</span>
+								</div>
+								{expandedToolCalls.has(index) && (
+									<div style={styles.toolCallsList}>
+										{ask.toolCalls.map((tc, tcIndex) => (
+											<div key={`${index}-${tcIndex}`} style={styles.toolCall}>
+												<span style={styles.toolName}>{tc.name}</span>
+												<code style={styles.toolArgs}>{JSON.stringify(tc.arguments, null, 2)}</code>
+											</div>
+										))}
 									</div>
-								))}
+								)}
 							</div>
 						)}
 
 						{/* Assistant Response */}
 						<div style={styles.assistantMessage}>
-							<div style={styles.roleLabel}>Assistant</div>
+							<div style={styles.roleLabel}>
+								Assistant
+								{(ask.usage || ask.inferenceTimeMs !== undefined) && (
+									<span style={styles.metrics}>
+										{ask.usage && <>{formatTokens(ask.usage.totalTokens)} tokens</>}
+										{ask.usage && ask.inferenceTimeMs !== undefined && " · "}
+										{ask.inferenceTimeMs !== undefined && formatInferenceTime(ask.inferenceTimeMs)}
+									</span>
+								)}
+							</div>
 							<div
 								className="markdown-content"
 								style={styles.messageContent}
@@ -201,9 +246,7 @@ export function Visualizer() {
 						</div>
 					</div>
 				))}
-				{session?.asks.length === 0 && (
-					<div style={styles.emptyState}>No questions in this session</div>
-				)}
+				{session?.asks.length === 0 && <div style={styles.emptyState}>No questions in this session</div>}
 			</main>
 		</div>
 	);
@@ -381,5 +424,39 @@ const styles: Record<string, React.CSSProperties> = {
 		color: "#64748b",
 		whiteSpace: "pre-wrap",
 		wordBreak: "break-word",
+	},
+	toolCallsHeader: {
+		display: "flex",
+		alignItems: "center",
+		gap: "8px",
+		padding: "10px 12px",
+		backgroundColor: "#f8fafc",
+		borderRadius: "6px",
+		border: "1px solid #e2e8f0",
+		cursor: "pointer",
+		userSelect: "none" as const,
+	},
+	toolCallsToggle: {
+		fontFamily: "ui-monospace, monospace",
+		fontSize: "12px",
+		color: "#64748b",
+	},
+	toolCallsCount: {
+		fontSize: "13px",
+		color: "#475569",
+		fontWeight: 500,
+	},
+	toolCallsList: {
+		display: "flex",
+		flexDirection: "column" as const,
+		gap: "8px",
+		marginTop: "8px",
+	},
+	metrics: {
+		fontFamily: "ui-monospace, monospace",
+		fontSize: "11px",
+		color: "#9ca3af",
+		fontWeight: 400,
+		marginLeft: "auto",
 	},
 };

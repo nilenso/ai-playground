@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { Session, AskResult, AskOptions, ToolCallRecord } from "ask-forge";
+import type { AskOptions, AskResult, Session, ToolCallRecord } from "ask-forge";
 
 const SESSIONS_DIR = "workdir/sessions";
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
@@ -10,6 +10,14 @@ interface AskEntry {
 	question: string;
 	toolCalls: ToolCallRecord[];
 	response: string;
+	usage: {
+		inputTokens: number;
+		outputTokens: number;
+		totalTokens: number;
+		cacheReadTokens: number;
+		cacheWriteTokens: number;
+	};
+	inferenceTimeMs: number;
 }
 
 export function wrapSession(session: Session): Session {
@@ -59,6 +67,8 @@ export function wrapSession(session: Session): Session {
 				question,
 				toolCalls: result.toolCalls,
 				response: result.response,
+				usage: result.usage,
+				inferenceTimeMs: result.inferenceTimeMs,
 			});
 
 			if (result.response.startsWith("[ERROR:")) {
