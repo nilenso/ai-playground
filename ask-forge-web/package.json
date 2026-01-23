@@ -3,8 +3,8 @@
 	"module": "src/server.ts",
 	"type": "module",
 	"scripts": {
-		"dev": "bun run --hot src/server.ts",
-		"build": "bun build src/client/index.tsx --outdir dist/public --minify",
+		"dev": "bun run build && bun run --hot src/server.ts",
+		"build": "bun build src/client/index.tsx --outdir public --minify",
 		"format": "biome format --write .",
 		"lint": "biome lint .",
 		"check": "biome check --write ."

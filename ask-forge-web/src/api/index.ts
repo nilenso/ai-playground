@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { connect } from "ask-forge";
+import { connect, type Session } from "ask-forge";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
 import {
 	findOrCreateRepository,
@@ -10,18 +10,37 @@ import {
 
 // Git environment to prevent interactive prompts and SSH key loading
 const GIT_ENV: Record<string, string> = {
-	// Disable SSH agent and key loading
 	SSH_AUTH_SOCK: "",
-	// Use a non-existent SSH key to prevent loading default keys
 	GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -o IdentityFile=/dev/null",
-	// Disable terminal prompts for credentials
 	GIT_TERMINAL_PROMPT: "0",
-	// Disable askpass programs
 	GIT_ASKPASS: "",
 	SSH_ASKPASS: "",
-	// Preserve PATH for git to work
 	PATH: process.env.PATH || "",
 };
+
+// In-memory session store
+const sessions = new Map<string, Session>();
+
+// Clean up sessions older than 30 minutes
+const SESSION_TTL = 30 * 60 * 1000;
+const sessionTimestamps = new Map<string, number>();
+
+function cleanupSessions() {
+	const now = Date.now();
+	for (const [id, timestamp] of sessionTimestamps) {
+		if (now - timestamp > SESSION_TTL) {
+			const session = sessions.get(id);
+			if (session) {
+				session.close();
+				sessions.delete(id);
+			}
+			sessionTimestamps.delete(id);
+		}
+	}
+}
+
+// Run cleanup every 5 minutes
+setInterval(cleanupSessions, 5 * 60 * 1000);
 
 const api = new Hono();
 
@@ -31,7 +50,6 @@ api.get("/health", (c) => {
 
 /**
  * Validate a git URL by checking if it's cloneable
- * Uses git ls-remote to check without actually cloning
  */
 api.post("/validate", async (c) => {
 	const body = await c.req.json<{ url: string }>();
@@ -47,7 +65,6 @@ api.post("/validate", async (c) => {
 		return c.json({ valid: false, error }, 400);
 	}
 
-	// Use git ls-remote to check if the repo is accessible
 	const proc = Bun.spawn(["git", "ls-remote", "--heads", normalized], {
 		stdout: "pipe",
 		stderr: "pipe",
@@ -69,7 +86,7 @@ api.post("/validate", async (c) => {
 });
 
 /**
- * Connect to a repository and ask an initial question about it
+ * Connect to a repository and create a session
  */
 api.post("/connect", async (c) => {
 	const body = await c.req.json<{ url: string; commit?: string }>();
@@ -86,46 +103,22 @@ api.post("/connect", async (c) => {
 	}
 
 	try {
-		// Connect to the repository (this clones it and creates a session)
-		// If commit is provided, use it; otherwise connect will use default branch
 		const session = await connect(normalized, { commitish: commit });
 
-		// Check if we already have a cached summary for this repo
+		// Store the session
+		sessions.set(session.id, session);
+		sessionTimestamps.set(session.id, Date.now());
+
+		// Check for cached summary
 		const existingRepo = getRepositoryByGitUrl(normalized);
-		let summary: string;
-		let shouldComputeSummary = true;
-
-		if (existingRepo?.summary) {
-			// Use cached summary
-			summary = existingRepo.summary;
-			shouldComputeSummary = false;
-		} else {
-			// Ask for a quick summary based on the README (faster than exploring the repo)
-			const result = await session.ask(
-				`Summarize the README file in markdown. Keep it brief. Do not include a title or header - start directly with the content.`
-			);
-			summary = result.response;
-		}
-
-		// Close the session
-		session.close();
+		let summary: string | null = existingRepo?.summary || null;
 
 		// Save/update repository record
 		const repository = findOrCreateRepository({
 			userInputUrl: url,
 			gitUrl: normalized,
 			defaultCommit: session.repo.commitish,
-			summary: shouldComputeSummary ? summary : undefined,
 		});
-
-		// Update summary if we computed a new one and repo already existed
-		if (shouldComputeSummary && existingRepo && !existingRepo.summary) {
-			updateRepositorySummary({
-				repositoryId: repository.id,
-				summary,
-				commit: session.repo.commitish,
-			});
-		}
 
 		// Record this checkout
 		recordCheckout({
@@ -135,6 +128,7 @@ api.post("/connect", async (c) => {
 
 		return c.json({
 			success: true,
+			sessionId: session.id,
 			normalized,
 			localPath: session.repo.localPath,
 			commitish: session.repo.commitish,
@@ -145,6 +139,93 @@ api.post("/connect", async (c) => {
 		const message = err instanceof Error ? err.message : "Unknown error";
 		return c.json({ success: false, error: message }, 500);
 	}
+});
+
+/**
+ * Ask a question in an existing session (streaming progress via SSE)
+ */
+api.post("/ask", async (c) => {
+	const body = await c.req.json<{ sessionId: string; question: string }>();
+	const { sessionId, question } = body;
+
+	if (!sessionId || !question) {
+		return c.json({ success: false, error: "sessionId and question are required" }, 400);
+	}
+
+	const session = sessions.get(sessionId);
+	if (!session) {
+		return c.json({ success: false, error: "Session not found or expired" }, 404);
+	}
+
+	// Update session timestamp
+	sessionTimestamps.set(sessionId, Date.now());
+
+	// Stream progress events via SSE
+	const stream = new ReadableStream({
+		async start(controller) {
+			const encoder = new TextEncoder();
+			const send = (event: string, data: unknown) => {
+				controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+			};
+
+			// Send immediate thinking event to keep connection alive
+			send("progress", { type: "thinking" });
+
+			// Heartbeat to prevent timeout during long LLM calls
+			const heartbeat = setInterval(() => {
+				send("heartbeat", { ts: Date.now() });
+			}, 15000);
+
+			try {
+				const result = await session.ask(question, {
+					onProgress: (event) => {
+						send("progress", event);
+					},
+				});
+
+				send("done", {
+					success: true,
+					response: result.response,
+					toolCalls: result.toolCalls,
+				});
+			} catch (err) {
+				const message = err instanceof Error ? err.message : "Unknown error";
+				send("error", { success: false, error: message });
+			} finally {
+				clearInterval(heartbeat);
+				controller.close();
+			}
+		},
+	});
+
+	return new Response(stream, {
+		headers: {
+			"Content-Type": "text/event-stream",
+			"Cache-Control": "no-cache",
+			Connection: "keep-alive",
+		},
+	});
+});
+
+/**
+ * Close a session
+ */
+api.post("/disconnect", async (c) => {
+	const body = await c.req.json<{ sessionId: string }>();
+	const { sessionId } = body;
+
+	if (!sessionId) {
+		return c.json({ success: false, error: "sessionId is required" }, 400);
+	}
+
+	const session = sessions.get(sessionId);
+	if (session) {
+		session.close();
+		sessions.delete(sessionId);
+		sessionTimestamps.delete(sessionId);
+	}
+
+	return c.json({ success: true });
 });
 
 export default api;

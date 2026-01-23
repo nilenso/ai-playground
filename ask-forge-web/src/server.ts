@@ -29,4 +29,5 @@ console.log(`🚀 Server running at http://localhost:${port}`);
 export default {
 	port,
 	fetch: app.fetch,
+	idleTimeout: 120, // 2 minutes for long-running LLM requests
 };

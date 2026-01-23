@@ -1,370 +1,443 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { marked } from "marked";
 
-type ValidationState = "idle" | "validating" | "valid" | "invalid";
-type ConnectionState = "idle" | "connecting" | "connected" | "error";
-
-interface ConnectionResult {
-	normalized: string;
-	localPath: string;
-	commitish: string;
-	summary: string;
+interface Message {
+	id: string;
+	role: "user" | "assistant";
+	content: string;
+	toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
 }
 
-// Cookie helpers
-function setCookie(name: string, value: string, days = 365) {
-	const expires = new Date(Date.now() + days * 864e5).toUTCString();
-	document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+interface ConnectionState {
+	status: "disconnected" | "connecting" | "connected" | "error";
+	sessionId: string | null;
+	commitish: string | null;
+	error: string | null;
 }
 
-function getCookie(name: string): string | null {
-	const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
-	return match ? decodeURIComponent(match[2]) : null;
+interface ProgressState {
+	type: "idle" | "thinking" | "tool" | "responding";
+	toolName?: string;
+	toolArgs?: Record<string, unknown>;
 }
 
 export function App() {
 	const [url, setUrl] = useState("");
-	const [commit, setCommit] = useState("");
-	const [validationState, setValidationState] = useState<ValidationState>("idle");
-	const [validationError, setValidationError] = useState<string | null>(null);
-	const [normalizedUrl, setNormalizedUrl] = useState<string | null>(null);
-
-	const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
-	const [connectionError, setConnectionError] = useState<string | null>(null);
-	const [connectionResult, setConnectionResult] = useState<ConnectionResult | null>(null);
-
+	const [connection, setConnection] = useState<ConnectionState>({
+		status: "disconnected",
+		sessionId: null,
+		commitish: null,
+		error: null,
+	});
+	const [messages, setMessages] = useState<Message[]>([]);
+	const [inputValue, setInputValue] = useState("");
+	const [isAsking, setIsAsking] = useState(false);
+	const [progress, setProgress] = useState<ProgressState>({ type: "idle" });
+	
 	const urlInputRef = useRef<HTMLInputElement>(null);
+	const inputRef = useRef<HTMLTextAreaElement>(null);
+	const messagesEndRef = useRef<HTMLDivElement>(null);
 
-	const validateAndConnect = useCallback(async (inputUrl: string, inputCommit: string) => {
-		if (!inputUrl.trim()) {
-			setValidationState("idle");
-			setValidationError(null);
-			return;
-		}
-
-		// Step 1: Validate
-		setValidationState("validating");
-		setValidationError(null);
-		setConnectionState("idle");
-		setConnectionResult(null);
-
-		try {
-			const validateRes = await fetch("/api/validate", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ url: inputUrl }),
-			});
-
-			const validateData = await validateRes.json();
-
-			if (!validateData.valid) {
-				setValidationState("invalid");
-				setValidationError(validateData.error || "Invalid repository URL");
-				return;
-			}
-
-			setValidationState("valid");
-			setNormalizedUrl(validateData.normalized);
-
-			// Step 2: Connect and ask
-			setConnectionState("connecting");
-
-			const connectRes = await fetch("/api/connect", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ 
-					url: inputUrl,
-					commit: inputCommit.trim() || undefined 
-				}),
-			});
-
-			const connectData = await connectRes.json();
-
-			if (!connectData.success) {
-				setConnectionState("error");
-				setConnectionError(connectData.error || "Failed to connect to repository");
-				return;
-			}
-
-			setConnectionState("connected");
-			setConnectionResult({
-				normalized: connectData.normalized,
-				localPath: connectData.localPath,
-				commitish: connectData.commitish,
-				summary: connectData.summary,
-			});
-
-			// Save to cookies on successful connection
-			setCookie("askforge_repo_url", inputUrl);
-			setCookie("askforge_repo_commit", inputCommit.trim());
-		} catch (err) {
-			setValidationState("invalid");
-			setValidationError(err instanceof Error ? err.message : "Network error");
+	// Load URL from localStorage and auto-focus on mount
+	useEffect(() => {
+		const savedUrl = localStorage.getItem("askforge_repo_url");
+		if (savedUrl) {
+			setUrl(savedUrl);
+		} else {
+			urlInputRef.current?.focus();
 		}
 	}, []);
 
-	const handleBlur = useCallback(() => {
-		validateAndConnect(url, commit);
-	}, [url, commit, validateAndConnect]);
-
-	const handleKeyDown = useCallback(
-		(e: React.KeyboardEvent) => {
-			if (e.key === "Enter") {
-				validateAndConnect(url, commit);
-			}
-		},
-		[url, commit, validateAndConnect]
-	);
-
-	// Load saved repository from cookie on mount
+	// Auto-focus URL input when disconnected and empty
 	useEffect(() => {
-		const savedUrl = getCookie("askforge_repo_url");
-		const savedCommit = getCookie("askforge_repo_commit");
-		
-		if (savedUrl) {
-			setUrl(savedUrl);
-			if (savedCommit) {
-				setCommit(savedCommit);
-			}
-			// Auto-connect to saved repository
-			validateAndConnect(savedUrl, savedCommit || "");
-		} else {
-			// No saved repo, focus the input
+		if (connection.status === "disconnected" && !url) {
 			urlInputRef.current?.focus();
 		}
-	// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []); // Run only on mount
+	}, [connection.status, url]);
+
+	// Auto-scroll to bottom when messages change
+	useEffect(() => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	}, [messages]);
+
+	// Focus question input when connected
+	useEffect(() => {
+		if (connection.status === "connected") {
+			inputRef.current?.focus();
+		}
+	}, [connection.status]);
+
+	const handleConnect = useCallback(async () => {
+		if (!url.trim()) return;
+
+		setConnection({ status: "connecting", sessionId: null, commitish: null, error: null });
+
+		try {
+			const res = await fetch("/api/connect", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ url: url.trim() }),
+			});
+
+			const data = await res.json();
+
+			if (!data.success) {
+				setConnection({
+					status: "error",
+					sessionId: null,
+					commitish: null,
+					error: data.error || "Failed to connect",
+				});
+				return;
+			}
+
+			setConnection({
+				status: "connected",
+				sessionId: data.sessionId,
+				commitish: data.commitish,
+				error: null,
+			});
+			
+			// Save URL to localStorage
+			localStorage.setItem("askforge_repo_url", url.trim());
+			
+			// Clear previous messages on new connection
+			setMessages([]);
+		} catch (err) {
+			setConnection({
+				status: "error",
+				sessionId: null,
+				commitish: null,
+				error: err instanceof Error ? err.message : "Network error",
+			});
+		}
+	}, [url]);
+
+	const handleDisconnect = useCallback(async () => {
+		if (connection.sessionId) {
+			try {
+				await fetch("/api/disconnect", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ sessionId: connection.sessionId }),
+				});
+			} catch {
+				// Ignore disconnect errors
+			}
+		}
+		setConnection({ status: "disconnected", sessionId: null, commitish: null, error: null });
+		setMessages([]);
+	}, [connection.sessionId]);
+
+	const handleSend = useCallback(async () => {
+		if (!inputValue.trim() || !connection.sessionId || isAsking) return;
+
+		const question = inputValue.trim();
+		setInputValue("");
+		setIsAsking(true);
+		setProgress({ type: "thinking" });
+
+		// Add user message immediately
+		const userMessage: Message = {
+			id: `user-${Date.now()}`,
+			role: "user",
+			content: question,
+		};
+		setMessages((prev) => [...prev, userMessage]);
+
+		try {
+			const res = await fetch("/api/ask", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					sessionId: connection.sessionId,
+					question,
+				}),
+			});
+
+			const reader = res.body?.getReader();
+			const decoder = new TextDecoder();
+			
+			if (!reader) {
+				throw new Error("No response body");
+			}
+
+			let buffer = "";
+			
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split("\n");
+				buffer = lines.pop() || "";
+				
+				let eventType = "";
+				for (const line of lines) {
+					if (line.startsWith("event: ")) {
+						eventType = line.slice(7);
+					} else if (line.startsWith("data: ") && eventType) {
+						const data = JSON.parse(line.slice(6));
+						
+						if (eventType === "progress") {
+							if (data.type === "thinking") {
+								setProgress({ type: "thinking" });
+							} else if (data.type === "tool_start") {
+								setProgress({ type: "tool", toolName: data.name, toolArgs: data.arguments });
+							} else if (data.type === "tool_end") {
+								setProgress({ type: "thinking" });
+							} else if (data.type === "responding") {
+								setProgress({ type: "responding" });
+							}
+						} else if (eventType === "done") {
+							if (data.success) {
+								const assistantMessage: Message = {
+									id: `assistant-${Date.now()}`,
+									role: "assistant",
+									content: data.response,
+									toolCalls: data.toolCalls,
+								};
+								setMessages((prev) => [...prev, assistantMessage]);
+							} else {
+								setMessages((prev) => [
+									...prev,
+									{
+										id: `error-${Date.now()}`,
+										role: "assistant",
+										content: `Error: ${data.error || "Failed to get response"}`,
+									},
+								]);
+							}
+						} else if (eventType === "error") {
+							setMessages((prev) => [
+								...prev,
+								{
+									id: `error-${Date.now()}`,
+									role: "assistant",
+									content: `Error: ${data.error || "Failed to get response"}`,
+								},
+							]);
+						}
+						eventType = "";
+					}
+				}
+			}
+		} catch (err) {
+			setMessages((prev) => [
+				...prev,
+				{
+					id: `error-${Date.now()}`,
+					role: "assistant",
+					content: `Error: ${err instanceof Error ? err.message : "Network error"}`,
+				},
+			]);
+		} finally {
+			setIsAsking(false);
+			setProgress({ type: "idle" });
+			inputRef.current?.focus();
+		}
+	}, [inputValue, connection.sessionId, isAsking]);
+
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Enter" && !e.shiftKey) {
+			e.preventDefault();
+			handleSend();
+		}
+	};
+
+	const handleUrlKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			handleConnect();
+		}
+	};
 
 	return (
 		<div style={styles.container}>
-			<div style={styles.card}>
-				<h1 style={styles.title}>Ask Forge</h1>
-				<p style={styles.subtitle}>Ask questions about any git repository</p>
+			{/* Top Bar */}
+			<header style={styles.topBar}>
+				<input
+					ref={urlInputRef}
+					type="text"
+					value={url}
+					onChange={(e) => setUrl(e.target.value)}
+					onKeyDown={handleUrlKeyDown}
+					placeholder="https://github.com/owner/repo"
+					style={styles.repoInput}
+					disabled={connection.status === "connecting"}
+				/>
+				{connection.commitish && (
+					<code style={styles.commitBadge}>{connection.commitish.slice(0, 7)}</code>
+				)}
+				{connection.status === "connected" ? (
+					<button style={styles.button} onClick={handleDisconnect}>Disconnect</button>
+				) : (
+					<button
+						style={styles.button}
+						onClick={handleConnect}
+						disabled={connection.status === "connecting" || !url.trim()}
+					>
+						{connection.status === "connecting" ? "..." : "Connect"}
+					</button>
+				)}
+				{connection.error && <span style={styles.error}>{connection.error}</span>}
+			</header>
 
-				<div style={styles.inputGroup}>
-					<label htmlFor="repo-url" style={styles.label}>
-						Repository URL
-					</label>
-					<div style={styles.inputWrapper}>
-						<input
-							ref={urlInputRef}
-							id="repo-url"
-							type="text"
-							value={url}
-							onChange={(e) => setUrl(e.target.value)}
-							onBlur={handleBlur}
+			{/* Conversation Area */}
+			<main style={styles.main}>
+				{connection.status === "connected" && (
+					<div style={styles.messages}>
+						{messages.map((msg) => (
+							<div key={msg.id} style={styles.message}>
+								<div style={styles.role}>{msg.role === "user" ? "You" : "Assistant"}</div>
+								<div 
+									className="markdown-content"
+									dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }}
+								/>
+								{msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
+									<details style={styles.toolCalls}>
+										<summary>{msg.toolCalls.length} tool call{msg.toolCalls.length > 1 ? "s" : ""}</summary>
+										{msg.toolCalls.map((tc, i) => (
+											<div key={i} style={styles.toolCall}>
+												<code>{tc.name}</code> {JSON.stringify(tc.arguments)}
+											</div>
+										))}
+									</details>
+								)}
+							</div>
+						))}
+						{isAsking && (
+							<div style={styles.message}>
+								<div style={styles.role}>Assistant</div>
+								<div style={styles.status}>
+									{progress.type === "thinking" && "Thinking..."}
+									{progress.type === "tool" && `Running ${progress.toolName}: ${JSON.stringify(progress.toolArgs)}`}
+									{progress.type === "responding" && "Writing response..."}
+								</div>
+							</div>
+						)}
+						<div ref={messagesEndRef} />
+					</div>
+				)}
+
+				{/* Input Area */}
+				{connection.status === "connected" && (
+					<div style={styles.inputArea}>
+						<textarea
+							ref={inputRef}
+							value={inputValue}
+							onChange={(e) => setInputValue(e.target.value)}
 							onKeyDown={handleKeyDown}
-							placeholder="https://github.com/user/repo or git@github.com:user/repo.git"
-							style={styles.input}
-							disabled={connectionState === "connecting"}
+							placeholder="Ask a question..."
+							style={styles.textarea}
+							rows={2}
+							disabled={isAsking}
 						/>
-						<div style={styles.statusIcon}>{getStatusIcon(validationState, connectionState)}</div>
-					</div>
-					{validationError && <p style={styles.error}>{validationError}</p>}
-					{normalizedUrl && validationState === "valid" && (
-						<p style={styles.normalized}>→ {normalizedUrl}</p>
-					)}
-				</div>
-
-				<div style={styles.inputGroup}>
-					<label htmlFor="repo-commit" style={styles.label}>
-						Commit / Branch / Tag <span style={styles.optional}>(optional)</span>
-					</label>
-					<input
-						id="repo-commit"
-						type="text"
-						value={commit}
-						onChange={(e) => setCommit(e.target.value)}
-						onBlur={handleBlur}
-						onKeyDown={handleKeyDown}
-						placeholder="main, v1.0.0, abc1234... (defaults to main or master)"
-						style={styles.inputSmall}
-						disabled={connectionState === "connecting"}
-					/>
-				</div>
-
-				{connectionState === "connecting" && (
-					<div style={styles.loading}>
-						<Spinner />
-						<span>Connecting and analyzing repository...</span>
+						<button style={styles.button} onClick={handleSend} disabled={isAsking || !inputValue.trim()}>
+							{isAsking ? "..." : "Send"}
+						</button>
 					</div>
 				)}
-
-				{connectionError && <p style={styles.error}>{connectionError}</p>}
-
-				{connectionResult && (
-					<div style={styles.result}>
-						<div style={styles.resultHeader}>
-							<h2 style={styles.resultTitle}>About this repository</h2>
-							<code style={styles.commitBadge} title={`Full commit: ${connectionResult.commitish}`}>
-								{connectionResult.commitish.slice(0, 7)}
-							</code>
-						</div>
-						<div 
-							style={styles.markdownContent} 
-							className="markdown-content"
-							dangerouslySetInnerHTML={{ __html: marked(connectionResult.summary) as string }}
-						/>
-					</div>
-				)}
-			</div>
+			</main>
 		</div>
-	);
-}
-
-function getStatusIcon(validation: ValidationState, connection: ConnectionState): React.ReactNode {
-	if (connection === "connected") {
-		return <span style={{ color: "#10b981", fontSize: "20px" }}>✓</span>;
-	}
-	if (validation === "validating" || connection === "connecting") {
-		return <Spinner />;
-	}
-	if (validation === "valid") {
-		return <span style={{ color: "#10b981", fontSize: "20px" }}>✓</span>;
-	}
-	if (validation === "invalid") {
-		return <span style={{ color: "#ef4444", fontSize: "20px" }}>✗</span>;
-	}
-	return null;
-}
-
-function Spinner() {
-	return (
-		<div
-			style={{
-				width: "18px",
-				height: "18px",
-				border: "2px solid #e5e7eb",
-				borderTopColor: "#3b82f6",
-				borderRadius: "50%",
-				animation: "spin 0.8s linear infinite",
-			}}
-		/>
 	);
 }
 
 const styles: Record<string, React.CSSProperties> = {
 	container: {
-		minHeight: "100vh",
-		backgroundColor: "#f9fafb",
+		height: "100vh",
 		display: "flex",
-		alignItems: "center",
-		justifyContent: "center",
-		padding: "20px",
-		fontFamily: "system-ui, -apple-system, sans-serif",
-	},
-	card: {
-		backgroundColor: "white",
-		borderRadius: "12px",
-		boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-		padding: "40px",
-		maxWidth: "600px",
-		width: "100%",
-	},
-	title: {
-		margin: "0 0 8px 0",
-		fontSize: "28px",
-		fontWeight: 700,
-		color: "#111827",
-	},
-	subtitle: {
-		margin: "0 0 32px 0",
-		color: "#6b7280",
-		fontSize: "16px",
-	},
-	inputGroup: {
-		marginBottom: "20px",
-	},
-	label: {
-		display: "block",
-		marginBottom: "8px",
-		fontWeight: 500,
-		color: "#374151",
+		flexDirection: "column",
+		fontFamily: "system-ui, sans-serif",
 		fontSize: "14px",
 	},
-	optional: {
-		fontWeight: 400,
-		color: "#9ca3af",
-		fontSize: "12px",
-	},
-	inputWrapper: {
-		position: "relative",
+	topBar: {
 		display: "flex",
+		gap: "8px",
+		padding: "12px",
+		borderBottom: "1px solid #ddd",
 		alignItems: "center",
 	},
-	input: {
-		width: "100%",
-		padding: "12px 40px 12px 16px",
-		fontSize: "15px",
-		border: "1px solid #d1d5db",
-		borderRadius: "8px",
-		outline: "none",
-		transition: "border-color 0.2s, box-shadow 0.2s",
-	},
-	inputSmall: {
-		width: "100%",
-		padding: "10px 16px",
-		fontSize: "14px",
-		border: "1px solid #d1d5db",
-		borderRadius: "8px",
-		outline: "none",
-		transition: "border-color 0.2s, box-shadow 0.2s",
-	},
-	statusIcon: {
-		position: "absolute",
-		right: "12px",
-		display: "flex",
-		alignItems: "center",
-	},
-	error: {
-		marginTop: "8px",
-		color: "#ef4444",
-		fontSize: "14px",
-	},
-	normalized: {
-		marginTop: "8px",
-		color: "#6b7280",
-		fontSize: "13px",
+	repoInput: {
+		flex: 1,
+		padding: "8px",
+		border: "1px solid #ddd",
+		borderRadius: "4px",
 		fontFamily: "monospace",
-	},
-	loading: {
-		display: "flex",
-		alignItems: "center",
-		gap: "12px",
-		color: "#6b7280",
-		fontSize: "14px",
-		marginBottom: "24px",
-	},
-	result: {
-		backgroundColor: "#f9fafb",
-		borderRadius: "8px",
-		padding: "20px",
-		marginTop: "8px",
-	},
-	resultHeader: {
-		display: "flex",
-		alignItems: "center",
-		justifyContent: "space-between",
-		marginBottom: "12px",
-	},
-	resultTitle: {
-		margin: 0,
-		fontSize: "16px",
-		fontWeight: 600,
-		color: "#111827",
+		fontSize: "13px",
 	},
 	commitBadge: {
-		backgroundColor: "#e5e7eb",
-		padding: "2px 8px",
+		padding: "4px 8px",
+		backgroundColor: "#eee",
 		borderRadius: "4px",
-		fontSize: "11px",
-		color: "#6b7280",
-		fontFamily: "ui-monospace, monospace",
-		cursor: "default",
+		fontSize: "12px",
 	},
-	markdownContent: {
-		color: "#374151",
-		lineHeight: 1.6,
-		fontSize: "15px",
+	button: {
+		padding: "8px 16px",
+		border: "1px solid #ddd",
+		borderRadius: "4px",
+		background: "white",
+		cursor: "pointer",
+	},
+	error: {
+		color: "#c00",
+		fontSize: "13px",
+	},
+	main: {
+		flex: 1,
+		display: "flex",
+		flexDirection: "column",
+		overflow: "hidden",
+	},
+	messages: {
+		flex: 1,
+		overflowY: "auto",
+		padding: "16px",
+		display: "flex",
+		flexDirection: "column",
+		gap: "16px",
+	},
+	message: {
+		padding: "12px",
+		borderRadius: "4px",
+		backgroundColor: "#f9f9f9",
+		border: "1px solid #eee",
+	},
+	role: {
+		fontWeight: 600,
+		marginBottom: "8px",
+		fontSize: "12px",
+		textTransform: "uppercase",
+		color: "#666",
+	},
+	status: {
+		color: "#666",
+		fontStyle: "italic",
+	},
+	toolCalls: {
+		marginTop: "8px",
+		fontSize: "12px",
+		color: "#666",
+	},
+	toolCall: {
+		fontFamily: "monospace",
+		fontSize: "11px",
+		color: "#888",
+		marginTop: "4px",
+	},
+	inputArea: {
+		display: "flex",
+		gap: "8px",
+		padding: "12px",
+		borderTop: "1px solid #ddd",
+	},
+	textarea: {
+		flex: 1,
+		padding: "8px",
+		border: "1px solid #ddd",
+		borderRadius: "4px",
+		fontFamily: "inherit",
+		fontSize: "14px",
+		resize: "none",
 	},
 };

@@ -41,3 +41,4 @@ workdir/
 
 # Built client bundle
 public/index.js
+AGENTS.local.md
