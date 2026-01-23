@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
 import { marked } from "marked";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Message {
 	id: string;
@@ -13,12 +13,32 @@ interface ConnectionState {
 	sessionId: string | null;
 	commitish: string | null;
 	error: string | null;
+	repoName: string | null;
 }
 
 interface ProgressState {
 	type: "idle" | "thinking" | "tool" | "responding";
 	toolName?: string;
 	toolArgs?: Record<string, unknown>;
+}
+
+type AppPhase = "connect" | "ask" | "chat";
+
+function extractRepoName(url: string): string {
+	// Extract repo name from URL like "https://github.com/owner/repo" -> "owner/repo"
+	const match = url.match(/(?:github\.com|gitlab\.com|bitbucket\.org)[/:]([^/]+\/[^/.]+)/i);
+	if (match && match[1]) return match[1];
+	// Fallback: just get last two path segments
+	const parts = url
+		.replace(/\.git$/, "")
+		.split("/")
+		.filter(Boolean);
+	if (parts.length >= 2) {
+		const owner = parts[parts.length - 2];
+		const repo = parts[parts.length - 1];
+		if (owner && repo) return `${owner}/${repo}`;
+	}
+	return url;
 }
 
 export function App() {
@@ -28,49 +48,46 @@ export function App() {
 		sessionId: null,
 		commitish: null,
 		error: null,
+		repoName: null,
 	});
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [inputValue, setInputValue] = useState("");
 	const [isAsking, setIsAsking] = useState(false);
 	const [progress, setProgress] = useState<ProgressState>({ type: "idle" });
-	
-	const urlInputRef = useRef<HTMLInputElement>(null);
-	const inputRef = useRef<HTMLTextAreaElement>(null);
+	const [phase, setPhase] = useState<AppPhase>("connect");
+
+	const inputRef = useRef<HTMLInputElement>(null);
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 
-	// Load URL from localStorage and auto-focus on mount
+	// Load URL from localStorage on mount
 	useEffect(() => {
 		const savedUrl = localStorage.getItem("askforge_repo_url");
 		if (savedUrl) {
 			setUrl(savedUrl);
-		} else {
-			urlInputRef.current?.focus();
 		}
 	}, []);
 
-	// Auto-focus URL input when disconnected and empty
+	// Auto-focus input based on phase
 	useEffect(() => {
-		if (connection.status === "disconnected" && !url) {
-			urlInputRef.current?.focus();
+		if (phase === "connect") {
+			inputRef.current?.focus();
+		} else if (phase === "ask") {
+			inputRef.current?.focus();
+		} else if (phase === "chat") {
+			textareaRef.current?.focus();
 		}
-	}, [connection.status, url]);
+	}, [phase]);
 
 	// Auto-scroll to bottom when messages change
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages]);
 
-	// Focus question input when connected
-	useEffect(() => {
-		if (connection.status === "connected") {
-			inputRef.current?.focus();
-		}
-	}, [connection.status]);
-
 	const handleConnect = useCallback(async () => {
 		if (!url.trim()) return;
 
-		setConnection({ status: "connecting", sessionId: null, commitish: null, error: null });
+		setConnection((prev) => ({ ...prev, status: "connecting", error: null }));
 
 		try {
 			const res = await fetch("/api/connect", {
@@ -82,34 +99,35 @@ export function App() {
 			const data = await res.json();
 
 			if (!data.success) {
-				setConnection({
+				setConnection((prev) => ({
+					...prev,
 					status: "error",
-					sessionId: null,
-					commitish: null,
 					error: data.error || "Failed to connect",
-				});
+				}));
 				return;
 			}
 
+			const repoName = extractRepoName(url.trim());
 			setConnection({
 				status: "connected",
 				sessionId: data.sessionId,
 				commitish: data.commitish,
 				error: null,
+				repoName,
 			});
-			
+
 			// Save URL to localStorage
 			localStorage.setItem("askforge_repo_url", url.trim());
-			
-			// Clear previous messages on new connection
+
+			// Transition to ask phase
+			setPhase("ask");
 			setMessages([]);
 		} catch (err) {
-			setConnection({
+			setConnection((prev) => ({
+				...prev,
 				status: "error",
-				sessionId: null,
-				commitish: null,
 				error: err instanceof Error ? err.message : "Network error",
-			});
+			}));
 		}
 	}, [url]);
 
@@ -125,8 +143,15 @@ export function App() {
 				// Ignore disconnect errors
 			}
 		}
-		setConnection({ status: "disconnected", sessionId: null, commitish: null, error: null });
+		setConnection({
+			status: "disconnected",
+			sessionId: null,
+			commitish: null,
+			error: null,
+			repoName: null,
+		});
 		setMessages([]);
+		setPhase("connect");
 	}, [connection.sessionId]);
 
 	const handleSend = useCallback(async () => {
@@ -136,6 +161,11 @@ export function App() {
 		setInputValue("");
 		setIsAsking(true);
 		setProgress({ type: "thinking" });
+
+		// Transition to chat phase on first message
+		if (phase === "ask") {
+			setPhase("chat");
+		}
 
 		// Add user message immediately
 		const userMessage: Message = {
@@ -157,28 +187,28 @@ export function App() {
 
 			const reader = res.body?.getReader();
 			const decoder = new TextDecoder();
-			
+
 			if (!reader) {
 				throw new Error("No response body");
 			}
 
 			let buffer = "";
-			
+
 			while (true) {
 				const { done, value } = await reader.read();
 				if (done) break;
-				
+
 				buffer += decoder.decode(value, { stream: true });
 				const lines = buffer.split("\n");
 				buffer = lines.pop() || "";
-				
+
 				let eventType = "";
 				for (const line of lines) {
 					if (line.startsWith("event: ")) {
 						eventType = line.slice(7);
 					} else if (line.startsWith("data: ") && eventType) {
 						const data = JSON.parse(line.slice(6));
-						
+
 						if (eventType === "progress") {
 							if (data.type === "thinking") {
 								setProgress({ type: "thinking" });
@@ -234,210 +264,193 @@ export function App() {
 		} finally {
 			setIsAsking(false);
 			setProgress({ type: "idle" });
-			inputRef.current?.focus();
+			if (phase === "chat") {
+				textareaRef.current?.focus();
+			}
 		}
-	}, [inputValue, connection.sessionId, isAsking]);
+	}, [inputValue, connection.sessionId, isAsking, phase]);
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
-			handleSend();
+			if (phase === "connect") {
+				handleConnect();
+			} else {
+				handleSend();
+			}
 		}
 	};
 
-	const handleUrlKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			handleConnect();
-		}
-	};
+	// Connect phase - centered input for repo URL
+	if (phase === "connect") {
+		return (
+			<div className="app-container phase-connect">
+				<div className="connect-content">
+					<h1 className="logo">
+						<span className="logo-ask">ask</span>
+						<span className="logo-forge">forge</span>
+					</h1>
 
-	return (
-		<div style={styles.container}>
-			{/* Top Bar */}
-			<header style={styles.topBar}>
-				<input
-					ref={urlInputRef}
-					type="text"
-					value={url}
-					onChange={(e) => setUrl(e.target.value)}
-					onKeyDown={handleUrlKeyDown}
-					placeholder="https://github.com/owner/repo"
-					style={styles.repoInput}
-					disabled={connection.status === "connecting"}
-				/>
-				{connection.commitish && (
-					<code style={styles.commitBadge}>{connection.commitish.slice(0, 7)}</code>
-				)}
-				{connection.status === "connected" ? (
-					<button style={styles.button} onClick={handleDisconnect}>Disconnect</button>
-				) : (
-					<button
-						style={styles.button}
-						onClick={handleConnect}
-						disabled={connection.status === "connecting" || !url.trim()}
-					>
-						{connection.status === "connecting" ? "..." : "Connect"}
-					</button>
-				)}
-				{connection.error && <span style={styles.error}>{connection.error}</span>}
-			</header>
-
-			{/* Conversation Area */}
-			<main style={styles.main}>
-				{connection.status === "connected" && (
-					<div style={styles.messages}>
-						{messages.map((msg) => (
-							<div key={msg.id} style={styles.message}>
-								<div style={styles.role}>{msg.role === "user" ? "You" : "Assistant"}</div>
-								<div 
-									className="markdown-content"
-									dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }}
-								/>
-								{msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
-									<details style={styles.toolCalls}>
-										<summary>{msg.toolCalls.length} tool call{msg.toolCalls.length > 1 ? "s" : ""}</summary>
-										{msg.toolCalls.map((tc, i) => (
-											<div key={i} style={styles.toolCall}>
-												<code>{tc.name}</code> {JSON.stringify(tc.arguments)}
-											</div>
-										))}
-									</details>
-								)}
-							</div>
-						))}
-						{isAsking && (
-							<div style={styles.message}>
-								<div style={styles.role}>Assistant</div>
-								<div style={styles.status}>
-									{progress.type === "thinking" && "Thinking..."}
-									{progress.type === "tool" && `Running ${progress.toolName}: ${JSON.stringify(progress.toolArgs)}`}
-									{progress.type === "responding" && "Writing response..."}
-								</div>
-							</div>
-						)}
-						<div ref={messagesEndRef} />
-					</div>
-				)}
-
-				{/* Input Area */}
-				{connection.status === "connected" && (
-					<div style={styles.inputArea}>
-						<textarea
+					<div className="input-container">
+						<input
 							ref={inputRef}
-							value={inputValue}
-							onChange={(e) => setInputValue(e.target.value)}
+							type="text"
+							value={url}
+							onChange={(e) => setUrl(e.target.value)}
 							onKeyDown={handleKeyDown}
-							placeholder="Ask a question..."
-							style={styles.textarea}
-							rows={2}
-							disabled={isAsking}
+							placeholder="Enter repository URL..."
+							className="main-input"
+							disabled={connection.status === "connecting"}
 						/>
-						<button style={styles.button} onClick={handleSend} disabled={isAsking || !inputValue.trim()}>
-							{isAsking ? "..." : "Send"}
+						<button
+							type="button"
+							className="connect-button"
+							onClick={handleConnect}
+							disabled={connection.status === "connecting" || !url.trim()}
+						>
+							{connection.status === "connecting" ? <span className="spinner" /> : "Connect"}
 						</button>
 					</div>
-				)}
+
+					{connection.error && <div className="error-message">{connection.error}</div>}
+
+					<p className="hint">Paste a GitHub, GitLab, or Bitbucket URL</p>
+				</div>
+			</div>
+		);
+	}
+
+	// Ask phase - show repo status and question input
+	if (phase === "ask") {
+		return (
+			<div className="app-container phase-ask">
+				<div className="ask-content">
+					<h1 className="logo">
+						<span className="logo-ask">ask</span>
+						<span className="logo-forge">forge</span>
+					</h1>
+
+					<div className="input-container">
+						<div className="input-wrapper">
+							<input
+								ref={inputRef}
+								type="text"
+								value={inputValue}
+								onChange={(e) => setInputValue(e.target.value)}
+								onKeyDown={handleKeyDown}
+								placeholder='Ask anything... "Fix a TODO in the codebase"'
+								className="main-input"
+								disabled={isAsking}
+							/>
+						</div>
+					</div>
+
+					<div className="repo-status">
+						<span className="status-indicator connected" />
+						<span className="repo-name">{connection.repoName}</span>
+						{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
+						<button type="button" className="disconnect-link" onClick={handleDisconnect}>
+							Disconnect
+						</button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	// Chat phase - full conversation view
+	return (
+		<div className="app-container phase-chat">
+			<header className="chat-header">
+				<div className="header-left">
+					<h1 className="logo-small">
+						<span className="logo-ask">ask</span>
+						<span className="logo-forge">forge</span>
+					</h1>
+					<button
+						type="button"
+						className="new-question-button"
+						onClick={handleDisconnect}
+						aria-label="Start new question"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+							<path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
+						</svg>
+						New
+					</button>
+				</div>
+				<div className="repo-status-inline">
+					<span className="status-indicator connected" />
+					<span className="repo-name">{connection.repoName}</span>
+					{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
+				</div>
+			</header>
+
+			<main className="chat-main">
+				<div className="messages">
+					{messages.map((msg) => (
+						<div key={msg.id} className={`message message-${msg.role}`}>
+							<div className="message-role">{msg.role === "user" ? "You" : "Assistant"}</div>
+							<div className="markdown-content" dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }} />
+							{msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
+								<details className="tool-calls">
+									<summary>
+										{msg.toolCalls.length} tool call{msg.toolCalls.length > 1 ? "s" : ""}
+									</summary>
+									{msg.toolCalls.map((tc) => (
+										<div key={`${msg.id}-${tc.name}`} className="tool-call">
+											<code>{tc.name}</code> {JSON.stringify(tc.arguments)}
+										</div>
+									))}
+								</details>
+							)}
+						</div>
+					))}
+					{isAsking && (
+						<div className="message message-assistant">
+							<div className="message-role">Assistant</div>
+							<div className="thinking-status">
+								{progress.type === "thinking" && (
+									<>
+										<span className="thinking-dots">
+											<span>.</span>
+											<span>.</span>
+											<span>.</span>
+										</span>
+										Thinking
+									</>
+								)}
+								{progress.type === "tool" && (
+									<>
+										<span className="tool-icon">&#8594;</span>
+										{progress.toolName}
+									</>
+								)}
+								{progress.type === "responding" && "Writing response..."}
+							</div>
+						</div>
+					)}
+					<div ref={messagesEndRef} />
+				</div>
 			</main>
+
+			<footer className="chat-footer">
+				<div className="chat-input-container">
+					<textarea
+						ref={textareaRef}
+						value={inputValue}
+						onChange={(e) => setInputValue(e.target.value)}
+						onKeyDown={handleKeyDown}
+						placeholder="Ask a follow-up question..."
+						className="chat-textarea"
+						rows={1}
+						disabled={isAsking}
+					/>
+					<button type="button" className="send-button" onClick={handleSend} disabled={isAsking || !inputValue.trim()}>
+						{isAsking ? <span className="spinner small" /> : "Send"}
+					</button>
+				</div>
+			</footer>
 		</div>
 	);
 }
-
-const styles: Record<string, React.CSSProperties> = {
-	container: {
-		height: "100vh",
-		display: "flex",
-		flexDirection: "column",
-		fontFamily: "system-ui, sans-serif",
-		fontSize: "14px",
-	},
-	topBar: {
-		display: "flex",
-		gap: "8px",
-		padding: "12px",
-		borderBottom: "1px solid #ddd",
-		alignItems: "center",
-	},
-	repoInput: {
-		flex: 1,
-		padding: "8px",
-		border: "1px solid #ddd",
-		borderRadius: "4px",
-		fontFamily: "monospace",
-		fontSize: "13px",
-	},
-	commitBadge: {
-		padding: "4px 8px",
-		backgroundColor: "#eee",
-		borderRadius: "4px",
-		fontSize: "12px",
-	},
-	button: {
-		padding: "8px 16px",
-		border: "1px solid #ddd",
-		borderRadius: "4px",
-		background: "white",
-		cursor: "pointer",
-	},
-	error: {
-		color: "#c00",
-		fontSize: "13px",
-	},
-	main: {
-		flex: 1,
-		display: "flex",
-		flexDirection: "column",
-		overflow: "hidden",
-	},
-	messages: {
-		flex: 1,
-		overflowY: "auto",
-		padding: "16px",
-		display: "flex",
-		flexDirection: "column",
-		gap: "16px",
-	},
-	message: {
-		padding: "12px",
-		borderRadius: "4px",
-		backgroundColor: "#f9f9f9",
-		border: "1px solid #eee",
-	},
-	role: {
-		fontWeight: 600,
-		marginBottom: "8px",
-		fontSize: "12px",
-		textTransform: "uppercase",
-		color: "#666",
-	},
-	status: {
-		color: "#666",
-		fontStyle: "italic",
-	},
-	toolCalls: {
-		marginTop: "8px",
-		fontSize: "12px",
-		color: "#666",
-	},
-	toolCall: {
-		fontFamily: "monospace",
-		fontSize: "11px",
-		color: "#888",
-		marginTop: "4px",
-	},
-	inputArea: {
-		display: "flex",
-		gap: "8px",
-		padding: "12px",
-		borderTop: "1px solid #ddd",
-	},
-	textarea: {
-		flex: 1,
-		padding: "8px",
-		border: "1px solid #ddd",
-		borderRadius: "4px",
-		fontFamily: "inherit",
-		fontSize: "14px",
-		resize: "none",
-	},
-};
