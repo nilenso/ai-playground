@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 const app = new Hono();
 
-const sessionDir = process.env.SESSION_DIR || ".";
+const sessionDir = process.env.SESSION_DIR || "workdir/sessions";
 
 // API to list available session files
 app.get("/api/sessions", async (c) => {
