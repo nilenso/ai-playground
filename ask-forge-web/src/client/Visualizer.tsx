@@ -141,8 +141,23 @@ export function Visualizer() {
 		<div style={styles.container}>
 			{/* Header */}
 			<header style={styles.header}>
-				<div style={styles.headerTop}>
-					<h1 style={styles.title}>Session Visualizer</h1>
+				<div style={styles.headerLeft}>
+					<h1 style={styles.title}>
+						<span style={styles.logoAsk}>ask</span>
+						<span style={styles.logoForge}>forge</span>
+						<span style={styles.titleSuffix}> sessions</span>
+					</h1>
+					{session && (
+						<div style={styles.repoStatusInline}>
+							<span style={styles.statusIndicator} />
+							<a href={session.repo.url} target="_blank" rel="noopener noreferrer" style={styles.repoLink}>
+								{session.repo.url.replace(/^https?:\/\/(www\.)?github\.com\//, "")}
+							</a>
+							<code style={styles.commitBadge}>{session.repo.commitish.slice(0, 8)}</code>
+						</div>
+					)}
+				</div>
+				<div style={styles.headerRight}>
 					{files.length > 0 && (
 						<select
 							style={styles.fileSelect}
@@ -158,33 +173,29 @@ export function Visualizer() {
 						</select>
 					)}
 				</div>
-				{session && (
-					<div style={styles.sessionInfo}>
-						<code style={styles.sessionId}>{session.sessionId.slice(0, 8)}</code>
-						<span style={styles.sessionMeta}>{formatTime(session.startedAt)}</span>
-						<span style={styles.sessionMeta}>Duration: {formatDuration(session.startedAt, session.endedAt)}</span>
-						<span
-							style={{
-								...styles.endReasonBadge,
-								backgroundColor:
-									session.endReason === "error" ? "#fecaca" : session.endReason === "timeout" ? "#fef3c7" : "#d1fae5",
-								color:
-									session.endReason === "error" ? "#dc2626" : session.endReason === "timeout" ? "#92400e" : "#059669",
-							}}
-						>
-							{endReasonLabel(session.endReason)}
-						</span>
-					</div>
-				)}
-				{session && (
-					<div style={styles.repoInfo}>
-						<a href={session.repo.url} target="_blank" rel="noopener noreferrer" style={styles.repoLink}>
-							{session.repo.url}
-						</a>
-						<code style={styles.commitBadge}>{session.repo.commitish.slice(0, 8)}</code>
-					</div>
-				)}
 			</header>
+			{session && (
+				<div style={styles.sessionBar}>
+					<code style={styles.sessionId}>{session.sessionId.slice(0, 8)}</code>
+					<span style={styles.sessionMeta}>{formatTime(session.startedAt)}</span>
+					<span style={styles.sessionMeta}>Duration: {formatDuration(session.startedAt, session.endedAt)}</span>
+					<span
+						style={{
+							...styles.endReasonBadge,
+							backgroundColor:
+								session.endReason === "error"
+									? "rgba(239, 68, 68, 0.1)"
+									: session.endReason === "timeout"
+										? "rgba(234, 179, 8, 0.1)"
+										: "rgba(0, 212, 170, 0.1)",
+							color:
+								session.endReason === "error" ? "#df1b41" : session.endReason === "timeout" ? "#92400e" : "#00d4aa",
+						}}
+					>
+						{endReasonLabel(session.endReason)}
+					</span>
+				</div>
+			)}
 
 			{/* Conversation */}
 			<main style={styles.main}>
@@ -255,137 +266,173 @@ export function Visualizer() {
 const styles: Record<string, React.CSSProperties> = {
 	container: {
 		minHeight: "100vh",
-		fontFamily: "system-ui, -apple-system, sans-serif",
-		fontSize: "14px",
+		display: "flex",
+		flexDirection: "column",
 	},
 	loading: {
 		padding: "40px",
 		textAlign: "center",
-		color: "#666",
+		color: "#8898aa",
 	},
 	error: {
 		padding: "40px",
 		textAlign: "center",
-		color: "#dc2626",
+		color: "#df1b41",
 	},
 	loadingOverlay: {
 		padding: "20px",
 		textAlign: "center",
-		color: "#6b7280",
+		color: "#425466",
 		fontStyle: "italic",
 	},
 	errorBanner: {
 		padding: "12px 16px",
-		backgroundColor: "#fef2f2",
-		color: "#dc2626",
-		borderRadius: "6px",
-		border: "1px solid #fecaca",
+		backgroundColor: "rgba(239, 68, 68, 0.1)",
+		color: "#df1b41",
+		borderRadius: "8px",
+		border: "1px solid rgba(239, 68, 68, 0.2)",
 		marginBottom: "16px",
+		fontSize: "14px",
 	},
 	emptyState: {
 		padding: "40px",
 		textAlign: "center",
-		color: "#9ca3af",
+		color: "#8898aa",
 		fontStyle: "italic",
 	},
 	header: {
+		display: "flex",
+		alignItems: "center",
+		justifyContent: "space-between",
 		padding: "16px 24px",
-		backgroundColor: "#1f2937",
-		color: "white",
+		borderBottom: "1px solid #e5e7eb",
+		backgroundColor: "#ffffff",
+		flexShrink: 0,
 		position: "sticky",
 		top: 0,
 		zIndex: 100,
 	},
-	headerTop: {
+	headerLeft: {
 		display: "flex",
-		justifyContent: "space-between",
 		alignItems: "center",
 		gap: "16px",
 	},
+	headerRight: {
+		display: "flex",
+		alignItems: "center",
+		gap: "12px",
+	},
 	title: {
 		margin: 0,
-		fontSize: "18px",
-		fontWeight: 600,
+		fontSize: "20px",
+		fontWeight: 700,
+		letterSpacing: "-0.02em",
+	},
+	logoAsk: {
+		color: "#8898aa",
+	},
+	logoForge: {
+		color: "#ec4899",
+	},
+	titleSuffix: {
+		color: "#8898aa",
+		fontWeight: 500,
+		fontSize: "16px",
+	},
+	repoStatusInline: {
+		display: "flex",
+		alignItems: "center",
+		gap: "10px",
+	},
+	statusIndicator: {
+		width: "8px",
+		height: "8px",
+		borderRadius: "50%",
+		backgroundColor: "#00d4aa",
+		boxShadow: "0 0 8px rgba(0, 212, 170, 0.4)",
 	},
 	fileSelect: {
-		padding: "6px 12px",
-		fontSize: "13px",
-		fontFamily: "ui-monospace, monospace",
-		backgroundColor: "#374151",
-		color: "white",
-		border: "1px solid #4b5563",
-		borderRadius: "4px",
+		padding: "8px 16px",
+		fontSize: "14px",
+		fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Code', monospace",
+		backgroundColor: "#ffffff",
+		color: "#0a2540",
+		border: "1px solid #e5e7eb",
+		borderRadius: "8px",
 		cursor: "pointer",
 		maxWidth: "400px",
+		boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
 	},
-	sessionInfo: {
-		marginTop: "8px",
+	sessionBar: {
 		display: "flex",
 		gap: "12px",
 		alignItems: "center",
 		fontSize: "13px",
+		padding: "10px 24px",
+		backgroundColor: "#f9fafb",
+		borderBottom: "1px solid #e5e7eb",
 	},
 	sessionId: {
-		backgroundColor: "rgba(255,255,255,0.1)",
-		padding: "2px 8px",
+		backgroundColor: "#f3f4f6",
+		padding: "4px 8px",
 		borderRadius: "4px",
+		fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Code', monospace",
+		fontSize: "12px",
+		color: "#425466",
 	},
 	sessionMeta: {
-		color: "#9ca3af",
+		color: "#8898aa",
 	},
 	endReasonBadge: {
-		padding: "2px 8px",
+		padding: "4px 8px",
 		borderRadius: "4px",
 		fontSize: "12px",
 		fontWeight: 500,
 	},
-	repoInfo: {
-		marginTop: "8px",
-		display: "flex",
-		gap: "12px",
-		alignItems: "center",
-		fontSize: "13px",
-	},
 	repoLink: {
-		color: "#60a5fa",
+		color: "#ec4899",
 		textDecoration: "none",
+		fontWeight: 500,
 	},
 	commitBadge: {
-		backgroundColor: "rgba(255,255,255,0.1)",
-		padding: "2px 8px",
+		backgroundColor: "#f3f4f6",
+		padding: "4px 8px",
 		borderRadius: "4px",
+		fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Code', monospace",
 		fontSize: "12px",
+		color: "#425466",
 	},
 	main: {
-		maxWidth: "900px",
-		margin: "0 auto",
+		flex: 1,
+		overflowY: "auto",
 		padding: "24px",
 		display: "flex",
 		flexDirection: "column",
 		gap: "24px",
 	},
 	askContainer: {
+		maxWidth: "800px",
+		width: "100%",
+		margin: "0 auto",
 		display: "flex",
 		flexDirection: "column",
 		gap: "12px",
 	},
 	userMessage: {
-		padding: "16px",
-		backgroundColor: "#dbeafe",
-		borderRadius: "8px",
-		borderLeft: "4px solid #3b82f6",
+		padding: "16px 20px",
+		backgroundColor: "#f3f4f6",
+		borderRadius: "12px",
+		border: "1px solid #e5e7eb",
 	},
 	assistantMessage: {
-		padding: "16px",
-		backgroundColor: "white",
-		borderRadius: "8px",
-		border: "1px solid #e5e7eb",
+		padding: "16px 20px",
 	},
 	roleLabel: {
 		fontWeight: 600,
 		fontSize: "12px",
 		textTransform: "uppercase",
-		color: "#6b7280",
+		letterSpacing: "0.05em",
+		color: "#8898aa",
 		marginBottom: "8px",
 		display: "flex",
 		alignItems: "center",
@@ -394,11 +441,13 @@ const styles: Record<string, React.CSSProperties> = {
 	timestamp: {
 		fontWeight: 400,
 		fontSize: "11px",
-		color: "#9ca3af",
+		color: "#8898aa",
 		textTransform: "none",
+		letterSpacing: "normal",
 	},
 	messageContent: {
-		lineHeight: 1.6,
+		lineHeight: 1.7,
+		color: "#0a2540",
 	},
 	toolCallsContainer: {
 		display: "flex",
@@ -407,21 +456,22 @@ const styles: Record<string, React.CSSProperties> = {
 		marginLeft: "20px",
 	},
 	toolCall: {
-		padding: "10px 12px",
-		backgroundColor: "#f8fafc",
+		padding: "8px 12px",
+		backgroundColor: "#f3f4f6",
 		borderRadius: "6px",
-		border: "1px solid #e2e8f0",
+		fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Code', monospace",
+		fontSize: "12px",
 	},
 	toolName: {
 		fontWeight: 600,
 		fontSize: "13px",
-		color: "#0f172a",
+		color: "#7c3aed",
 	},
 	toolArgs: {
 		display: "block",
 		marginTop: "6px",
 		fontSize: "12px",
-		color: "#64748b",
+		color: "#8898aa",
 		whiteSpace: "pre-wrap",
 		wordBreak: "break-word",
 	},
@@ -429,21 +479,22 @@ const styles: Record<string, React.CSSProperties> = {
 		display: "flex",
 		alignItems: "center",
 		gap: "8px",
-		padding: "10px 12px",
-		backgroundColor: "#f8fafc",
+		padding: "8px 12px",
+		backgroundColor: "#f3f4f6",
 		borderRadius: "6px",
-		border: "1px solid #e2e8f0",
 		cursor: "pointer",
 		userSelect: "none" as const,
+		fontSize: "13px",
+		color: "#8898aa",
 	},
 	toolCallsToggle: {
-		fontFamily: "ui-monospace, monospace",
+		fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Code', monospace",
 		fontSize: "12px",
-		color: "#64748b",
+		color: "#8898aa",
 	},
 	toolCallsCount: {
 		fontSize: "13px",
-		color: "#475569",
+		color: "#425466",
 		fontWeight: 500,
 	},
 	toolCallsList: {
@@ -453,9 +504,9 @@ const styles: Record<string, React.CSSProperties> = {
 		marginTop: "8px",
 	},
 	metrics: {
-		fontFamily: "ui-monospace, monospace",
+		fontFamily: "ui-monospace, 'SF Mono', 'Cascadia Code', monospace",
 		fontSize: "11px",
-		color: "#9ca3af",
+		color: "#8898aa",
 		fontWeight: 400,
 		marginLeft: "auto",
 	},
