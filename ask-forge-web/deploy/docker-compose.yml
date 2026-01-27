@@ -1,0 +1,20 @@
+services:
+  web:
+    image: ghcr.io/nilenso/ask-forge-web:latest
+    container_name: ask-forge-web
+    environment:
+      - PORT=3000
+      - VISUALIZER_PORT=3001
+      - DATABASE_PATH=/app/data/ask-forge.db
+      - SESSION_DIR=/app/data/sessions
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    volumes:
+      - ./data:/app/data
+    networks:
+      - default
+      - web
+    restart: unless-stopped
+
+networks:
+  web:
+    external: true
