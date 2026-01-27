@@ -145,7 +145,7 @@ export function App() {
 	// Auto-scroll to bottom when messages change
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, []);
+	}, [messages]);
 
 	const handleConnect = useCallback(async () => {
 		if (!url.trim()) return;
