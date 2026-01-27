@@ -227,13 +227,75 @@ export function App() {
 	const streamingThinkingRef = useRef("");
 	const streamingBlocksRef = useRef<ContentBlock[]>([]);
 
-	// Helper to get the current text content from streaming blocks
-	const getStreamingTextContent = useCallback(() => {
-		return streamingBlocksRef.current
-			.filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
-			.map((b) => b.content)
-			.join("");
+	// Text buffering for smooth character-by-character release
+	const textBufferRef = useRef(""); // Pending text not yet displayed
+	const releaseIntervalRef = useRef<number | null>(null);
+	const CHARS_PER_TICK = 2; // Base chars to release per tick (~120 chars/sec at 60fps)
+	const TICK_MS = 16; // ~60fps
+
+	// Update the UI with current streaming state
+	const updateStreamingUI = useCallback(() => {
+		if (!streamingMessageIdRef.current) return;
+		setMessages((prev) =>
+			prev.map((msg) =>
+				msg.id === streamingMessageIdRef.current
+					? { ...msg, thinking: streamingThinkingRef.current, contentBlocks: [...streamingBlocksRef.current] }
+					: msg,
+			),
+		);
 	}, []);
+
+	// Release characters from buffer to displayed text
+	const releaseChars = useCallback(() => {
+		if (textBufferRef.current.length === 0) return;
+
+		// Adaptive rate: speed up if buffer is growing to avoid falling behind
+		const bufferLen = textBufferRef.current.length;
+		const charsToRelease = bufferLen > 100 ? Math.min(bufferLen, CHARS_PER_TICK * 5) : bufferLen > 50 ? CHARS_PER_TICK * 2 : CHARS_PER_TICK;
+
+		// Move chars from buffer to the last text block
+		const chars = textBufferRef.current.slice(0, charsToRelease);
+		textBufferRef.current = textBufferRef.current.slice(charsToRelease);
+
+		const blocks = streamingBlocksRef.current;
+		const lastBlock = blocks[blocks.length - 1];
+		if (lastBlock && lastBlock.type === "text") {
+			lastBlock.content += chars;
+		} else {
+			blocks.push({ type: "text", content: chars });
+		}
+
+		updateStreamingUI();
+	}, [updateStreamingUI]);
+
+	// Start the release loop if not already running
+	const startReleaseLoop = useCallback(() => {
+		if (releaseIntervalRef.current !== null) return;
+		releaseIntervalRef.current = window.setInterval(releaseChars, TICK_MS);
+	}, [releaseChars]);
+
+	// Stop the release loop
+	const stopReleaseLoop = useCallback(() => {
+		if (releaseIntervalRef.current !== null) {
+			clearInterval(releaseIntervalRef.current);
+			releaseIntervalRef.current = null;
+		}
+	}, []);
+
+	// Flush all buffered text immediately (for tool calls, completion, etc.)
+	const flushTextBuffer = useCallback(() => {
+		if (textBufferRef.current.length === 0) return;
+
+		const blocks = streamingBlocksRef.current;
+		const lastBlock = blocks[blocks.length - 1];
+		if (lastBlock && lastBlock.type === "text") {
+			lastBlock.content += textBufferRef.current;
+		} else {
+			blocks.push({ type: "text", content: textBufferRef.current });
+		}
+		textBufferRef.current = "";
+		updateStreamingUI();
+	}, [updateStreamingUI]);
 
 	// WebSocket message handler
 	const handleWsMessage = useCallback(
@@ -276,46 +338,28 @@ export function App() {
 					if (data.type === "thinking") {
 						setProgress({ type: "thinking" });
 					} else if (data.type === "thinking_delta") {
+						// Update thinking immediately (no buffering)
 						streamingThinkingRef.current += data.delta;
-						setMessages((prev) =>
-							prev.map((msg) =>
-								msg.id === streamingMessageIdRef.current ? { ...msg, thinking: streamingThinkingRef.current } : msg,
-							),
-						);
-						setProgress((prev) => ({ ...prev, type: "thinking", thinkingContent: streamingThinkingRef.current }));
+						setProgress((prev) => ({ ...prev, type: "thinking" }));
+						updateStreamingUI();
 					} else if (data.type === "text_delta") {
-						// Append to last text block or create a new one
-						const blocks = streamingBlocksRef.current;
-						const lastBlock = blocks[blocks.length - 1];
-						if (lastBlock && lastBlock.type === "text") {
-							lastBlock.content += data.delta;
-						} else {
-							blocks.push({ type: "text", content: data.delta });
-						}
-						streamingBlocksRef.current = [...blocks];
-						setMessages((prev) =>
-							prev.map((msg) =>
-								msg.id === streamingMessageIdRef.current
-									? { ...msg, contentBlocks: [...streamingBlocksRef.current] }
-									: msg,
-							),
-						);
-						setProgress((prev) => ({ ...prev, type: "responding", textContent: getStreamingTextContent() }));
+						// Buffer text for smooth release
+						textBufferRef.current += data.delta;
+						setProgress((prev) => ({ ...prev, type: "responding" }));
+						startReleaseLoop();
 					} else if (data.type === "tool_start") {
+						// Flush any buffered text before showing tool
+						flushTextBuffer();
 						// Add a new incomplete tool call block
 						streamingBlocksRef.current = [
 							...streamingBlocksRef.current,
 							{ type: "tool_call", name: data.name, arguments: data.arguments || {}, isComplete: false },
 						];
-						setMessages((prev) =>
-							prev.map((msg) =>
-								msg.id === streamingMessageIdRef.current
-									? { ...msg, contentBlocks: [...streamingBlocksRef.current] }
-									: msg,
-							),
-						);
+						updateStreamingUI();
 						setProgress({ type: "tool", toolName: data.name, toolArgs: data.arguments });
 					} else if (data.type === "tool_end") {
+						// Flush any buffered text
+						flushTextBuffer();
 						// Mark the matching incomplete tool call as complete
 						const blocks = streamingBlocksRef.current;
 						for (let i = blocks.length - 1; i >= 0; i--) {
@@ -330,18 +374,16 @@ export function App() {
 							}
 						}
 						streamingBlocksRef.current = [...blocks];
-						setMessages((prev) =>
-							prev.map((msg) =>
-								msg.id === streamingMessageIdRef.current
-									? { ...msg, contentBlocks: [...streamingBlocksRef.current] }
-									: msg,
-							),
-						);
+						updateStreamingUI();
 						setProgress({ type: "thinking" });
 					} else if (data.type === "responding") {
 						setProgress({ type: "responding" });
 					}
 				} else if (message.type === "done") {
+					// Stop release loop and flush remaining buffer
+					stopReleaseLoop();
+					flushTextBuffer();
+
 					const data = message.data;
 
 					// Finalize the streaming message or create new one if no streaming happened
@@ -403,6 +445,7 @@ export function App() {
 					streamingMessageIdRef.current = null;
 					streamingThinkingRef.current = "";
 					streamingBlocksRef.current = [];
+					textBufferRef.current = "";
 
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
@@ -412,6 +455,9 @@ export function App() {
 						chatTextareaRef.current?.focus();
 					}
 				} else if (message.type === "error") {
+					// Stop release loop
+					stopReleaseLoop();
+
 					// Remove streaming message if present
 					if (streamingMessageIdRef.current) {
 						setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
@@ -429,12 +475,16 @@ export function App() {
 					streamingMessageIdRef.current = null;
 					streamingThinkingRef.current = "";
 					streamingBlocksRef.current = [];
+					textBufferRef.current = "";
 
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
 					setIsAsking(false);
 					setProgress({ type: "idle" });
 				} else if (message.type === "cancelled") {
+					// Stop release loop
+					stopReleaseLoop();
+
 					// Remove streaming message if present
 					if (streamingMessageIdRef.current) {
 						setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
@@ -444,6 +494,7 @@ export function App() {
 					streamingMessageIdRef.current = null;
 					streamingThinkingRef.current = "";
 					streamingBlocksRef.current = [];
+					textBufferRef.current = "";
 
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
@@ -454,7 +505,7 @@ export function App() {
 				// Ignore JSON parse errors
 			}
 		},
-		[phase],
+		[phase, updateStreamingUI, startReleaseLoop, stopReleaseLoop, flushTextBuffer],
 	);
 
 	// Create/reconnect WebSocket with exponential backoff
@@ -517,11 +568,14 @@ export function App() {
 		};
 	}, [handleWsMessage]);
 
-	// Cleanup WebSocket on unmount
+	// Cleanup WebSocket and release loop on unmount
 	useEffect(() => {
 		return () => {
 			if (reconnectTimeoutRef.current) {
 				clearTimeout(reconnectTimeoutRef.current);
+			}
+			if (releaseIntervalRef.current !== null) {
+				clearInterval(releaseIntervalRef.current);
 			}
 			if (wsRef.current) {
 				wsRef.current.close();
