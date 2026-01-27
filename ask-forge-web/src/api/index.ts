@@ -19,12 +19,12 @@ const GIT_ENV: Record<string, string> = {
 	PATH: process.env.PATH || "",
 };
 
-// In-memory session store
-const sessions = new Map<string, Session>();
+// In-memory session store (exported for WebSocket handler)
+export const sessions = new Map<string, Session>();
 
 // Clean up sessions older than 30 minutes
 const SESSION_TTL = 30 * 60 * 1000;
-const sessionTimestamps = new Map<string, number>();
+export const sessionTimestamps = new Map<string, number>();
 
 function cleanupSessions() {
 	const now = Date.now();

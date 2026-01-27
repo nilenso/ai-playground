@@ -5,7 +5,9 @@ interface Message {
 	id: string;
 	role: "user" | "assistant";
 	content: string;
+	thinking?: string;
 	toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+	isStreaming?: boolean;
 }
 
 interface ConnectionState {
@@ -20,6 +22,8 @@ interface ProgressState {
 	type: "idle" | "thinking" | "tool" | "responding";
 	toolName?: string;
 	toolArgs?: Record<string, unknown>;
+	thinkingContent?: string;
+	textContent?: string;
 }
 
 type AppPhase = "connect" | "ask" | "chat";
@@ -27,7 +31,7 @@ type AppPhase = "connect" | "ask" | "chat";
 function extractRepoName(url: string): string {
 	// Extract repo name from URL like "https://github.com/owner/repo" -> "owner/repo"
 	const match = url.match(/(?:github\.com|gitlab\.com|bitbucket\.org)[/:]([^/]+\/[^/.]+)/i);
-	if (match && match[1]) return match[1];
+	if (match?.[1]) return match[1];
 	// Fallback: just get last two path segments
 	const parts = url
 		.replace(/\.git$/, "")
@@ -56,9 +60,15 @@ export function App() {
 	const [progress, setProgress] = useState<ProgressState>({ type: "idle" });
 	const [phase, setPhase] = useState<AppPhase>("connect");
 
-	const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const urlInputRef = useRef<HTMLInputElement>(null);
+	const askTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const chatTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
+	const wsRef = useRef<WebSocket | null>(null);
+	const currentRequestIdRef = useRef<string | null>(null);
+	const reconnectAttemptRef = useRef(0);
+	const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const pendingMessageRef = useRef<{ requestId: string; sessionId: string; question: string } | null>(null);
 
 	// Load URL from localStorage on mount
 	useEffect(() => {
@@ -71,18 +81,18 @@ export function App() {
 	// Auto-focus input based on phase
 	useEffect(() => {
 		if (phase === "connect") {
-			inputRef.current?.focus();
+			urlInputRef.current?.focus();
 		} else if (phase === "ask") {
-			inputRef.current?.focus();
+			askTextareaRef.current?.focus();
 		} else if (phase === "chat") {
-			textareaRef.current?.focus();
+			chatTextareaRef.current?.focus();
 		}
 	}, [phase]);
 
 	// Auto-scroll to bottom when messages change
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [messages]);
+	}, []);
 
 	const handleConnect = useCallback(async () => {
 		if (!url.trim()) return;
@@ -154,10 +164,278 @@ export function App() {
 		setPhase("connect");
 	}, [connection.sessionId]);
 
-	const handleSend = useCallback(async () => {
+	// Generate unique request ID
+	const generateRequestId = useCallback(() => {
+		return `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+	}, []);
+
+	// Refs for accumulating streaming content
+	const streamingMessageIdRef = useRef<string | null>(null);
+	const streamingThinkingRef = useRef("");
+	const streamingTextRef = useRef("");
+	const streamingToolCallsRef = useRef<Array<{ name: string; arguments: Record<string, unknown> }>>([]);
+
+	// WebSocket message handler
+	const handleWsMessage = useCallback(
+		(event: MessageEvent) => {
+			try {
+				const message = JSON.parse(event.data);
+
+				// Ignore messages for other requests (out of order protection)
+				if (message.requestId && message.requestId !== currentRequestIdRef.current) {
+					return;
+				}
+
+				if (message.type === "pong") {
+					// Heartbeat response - connection is alive
+					return;
+				}
+
+				if (message.type === "progress") {
+					const data = message.data;
+
+					// Initialize streaming message if needed
+					if (!streamingMessageIdRef.current) {
+						streamingMessageIdRef.current = `assistant-${Date.now()}`;
+						streamingThinkingRef.current = "";
+						streamingTextRef.current = "";
+						streamingToolCallsRef.current = [];
+
+						// Add streaming message placeholder
+						setMessages((prev) => [
+							...prev,
+							{
+								id: streamingMessageIdRef.current!,
+								role: "assistant",
+								content: "",
+								thinking: "",
+								isStreaming: true,
+							},
+						]);
+					}
+
+					if (data.type === "thinking") {
+						setProgress({ type: "thinking" });
+					} else if (data.type === "thinking_delta") {
+						streamingThinkingRef.current += data.delta;
+						setMessages((prev) =>
+							prev.map((msg) =>
+								msg.id === streamingMessageIdRef.current ? { ...msg, thinking: streamingThinkingRef.current } : msg,
+							),
+						);
+						setProgress((prev) => ({ ...prev, type: "thinking", thinkingContent: streamingThinkingRef.current }));
+					} else if (data.type === "text_delta") {
+						streamingTextRef.current += data.delta;
+						setMessages((prev) =>
+							prev.map((msg) =>
+								msg.id === streamingMessageIdRef.current ? { ...msg, content: streamingTextRef.current } : msg,
+							),
+						);
+						setProgress((prev) => ({ ...prev, type: "responding", textContent: streamingTextRef.current }));
+					} else if (data.type === "tool_start") {
+						setProgress({ type: "tool", toolName: data.name, toolArgs: data.arguments });
+					} else if (data.type === "tool_end") {
+						// Add completed tool call
+						streamingToolCallsRef.current = [
+							...streamingToolCallsRef.current,
+							{ name: data.name, arguments: data.arguments },
+						];
+						setMessages((prev) =>
+							prev.map((msg) =>
+								msg.id === streamingMessageIdRef.current
+									? { ...msg, toolCalls: [...streamingToolCallsRef.current] }
+									: msg,
+							),
+						);
+						setProgress({ type: "thinking" });
+					} else if (data.type === "responding") {
+						setProgress({ type: "responding" });
+					}
+				} else if (message.type === "done") {
+					const data = message.data;
+
+					// Finalize the streaming message or create new one if no streaming happened
+					if (data.success) {
+						if (streamingMessageIdRef.current) {
+							// Update streaming message with final content
+							setMessages((prev) =>
+								prev.map((msg) =>
+									msg.id === streamingMessageIdRef.current
+										? {
+												...msg,
+												content: data.response,
+												toolCalls: data.toolCalls,
+												isStreaming: false,
+											}
+										: msg,
+								),
+							);
+						} else {
+							// No streaming happened, add message directly
+							setMessages((prev) => [
+								...prev,
+								{
+									id: `assistant-${Date.now()}`,
+									role: "assistant",
+									content: data.response,
+									toolCalls: data.toolCalls,
+								},
+							]);
+						}
+					} else {
+						// Error case - remove streaming message and add error
+						if (streamingMessageIdRef.current) {
+							setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
+						}
+						setMessages((prev) => [
+							...prev,
+							{
+								id: `error-${Date.now()}`,
+								role: "assistant",
+								content: `Error: ${data.error || "Failed to get response"}`,
+							},
+						]);
+					}
+
+					// Reset streaming state
+					streamingMessageIdRef.current = null;
+					streamingThinkingRef.current = "";
+					streamingTextRef.current = "";
+					streamingToolCallsRef.current = [];
+
+					currentRequestIdRef.current = null;
+					pendingMessageRef.current = null;
+					setIsAsking(false);
+					setProgress({ type: "idle" });
+					if (phase === "chat") {
+						chatTextareaRef.current?.focus();
+					}
+				} else if (message.type === "error") {
+					// Remove streaming message if present
+					if (streamingMessageIdRef.current) {
+						setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
+					}
+					setMessages((prev) => [
+						...prev,
+						{
+							id: `error-${Date.now()}`,
+							role: "assistant",
+							content: `Error: ${message.error || "Failed to get response"}`,
+						},
+					]);
+
+					// Reset streaming state
+					streamingMessageIdRef.current = null;
+					streamingThinkingRef.current = "";
+					streamingTextRef.current = "";
+					streamingToolCallsRef.current = [];
+
+					currentRequestIdRef.current = null;
+					pendingMessageRef.current = null;
+					setIsAsking(false);
+					setProgress({ type: "idle" });
+				} else if (message.type === "cancelled") {
+					// Remove streaming message if present
+					if (streamingMessageIdRef.current) {
+						setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
+					}
+
+					// Reset streaming state
+					streamingMessageIdRef.current = null;
+					streamingThinkingRef.current = "";
+					streamingTextRef.current = "";
+					streamingToolCallsRef.current = [];
+
+					currentRequestIdRef.current = null;
+					pendingMessageRef.current = null;
+					setIsAsking(false);
+					setProgress({ type: "idle" });
+				}
+			} catch {
+				// Ignore JSON parse errors
+			}
+		},
+		[phase],
+	);
+
+	// Create/reconnect WebSocket with exponential backoff
+	const connectWebSocket = useCallback(() => {
+		if (wsRef.current?.readyState === WebSocket.OPEN) {
+			return;
+		}
+
+		// Clear any pending reconnect
+		if (reconnectTimeoutRef.current) {
+			clearTimeout(reconnectTimeoutRef.current);
+			reconnectTimeoutRef.current = null;
+		}
+
+		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+		const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+		wsRef.current = ws;
+
+		ws.onopen = () => {
+			console.log("[WS] Connected");
+			reconnectAttemptRef.current = 0;
+
+			// Resend pending message if any (reconnection recovery)
+			if (pendingMessageRef.current) {
+				ws.send(JSON.stringify({ type: "ask", ...pendingMessageRef.current }));
+			}
+		};
+
+		ws.onmessage = handleWsMessage;
+
+		ws.onerror = (error) => {
+			console.error("[WS] Error:", error);
+		};
+
+		ws.onclose = (event) => {
+			console.log(`[WS] Closed: ${event.code} ${event.reason}`);
+			wsRef.current = null;
+
+			// If we have a pending request, attempt reconnect with exponential backoff
+			if (pendingMessageRef.current && reconnectAttemptRef.current < 5) {
+				const delay = Math.min(1000 * 2 ** reconnectAttemptRef.current, 30000);
+				console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current + 1})`);
+				reconnectAttemptRef.current++;
+				reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
+			} else if (pendingMessageRef.current) {
+				// Max retries exceeded
+				setMessages((prev) => [
+					...prev,
+					{
+						id: `error-${Date.now()}`,
+						role: "assistant",
+						content: "Error: Connection lost. Please try again.",
+					},
+				]);
+				currentRequestIdRef.current = null;
+				pendingMessageRef.current = null;
+				setIsAsking(false);
+				setProgress({ type: "idle" });
+			}
+		};
+	}, [handleWsMessage]);
+
+	// Cleanup WebSocket on unmount
+	useEffect(() => {
+		return () => {
+			if (reconnectTimeoutRef.current) {
+				clearTimeout(reconnectTimeoutRef.current);
+			}
+			if (wsRef.current) {
+				wsRef.current.close();
+			}
+		};
+	}, []);
+
+	const handleSend = useCallback(() => {
 		if (!inputValue.trim() || !connection.sessionId || isAsking) return;
 
 		const question = inputValue.trim();
+		const requestId = generateRequestId();
+
 		setInputValue("");
 		setIsAsking(true);
 		setProgress({ type: "thinking" });
@@ -175,100 +453,19 @@ export function App() {
 		};
 		setMessages((prev) => [...prev, userMessage]);
 
-		try {
-			const res = await fetch("/api/ask", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					sessionId: connection.sessionId,
-					question,
-				}),
-			});
+		// Store request info for correlation and reconnection recovery
+		currentRequestIdRef.current = requestId;
+		pendingMessageRef.current = { requestId, sessionId: connection.sessionId, question };
 
-			const reader = res.body?.getReader();
-			const decoder = new TextDecoder();
+		// Ensure WebSocket is connected and send
+		connectWebSocket();
 
-			if (!reader) {
-				throw new Error("No response body");
-			}
-
-			let buffer = "";
-
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-
-				buffer += decoder.decode(value, { stream: true });
-				const lines = buffer.split("\n");
-				buffer = lines.pop() || "";
-
-				let eventType = "";
-				for (const line of lines) {
-					if (line.startsWith("event: ")) {
-						eventType = line.slice(7);
-					} else if (line.startsWith("data: ") && eventType) {
-						const data = JSON.parse(line.slice(6));
-
-						if (eventType === "progress") {
-							if (data.type === "thinking") {
-								setProgress({ type: "thinking" });
-							} else if (data.type === "tool_start") {
-								setProgress({ type: "tool", toolName: data.name, toolArgs: data.arguments });
-							} else if (data.type === "tool_end") {
-								setProgress({ type: "thinking" });
-							} else if (data.type === "responding") {
-								setProgress({ type: "responding" });
-							}
-						} else if (eventType === "done") {
-							if (data.success) {
-								const assistantMessage: Message = {
-									id: `assistant-${Date.now()}`,
-									role: "assistant",
-									content: data.response,
-									toolCalls: data.toolCalls,
-								};
-								setMessages((prev) => [...prev, assistantMessage]);
-							} else {
-								setMessages((prev) => [
-									...prev,
-									{
-										id: `error-${Date.now()}`,
-										role: "assistant",
-										content: `Error: ${data.error || "Failed to get response"}`,
-									},
-								]);
-							}
-						} else if (eventType === "error") {
-							setMessages((prev) => [
-								...prev,
-								{
-									id: `error-${Date.now()}`,
-									role: "assistant",
-									content: `Error: ${data.error || "Failed to get response"}`,
-								},
-							]);
-						}
-						eventType = "";
-					}
-				}
-			}
-		} catch (err) {
-			setMessages((prev) => [
-				...prev,
-				{
-					id: `error-${Date.now()}`,
-					role: "assistant",
-					content: `Error: ${err instanceof Error ? err.message : "Network error"}`,
-				},
-			]);
-		} finally {
-			setIsAsking(false);
-			setProgress({ type: "idle" });
-			if (phase === "chat") {
-				textareaRef.current?.focus();
-			}
+		// Send message if already connected
+		if (wsRef.current?.readyState === WebSocket.OPEN) {
+			wsRef.current.send(JSON.stringify({ type: "ask", ...pendingMessageRef.current }));
 		}
-	}, [inputValue, connection.sessionId, isAsking, phase]);
+		// Otherwise, onopen handler will send it
+	}, [inputValue, connection.sessionId, isAsking, phase, generateRequestId, connectWebSocket]);
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter" && !e.shiftKey) {
@@ -293,7 +490,7 @@ export function App() {
 
 					<div className="input-container">
 						<input
-							ref={inputRef}
+							ref={urlInputRef}
 							type="text"
 							value={url}
 							onChange={(e) => setUrl(e.target.value)}
@@ -333,7 +530,7 @@ export function App() {
 					<div className="input-container">
 						<div className="input-wrapper">
 							<textarea
-								ref={inputRef}
+								ref={askTextareaRef}
 								value={inputValue}
 								onChange={(e) => setInputValue(e.target.value)}
 								onKeyDown={handleKeyDown}
@@ -389,16 +586,27 @@ export function App() {
 			<main className="chat-main">
 				<div className="messages">
 					{messages.map((msg) => (
-						<div key={msg.id} className={`message message-${msg.role}`}>
-							<div className="message-role">{msg.role === "user" ? "You" : "Assistant"}</div>
-							<div className="markdown-content" dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }} />
+						<div key={msg.id} className={`message message-${msg.role}${msg.isStreaming ? " streaming" : ""}`}>
+							<div className="message-role">
+								{msg.role === "user" ? "You" : "Assistant"}
+								{msg.isStreaming && <span className="streaming-indicator" />}
+							</div>
+							{msg.thinking && (
+								<details className="thinking-block" open={msg.isStreaming}>
+									<summary>Thinking...</summary>
+									<div className="thinking-content">{msg.thinking}</div>
+								</details>
+							)}
+							{msg.content && (
+								<div className="markdown-content" dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }} />
+							)}
 							{msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
-								<details className="tool-calls">
+								<details className="tool-calls" open={msg.isStreaming}>
 									<summary>
 										{msg.toolCalls.length} tool call{msg.toolCalls.length > 1 ? "s" : ""}
 									</summary>
-									{msg.toolCalls.map((tc) => (
-										<div key={`${msg.id}-${tc.name}`} className="tool-call">
+									{msg.toolCalls.map((tc, idx) => (
+										<div key={`${msg.id}-${tc.name}-${idx}`} className="tool-call">
 											<code>{tc.name}</code> {JSON.stringify(tc.arguments)}
 										</div>
 									))}
@@ -406,7 +614,8 @@ export function App() {
 							)}
 						</div>
 					))}
-					{isAsking && (
+					{/* Show status indicator only when asking but no streaming message yet */}
+					{isAsking && !messages.some((m) => m.isStreaming) && (
 						<div className="message message-assistant">
 							<div className="message-role">Assistant</div>
 							<div className="thinking-status">
@@ -437,7 +646,7 @@ export function App() {
 			<footer className="chat-footer">
 				<div className="chat-input-container">
 					<textarea
-						ref={textareaRef}
+						ref={chatTextareaRef}
 						value={inputValue}
 						onChange={(e) => setInputValue(e.target.value)}
 						onKeyDown={handleKeyDown}
