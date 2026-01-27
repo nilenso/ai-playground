@@ -1,5 +1,5 @@
-import { marked } from "marked";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createMarkedWithFileLinks } from "./file-linker.ts";
 
 interface ToolCallRecord {
 	name: string;
@@ -40,6 +40,12 @@ export function Visualizer() {
 	const [loadingSession, setLoadingSession] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [expandedToolCalls, setExpandedToolCalls] = useState<Set<number>>(new Set());
+
+	// Create a marked instance that links file paths to the forge
+	const markedWithLinks = useMemo(
+		() => createMarkedWithFileLinks(session?.repo.url, session?.repo.commitish),
+		[session?.repo.url, session?.repo.commitish],
+	);
 
 	// Load list of session files
 	useEffect(() => {
@@ -251,7 +257,7 @@ export function Visualizer() {
 								className="markdown-content"
 								style={styles.messageContent}
 								dangerouslySetInnerHTML={{
-									__html: marked(ask.response) as string,
+									__html: markedWithLinks.parse(ask.response) as string,
 								}}
 							/>
 						</div>

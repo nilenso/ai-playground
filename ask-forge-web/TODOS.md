@@ -10,5 +10,5 @@
 
 - [ ] Share session
 - [ ] Allow queueing messages when session is in progress
-- [ ] Link to files cited in response
+- [x] Link to files cited in response
 - [ ] Parallel tool calls

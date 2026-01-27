@@ -547,6 +547,19 @@
 			text-decoration: underline;
 		}
 
+		.markdown-content a.file-link code {
+			color: var(--accent-pink);
+			text-decoration: underline;
+			text-decoration-style: dotted;
+			text-underline-offset: 3px;
+			cursor: pointer;
+		}
+
+		.markdown-content a.file-link:hover code {
+			text-decoration-style: solid;
+			color: var(--accent-pink);
+		}
+
 		/* Scrollbar Styling */
 		::-webkit-scrollbar {
 			width: 8px;

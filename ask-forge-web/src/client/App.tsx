@@ -1,5 +1,5 @@
-import { marked } from "marked";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createMarkedWithFileLinks } from "./file-linker.ts";
 
 interface Message {
 	id: string;
@@ -69,6 +69,12 @@ export function App() {
 	const reconnectAttemptRef = useRef(0);
 	const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const pendingMessageRef = useRef<{ requestId: string; sessionId: string; question: string } | null>(null);
+
+	// Create a marked instance that links file paths to the forge
+	const markedWithLinks = useMemo(
+		() => createMarkedWithFileLinks(url, connection.commitish),
+		[url, connection.commitish],
+	);
 
 	// Load URL from localStorage on mount
 	useEffect(() => {
@@ -598,7 +604,10 @@ export function App() {
 								</details>
 							)}
 							{msg.content && (
-								<div className="markdown-content" dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }} />
+								<div
+									className="markdown-content"
+									dangerouslySetInnerHTML={{ __html: markedWithLinks.parse(msg.content) as string }}
+								/>
 							)}
 							{msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
 								<details className="tool-calls" open={msg.isStreaming}>
