@@ -1,6 +1,3 @@
-# Get litem8 binary from official image
-FROM ghcr.io/neenaoffline/litem8:latest AS litem8
-
 # Build stage
 FROM oven/bun:1-alpine AS builder
 
@@ -23,27 +20,31 @@ COPY src ./src
 COPY public ./public
 COPY tsconfig.json biome.json ./
 
-# Build the client
-RUN bun run build
+# Build both clients
+RUN bun run build && bun run build:visualizer
 
 # Production stage
 FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Install git (needed for git operations in the app)
-RUN apk add --no-cache git openssh-client
+# Install git and download litem8 static binary from GitHub (arch-aware)
+RUN apk add --no-cache git openssh-client curl && \
+    ARCH=$(uname -m) && \
+    case "$ARCH" in \
+      x86_64)  LITEM8_ARCH="x86_64" ;; \
+      aarch64) LITEM8_ARCH="aarch64" ;; \
+      *)       echo "Unsupported arch: $ARCH" && exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/neenaoffline/litem8/releases/download/v0.2.0/litem8-linux-${LITEM8_ARCH}-static" \
+      -o /usr/local/bin/litem8 && \
+    chmod +x /usr/local/bin/litem8
 
-# Copy litem8 binary
-COPY --from=litem8 /litem8 /usr/local/bin/litem8
-
-# Copy ask-forge dependency
+# Copy ask-forge dependency and install production dependencies
 COPY ask-forge ./ask-forge
-
-# Copy package files and install production dependencies
 COPY package.json bun.lock ./
-RUN sed -i 's|file:../ask-forge|file:./ask-forge|' package.json && \
-    bun install --production
+RUN sed -i 's|file:../ask-forge|file:./ask-forge|' package.json
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy built assets and source
 COPY --from=builder /app/public ./public
@@ -62,11 +63,12 @@ RUN addgroup -g 1001 appgroup && \
 # Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV VISUALIZER_PORT=3001
 ENV DATABASE_PATH=/app/data/ask-forge.db
 
-EXPOSE 3000
+EXPOSE 3000 3001
 
-# Entrypoint script that runs migrations then starts server
+# Entrypoint script that runs migrations then starts both servers
 COPY --chmod=755 <<'EOF' /app/entrypoint.sh
 #!/bin/sh
 set -e
@@ -74,7 +76,10 @@ set -e
 echo "Running database migrations..."
 litem8 up --db "${DATABASE_PATH:-/app/data/ask-forge.db}" --migrations /app/migrations
 
-echo "Starting server..."
+echo "Starting visualizer server on port ${VISUALIZER_PORT:-3001}..."
+PORT="${VISUALIZER_PORT:-3001}" bun run src/visualizer-server.ts &
+
+echo "Starting main server on port ${PORT:-3000}..."
 exec bun run src/server.ts
 EOF
 
