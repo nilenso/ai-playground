@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createMarkedWithFileLinks } from "./file-linker.ts";
 
+// Content blocks represent ordered segments of text and tool calls
+type ContentBlock =
+	| { type: "text"; content: string }
+	| { type: "tool_call"; name: string; arguments: Record<string, unknown>; isComplete: boolean };
+
 interface Message {
 	id: string;
 	role: "user" | "assistant";
-	content: string;
+	contentBlocks: ContentBlock[];
 	thinking?: string;
-	toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
 	isStreaming?: boolean;
 }
 
@@ -27,6 +31,49 @@ interface ProgressState {
 }
 
 type AppPhase = "connect" | "ask" | "chat";
+
+// Format tool calls in a CLI-like style for display
+function formatToolCall(name: string, args: Record<string, unknown>): string {
+	switch (name) {
+		case "ls":
+			return `ls ${args.path || "."}`;
+		case "Read":
+		case "read":
+			return `read ${args.file_path || args.path || ""}`;
+		case "rg":
+		case "Grep":
+		case "grep": {
+			let cmd = `rg "${args.pattern}"`;
+			if (args.glob) cmd += ` --glob "${args.glob}"`;
+			if (args.path) cmd += ` ${args.path}`;
+			return cmd;
+		}
+		case "Glob":
+		case "glob":
+			return `glob "${args.pattern}"${args.path ? ` in ${args.path}` : ""}`;
+		case "Bash":
+		case "bash": {
+			const cmdStr = String(args.command || "");
+			return cmdStr.length > 60 ? `bash ${cmdStr.slice(0, 60)}...` : `bash ${cmdStr}`;
+		}
+		case "Write":
+		case "write":
+		case "Edit":
+		case "edit":
+			return `${name.toLowerCase()} ${args.file_path || ""}`;
+		default: {
+			// For unknown tools, show key=value pairs concisely
+			const pairs = Object.entries(args)
+				.slice(0, 3)
+				.map(([k, v]) => {
+					const val = typeof v === "string" ? v : JSON.stringify(v);
+					const truncated = val.length > 30 ? val.slice(0, 30) + "..." : val;
+					return `${k}="${truncated}"`;
+				});
+			return `${name} ${pairs.join(" ")}`;
+		}
+	}
+}
 
 function extractRepoName(url: string): string {
 	// Extract repo name from URL like "https://github.com/owner/repo" -> "owner/repo"
@@ -178,8 +225,15 @@ export function App() {
 	// Refs for accumulating streaming content
 	const streamingMessageIdRef = useRef<string | null>(null);
 	const streamingThinkingRef = useRef("");
-	const streamingTextRef = useRef("");
-	const streamingToolCallsRef = useRef<Array<{ name: string; arguments: Record<string, unknown> }>>([]);
+	const streamingBlocksRef = useRef<ContentBlock[]>([]);
+
+	// Helper to get the current text content from streaming blocks
+	const getStreamingTextContent = useCallback(() => {
+		return streamingBlocksRef.current
+			.filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+			.map((b) => b.content)
+			.join("");
+	}, []);
 
 	// WebSocket message handler
 	const handleWsMessage = useCallback(
@@ -204,8 +258,7 @@ export function App() {
 					if (!streamingMessageIdRef.current) {
 						streamingMessageIdRef.current = `assistant-${Date.now()}`;
 						streamingThinkingRef.current = "";
-						streamingTextRef.current = "";
-						streamingToolCallsRef.current = [];
+						streamingBlocksRef.current = [];
 
 						// Add streaming message placeholder
 						setMessages((prev) => [
@@ -213,7 +266,7 @@ export function App() {
 							{
 								id: streamingMessageIdRef.current!,
 								role: "assistant",
-								content: "",
+								contentBlocks: [],
 								thinking: "",
 								isStreaming: true,
 							},
@@ -231,25 +284,56 @@ export function App() {
 						);
 						setProgress((prev) => ({ ...prev, type: "thinking", thinkingContent: streamingThinkingRef.current }));
 					} else if (data.type === "text_delta") {
-						streamingTextRef.current += data.delta;
+						// Append to last text block or create a new one
+						const blocks = streamingBlocksRef.current;
+						const lastBlock = blocks[blocks.length - 1];
+						if (lastBlock && lastBlock.type === "text") {
+							lastBlock.content += data.delta;
+						} else {
+							blocks.push({ type: "text", content: data.delta });
+						}
+						streamingBlocksRef.current = [...blocks];
 						setMessages((prev) =>
 							prev.map((msg) =>
-								msg.id === streamingMessageIdRef.current ? { ...msg, content: streamingTextRef.current } : msg,
+								msg.id === streamingMessageIdRef.current
+									? { ...msg, contentBlocks: [...streamingBlocksRef.current] }
+									: msg,
 							),
 						);
-						setProgress((prev) => ({ ...prev, type: "responding", textContent: streamingTextRef.current }));
+						setProgress((prev) => ({ ...prev, type: "responding", textContent: getStreamingTextContent() }));
 					} else if (data.type === "tool_start") {
-						setProgress({ type: "tool", toolName: data.name, toolArgs: data.arguments });
-					} else if (data.type === "tool_end") {
-						// Add completed tool call
-						streamingToolCallsRef.current = [
-							...streamingToolCallsRef.current,
-							{ name: data.name, arguments: data.arguments },
+						// Add a new incomplete tool call block
+						streamingBlocksRef.current = [
+							...streamingBlocksRef.current,
+							{ type: "tool_call", name: data.name, arguments: data.arguments || {}, isComplete: false },
 						];
 						setMessages((prev) =>
 							prev.map((msg) =>
 								msg.id === streamingMessageIdRef.current
-									? { ...msg, toolCalls: [...streamingToolCallsRef.current] }
+									? { ...msg, contentBlocks: [...streamingBlocksRef.current] }
+									: msg,
+							),
+						);
+						setProgress({ type: "tool", toolName: data.name, toolArgs: data.arguments });
+					} else if (data.type === "tool_end") {
+						// Mark the matching incomplete tool call as complete
+						const blocks = streamingBlocksRef.current;
+						for (let i = blocks.length - 1; i >= 0; i--) {
+							const block = blocks[i];
+							if (block && block.type === "tool_call" && block.name === data.name && !block.isComplete) {
+								blocks[i] = {
+									...block,
+									arguments: data.arguments || block.arguments,
+									isComplete: true,
+								};
+								break;
+							}
+						}
+						streamingBlocksRef.current = [...blocks];
+						setMessages((prev) =>
+							prev.map((msg) =>
+								msg.id === streamingMessageIdRef.current
+									? { ...msg, contentBlocks: [...streamingBlocksRef.current] }
 									: msg,
 							),
 						);
@@ -262,15 +346,28 @@ export function App() {
 
 					// Finalize the streaming message or create new one if no streaming happened
 					if (data.success) {
+						// Convert final data to content blocks if present
+						const finalBlocks: ContentBlock[] = [];
+						if (data.response) {
+							finalBlocks.push({ type: "text", content: data.response });
+						}
+						if (data.toolCalls && Array.isArray(data.toolCalls)) {
+							for (const tc of data.toolCalls) {
+								finalBlocks.push({ type: "tool_call", name: tc.name, arguments: tc.arguments, isComplete: true });
+							}
+						}
+
 						if (streamingMessageIdRef.current) {
 							// Update streaming message with final content
+							// Use streamed blocks if available, otherwise use final blocks
+							const blocksToUse =
+								streamingBlocksRef.current.length > 0 ? streamingBlocksRef.current : finalBlocks;
 							setMessages((prev) =>
 								prev.map((msg) =>
 									msg.id === streamingMessageIdRef.current
 										? {
 												...msg,
-												content: data.response,
-												toolCalls: data.toolCalls,
+												contentBlocks: blocksToUse,
 												isStreaming: false,
 											}
 										: msg,
@@ -283,8 +380,7 @@ export function App() {
 								{
 									id: `assistant-${Date.now()}`,
 									role: "assistant",
-									content: data.response,
-									toolCalls: data.toolCalls,
+									contentBlocks: finalBlocks,
 								},
 							]);
 						}
@@ -298,7 +394,7 @@ export function App() {
 							{
 								id: `error-${Date.now()}`,
 								role: "assistant",
-								content: `Error: ${data.error || "Failed to get response"}`,
+								contentBlocks: [{ type: "text", content: `Error: ${data.error || "Failed to get response"}` }],
 							},
 						]);
 					}
@@ -306,8 +402,7 @@ export function App() {
 					// Reset streaming state
 					streamingMessageIdRef.current = null;
 					streamingThinkingRef.current = "";
-					streamingTextRef.current = "";
-					streamingToolCallsRef.current = [];
+					streamingBlocksRef.current = [];
 
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
@@ -326,15 +421,14 @@ export function App() {
 						{
 							id: `error-${Date.now()}`,
 							role: "assistant",
-							content: `Error: ${message.error || "Failed to get response"}`,
+							contentBlocks: [{ type: "text", content: `Error: ${message.error || "Failed to get response"}` }],
 						},
 					]);
 
 					// Reset streaming state
 					streamingMessageIdRef.current = null;
 					streamingThinkingRef.current = "";
-					streamingTextRef.current = "";
-					streamingToolCallsRef.current = [];
+					streamingBlocksRef.current = [];
 
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
@@ -349,8 +443,7 @@ export function App() {
 					// Reset streaming state
 					streamingMessageIdRef.current = null;
 					streamingThinkingRef.current = "";
-					streamingTextRef.current = "";
-					streamingToolCallsRef.current = [];
+					streamingBlocksRef.current = [];
 
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
@@ -413,7 +506,7 @@ export function App() {
 					{
 						id: `error-${Date.now()}`,
 						role: "assistant",
-						content: "Error: Connection lost. Please try again.",
+						contentBlocks: [{ type: "text", content: "Error: Connection lost. Please try again." }],
 					},
 				]);
 				currentRequestIdRef.current = null;
@@ -455,7 +548,7 @@ export function App() {
 		const userMessage: Message = {
 			id: `user-${Date.now()}`,
 			role: "user",
-			content: question,
+			contentBlocks: [{ type: "text", content: question }],
 		};
 		setMessages((prev) => [...prev, userMessage]);
 
@@ -603,23 +696,28 @@ export function App() {
 									<div className="thinking-content">{msg.thinking}</div>
 								</details>
 							)}
-							{msg.content && (
-								<div
-									className="markdown-content"
-									dangerouslySetInnerHTML={{ __html: markedWithLinks.parse(msg.content) as string }}
-								/>
-							)}
-							{msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
-								<details className="tool-calls" open={msg.isStreaming}>
-									<summary>
-										{msg.toolCalls.length} tool call{msg.toolCalls.length > 1 ? "s" : ""}
-									</summary>
-									{msg.toolCalls.map((tc, idx) => (
-										<div key={`${msg.id}-${tc.name}-${idx}`} className="tool-call">
-											<code>{tc.name}</code> {JSON.stringify(tc.arguments)}
-										</div>
-									))}
-								</details>
+							{msg.contentBlocks.map((block, idx) =>
+								block.type === "text" ? (
+									<div
+										key={`${msg.id}-text-${idx}`}
+										className="markdown-content"
+										dangerouslySetInnerHTML={{ __html: markedWithLinks.parse(block.content) as string }}
+									/>
+								) : (
+									<details
+										key={`${msg.id}-tool-${idx}`}
+										className="tool-call-inline"
+										open={msg.isStreaming && !block.isComplete}
+									>
+										<summary>
+											<code>{formatToolCall(block.name, block.arguments)}</code>
+											{!block.isComplete && <span className="spinner small" />}
+										</summary>
+										{Object.keys(block.arguments).length > 0 && (
+											<pre>{JSON.stringify(block.arguments, null, 2)}</pre>
+										)}
+									</details>
+								),
 							)}
 						</div>
 					))}

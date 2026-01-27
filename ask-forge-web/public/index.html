@@ -425,6 +425,44 @@
 			overflow-x: auto;
 		}
 
+		/* Inline Tool Calls */
+		.tool-call-inline {
+			margin: 8px 0;
+			padding: 8px 12px;
+			background: var(--bg-tertiary);
+			border-radius: 6px;
+			border-left: 3px solid var(--accent-pink);
+		}
+
+		.tool-call-inline summary {
+			cursor: pointer;
+			font-family: var(--font-mono);
+			font-size: 13px;
+			color: var(--text-muted);
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.tool-call-inline summary code {
+			background: none;
+			padding: 0;
+			color: var(--text-secondary);
+		}
+
+		.tool-call-inline summary .spinner {
+			flex-shrink: 0;
+		}
+
+		.tool-call-inline pre {
+			margin: 8px 0 0 0;
+			padding: 8px;
+			font-size: 12px;
+			overflow-x: auto;
+			background: var(--bg-secondary);
+			border-radius: 4px;
+		}
+
 		/* Chat Footer */
 		.chat-footer {
 			padding: 16px 24px 24px;
