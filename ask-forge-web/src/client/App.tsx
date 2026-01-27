@@ -56,7 +56,7 @@ export function App() {
 	const [progress, setProgress] = useState<ProgressState>({ type: "idle" });
 	const [phase, setPhase] = useState<AppPhase>("connect");
 
-	const inputRef = useRef<HTMLInputElement>(null);
+	const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -332,15 +332,15 @@ export function App() {
 
 					<div className="input-container">
 						<div className="input-wrapper">
-							<input
+							<textarea
 								ref={inputRef}
-								type="text"
 								value={inputValue}
 								onChange={(e) => setInputValue(e.target.value)}
 								onKeyDown={handleKeyDown}
-								placeholder='Ask anything... "Fix a TODO in the codebase"'
+								placeholder='Ask anything... "Explain the architecture"'
 								className="main-input"
 								disabled={isAsking}
+								rows={3}
 							/>
 						</div>
 					</div>
