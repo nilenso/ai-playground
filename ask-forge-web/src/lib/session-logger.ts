@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AskOptions, AskResult, Session, ToolCallRecord } from "ask-forge";
 
-const SESSIONS_DIR = "workdir/sessions";
+const SESSIONS_DIR = process.env.SESSION_DIR || "workdir/sessions";
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 interface AskEntry {

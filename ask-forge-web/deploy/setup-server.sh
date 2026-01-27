@@ -5,7 +5,7 @@ echo "=== Setting up ask-forge-web server ==="
 
 # Create directories
 echo "Creating directories..."
-mkdir -p ~/gateway ~/ask-forge-web
+mkdir -p ~/gateway ~/ask-forge-web/data/sessions
 
 # Setup gateway (Caddy for SSL termination)
 echo "Setting up gateway..."
