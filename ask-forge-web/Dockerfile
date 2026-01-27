@@ -29,7 +29,7 @@ FROM oven/bun:1-alpine
 WORKDIR /app
 
 # Install git and download litem8 static binary from GitHub (arch-aware)
-RUN apk add --no-cache git openssh-client curl && \
+RUN apk add --no-cache git openssh-client curl ripgrep fd && \
     ARCH=$(uname -m) && \
     case "$ARCH" in \
       x86_64)  LITEM8_ARCH="x86_64" ;; \
