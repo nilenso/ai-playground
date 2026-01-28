@@ -66,8 +66,11 @@ jobs:
           host: ask.nilenso.ai
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
           script: |
+            set -e
             cd ~/ask-forge-web
             docker compose pull
+            docker compose down --remove-orphans || true
             docker compose up -d
             docker image prune -f
