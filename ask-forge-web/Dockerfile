@@ -20,8 +20,9 @@ COPY src ./src
 COPY public ./public
 COPY tsconfig.json biome.json ./
 
-# Build both clients
-RUN bun run build && bun run build:visualizer
+# Build both clients and create build info with current timestamp
+RUN bun run build && bun run build:visualizer && \
+    echo "{\"buildTime\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > public/build-info.json
 
 # Production stage
 FROM oven/bun:1-alpine

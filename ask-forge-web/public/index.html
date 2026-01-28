@@ -83,6 +83,7 @@
 		.phase-connect {
 			justify-content: center;
 			align-items: center;
+			position: relative;
 		}
 
 		.connect-content {
@@ -627,6 +628,18 @@
 		textarea:focus-visible,
 		button:focus-visible {
 			outline: none;
+		}
+
+		/* Deploy info footer */
+		.deploy-info {
+			position: absolute;
+			bottom: 12px;
+			left: 0;
+			right: 0;
+			text-align: center;
+			font-size: 11px;
+			color: var(--border-subtle);
+			opacity: 0.6;
 		}
 	</style>
 </head>

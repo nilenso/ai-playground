@@ -106,6 +106,7 @@ export function App() {
 	const [isAsking, setIsAsking] = useState(false);
 	const [progress, setProgress] = useState<ProgressState>({ type: "idle" });
 	const [phase, setPhase] = useState<AppPhase>("connect");
+	const [buildTime, setBuildTime] = useState<string | null>(null);
 
 	const urlInputRef = useRef<HTMLInputElement>(null);
 	const askTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -129,6 +130,14 @@ export function App() {
 		if (savedUrl) {
 			setUrl(savedUrl);
 		}
+	}, []);
+
+	// Fetch build info on mount
+	useEffect(() => {
+		fetch("/build-info.json")
+			.then((res) => res.json())
+			.then((data) => setBuildTime(data.buildTime))
+			.catch(() => {}); // Ignore errors (file may not exist in dev)
 	}, []);
 
 	// Auto-focus input based on phase
@@ -666,6 +675,16 @@ export function App() {
 
 					<p className="hint">Paste a GitHub, GitLab, or Bitbucket URL</p>
 				</div>
+				{buildTime && (
+					<div className="deploy-info">
+						{new Date(buildTime).toLocaleDateString("en-US", {
+							month: "short",
+							day: "numeric",
+							hour: "2-digit",
+							minute: "2-digit",
+						})}
+					</div>
+				)}
 			</div>
 		);
 	}
