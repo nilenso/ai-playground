@@ -125,7 +125,9 @@ export function App() {
 	const urlInputRef = useRef<HTMLInputElement>(null);
 	const askTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const chatTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const messagesContainerRef = useRef<HTMLDivElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
+	const shouldAutoScrollRef = useRef(true);
 	const wsRef = useRef<WebSocket | null>(null);
 	const currentRequestIdRef = useRef<string | null>(null);
 	const reconnectAttemptRef = useRef(0);
@@ -209,9 +211,22 @@ export function App() {
 		}
 	}, [phase]);
 
-	// Auto-scroll to bottom when messages change
+	// Check if user is near the bottom of the messages container
+	const handleMessagesScroll = useCallback(() => {
+		const container = messagesContainerRef.current;
+		if (!container) return;
+
+		const { scrollTop, scrollHeight, clientHeight } = container;
+		const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+		// Consider "near bottom" if within 100px of the bottom
+		shouldAutoScrollRef.current = distanceFromBottom < 100;
+	}, []);
+
+	// Auto-scroll to bottom when messages change (only if user hasn't scrolled up)
 	useEffect(() => {
-		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+		if (shouldAutoScrollRef.current) {
+			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+		}
 	}, [messages]);
 
 	const handleConnect = useCallback(async () => {
@@ -886,7 +901,7 @@ export function App() {
 			</header>
 
 			<main className="chat-main">
-				<div className="messages">
+				<div className="messages" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
 					{messages.map((msg) => (
 						<div key={msg.id} className={`message message-${msg.role}${msg.isStreaming ? " streaming" : ""}`}>
 							<div className="message-role">
