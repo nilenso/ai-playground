@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 const DB_PATH = process.env.DB_PATH || "./data/ask-forge.db";
@@ -14,7 +14,7 @@ export function getDb(): Database {
 		if (!existsSync(dir)) {
 			mkdirSync(dir, { recursive: true });
 		}
-		
+
 		db = new Database(DB_PATH);
 		db.exec("PRAGMA foreign_keys = ON");
 	}
@@ -53,8 +53,11 @@ export function parseGitUrl(gitUrl: string): {
 } {
 	const url = new URL(gitUrl);
 	const forgeDomain = url.hostname;
-	const pathParts = url.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/");
-	
+	const pathParts = url.pathname
+		.replace(/^\//, "")
+		.replace(/\.git$/, "")
+		.split("/");
+
 	return {
 		forgeDomain,
 		usernameOrOrg: pathParts[0] || "",
@@ -77,9 +80,7 @@ export function findOrCreateRepository(params: {
 	const { forgeDomain, usernameOrOrg, repoName } = parseGitUrl(gitUrl);
 
 	// Check if repository already exists
-	const existing = db.query<Repository, [string]>(
-		"SELECT * FROM repositories WHERE git_url = ?"
-	).get(gitUrl);
+	const existing = db.query<Repository, [string]>("SELECT * FROM repositories WHERE git_url = ?").get(gitUrl);
 
 	if (existing) {
 		// Update summary if provided and not already set
@@ -89,7 +90,7 @@ export function findOrCreateRepository(params: {
 				`UPDATE repositories 
 				 SET summary = ?, summary_last_computed_at = ?, summary_last_computed_for = ?
 				 WHERE id = ?`,
-				[summary, now, defaultCommit, existing.id]
+				[summary, now, defaultCommit, existing.id],
 			);
 			return {
 				...existing,
@@ -118,7 +119,7 @@ export function findOrCreateRepository(params: {
 			now,
 			summary ? now : null,
 			summary ? defaultCommit : null,
-		]
+		],
 	);
 
 	return {
@@ -139,18 +140,15 @@ export function findOrCreateRepository(params: {
 /**
  * Record a checkout for a repository
  */
-export function recordCheckout(params: {
-	repositoryId: number;
-	commitId: string;
-}): Checkout {
+export function recordCheckout(params: { repositoryId: number; commitId: string }): Checkout {
 	const db = getDb();
 	const { repositoryId, commitId } = params;
 	const shortId = commitId.slice(0, 7);
 
 	// Check if checkout already exists
-	const existing = db.query<Checkout, [number, string]>(
-		"SELECT * FROM checkouts WHERE repository_id = ? AND commit_id = ?"
-	).get(repositoryId, commitId);
+	const existing = db
+		.query<Checkout, [number, string]>("SELECT * FROM checkouts WHERE repository_id = ? AND commit_id = ?")
+		.get(repositoryId, commitId);
 
 	if (existing) {
 		return existing;
@@ -161,7 +159,7 @@ export function recordCheckout(params: {
 	const result = db.run(
 		`INSERT INTO checkouts (repository_id, commit_id, short_id, created_at)
 		 VALUES (?, ?, ?, ?)`,
-		[repositoryId, commitId, shortId, now]
+		[repositoryId, commitId, shortId, now],
 	);
 
 	return {
@@ -178,25 +176,19 @@ export function recordCheckout(params: {
  */
 export function getRepositoryByGitUrl(gitUrl: string): Repository | null {
 	const db = getDb();
-	return db.query<Repository, [string]>(
-		"SELECT * FROM repositories WHERE git_url = ?"
-	).get(gitUrl) || null;
+	return db.query<Repository, [string]>("SELECT * FROM repositories WHERE git_url = ?").get(gitUrl) || null;
 }
 
 /**
  * Update repository summary
  */
-export function updateRepositorySummary(params: {
-	repositoryId: number;
-	summary: string;
-	commit: string;
-}): void {
+export function updateRepositorySummary(params: { repositoryId: number; summary: string; commit: string }): void {
 	const db = getDb();
 	const now = new Date().toISOString();
 	db.run(
 		`UPDATE repositories 
 		 SET summary = ?, summary_last_computed_at = ?, summary_last_computed_for = ?
 		 WHERE id = ?`,
-		[params.summary, now, params.commit, params.repositoryId]
+		[params.summary, now, params.commit, params.repositoryId],
 	);
 }

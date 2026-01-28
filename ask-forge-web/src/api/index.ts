@@ -1,12 +1,7 @@
-import { Hono } from "hono";
 import { connect, type Session } from "ask-forge";
+import { Hono } from "hono";
+import { findOrCreateRepository, getRepositoryByGitUrl, recordCheckout, updateRepositorySummary } from "../lib/db.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
-import {
-	findOrCreateRepository,
-	recordCheckout,
-	getRepositoryByGitUrl,
-	updateRepositorySummary,
-} from "../lib/db.ts";
 import { wrapSession } from "../lib/session-logger.ts";
 
 // Git environment to prevent interactive prompts and SSH key loading
@@ -112,7 +107,7 @@ api.post("/connect", async (c) => {
 
 		// Check for cached summary
 		const existingRepo = getRepositoryByGitUrl(normalized);
-		let summary: string | null = existingRepo?.summary || null;
+		const summary: string | null = existingRepo?.summary || null;
 
 		// Save/update repository record
 		const repository = findOrCreateRepository({
