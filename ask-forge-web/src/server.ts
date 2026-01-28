@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import auth from "./api/auth.ts";
 import api from "./api/index.ts";
+import { validateAuthConfig } from "./lib/auth-config.ts";
 import { websocketHandler } from "./websocket.ts";
+
+// Validate auth config on startup
+validateAuthConfig();
 
 // Disable all SSH keys for git operations - only HTTPS or explicitly provided keys should work
 // TODO: Add support for explicitly passing SSH keys per-request
@@ -13,6 +18,9 @@ import { websocketHandler } from "./websocket.ts";
 process.env.GIT_SSH_COMMAND = "ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -o StrictHostKeyChecking=accept-new";
 
 const app = new Hono();
+
+// Auth routes (before API for /api/auth/* to take priority)
+app.route("/api/auth", auth);
 
 // API routes
 app.route("/api", api);
