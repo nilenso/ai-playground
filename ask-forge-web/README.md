@@ -93,3 +93,28 @@ The visualizer runs on port 3001 and provides:
 - `bun run dev:visualizer` — Start session visualizer (port 3001)
 - `bun run build:visualizer` — Build visualizer client bundle
 - `bun run check` — Run biome lint/format
+
+## Deployment
+
+The app is deployed to `ask.nilenso.ai` via GitHub Actions.
+
+### CI/CD Pipeline
+
+On push to `main` (when `ask-forge-web/` or `ask-forge/` changes):
+1. **Build**: Docker image is built and pushed to `ghcr.io/nilenso/ask-forge-web`
+2. **Deploy**: Image is pulled and restarted on the production server
+
+See `.github/workflows/ask-forge-web-docker.yml` for the workflow.
+
+### Manual Deployment
+
+```bash
+ssh root@ask.nilenso.ai
+cd ~/ask-forge-web
+docker compose pull
+docker compose up -d
+```
+
+### Server Setup
+
+See `deploy/README.md` for initial server provisioning and setup instructions.
