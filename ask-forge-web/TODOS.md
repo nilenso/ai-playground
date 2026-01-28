@@ -18,3 +18,4 @@
 - [x] Tool call efficiency
 - [ ] Interrupt sessions
 - [ ] Links to files/directories are forge-agnostic
+- [ ] Consider re-using the same session interface (jsonl) for rendering and visualising it
