@@ -54,3 +54,20 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ask.nilenso.ai
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ~/ask-forge-web
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
