@@ -630,7 +630,7 @@
 			outline: none;
 		}
 
-		/* Deploy info footer */
+/* Deploy info footer */
 		.deploy-info {
 			position: absolute;
 			bottom: 12px;
@@ -640,6 +640,139 @@
 			font-size: 11px;
 			color: var(--border-subtle);
 			opacity: 0.6;
+		}
+
+		/* Auth Styles */
+		.auth-loading {
+			display: flex;
+			justify-content: center;
+			padding: 40px 0;
+		}
+
+		.login-button {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			width: 100%;
+			max-width: 320px;
+			margin: 0 auto;
+			padding: 14px 24px;
+			background: #24292e;
+			color: #ffffff;
+			border: none;
+			border-radius: 8px;
+			font-size: 16px;
+			font-weight: 600;
+			font-family: inherit;
+			cursor: pointer;
+			transition: background 0.2s, transform 0.1s;
+		}
+
+		.login-button:hover {
+			background: #2f363d;
+		}
+
+		.login-button:active {
+			transform: scale(0.98);
+		}
+
+		.login-button svg {
+			width: 20px;
+			height: 20px;
+		}
+
+		.user-header {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			margin-bottom: 24px;
+		}
+
+		.user-avatar {
+			width: 32px;
+			height: 32px;
+			border-radius: 50%;
+		}
+
+		.user-avatar-small {
+			width: 24px;
+			height: 24px;
+			border-radius: 50%;
+		}
+
+		.user-name {
+			color: var(--text-primary);
+			font-weight: 500;
+		}
+
+		.logout-link {
+			background: none;
+			border: none;
+			color: var(--text-muted);
+			font-size: 13px;
+			font-family: inherit;
+			cursor: pointer;
+			padding: 4px 8px;
+			border-radius: 4px;
+			transition: color 0.2s, background 0.2s;
+		}
+
+		.logout-link:hover {
+			color: var(--error);
+			background: rgba(239, 68, 68, 0.1);
+		}
+
+		.user-menu {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.header-right {
+			display: flex;
+			align-items: center;
+			gap: 20px;
+		}
+
+		/* Thinking Block */
+		.thinking-block {
+			margin-bottom: 12px;
+			padding: 12px;
+			background: var(--bg-secondary);
+			border-radius: 8px;
+			border-left: 3px solid var(--accent-purple);
+		}
+
+		.thinking-block summary {
+			cursor: pointer;
+			font-size: 13px;
+			font-weight: 500;
+			color: var(--text-muted);
+		}
+
+		.thinking-content {
+			margin-top: 8px;
+			font-size: 13px;
+			color: var(--text-secondary);
+			white-space: pre-wrap;
+			font-family: var(--font-mono);
+		}
+
+		.streaming-indicator {
+			display: inline-block;
+			width: 6px;
+			height: 6px;
+			margin-left: 6px;
+			background: var(--accent-green);
+			border-radius: 50%;
+			animation: pulse 1s ease-in-out infinite;
+		}
+
+		@keyframes pulse {
+			0%, 100% { opacity: 0.4; }
+			50% { opacity: 1; }
 		}
 	</style>
 </head>

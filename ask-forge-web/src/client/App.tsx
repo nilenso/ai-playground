@@ -30,6 +30,14 @@ interface ProgressState {
 	textContent?: string;
 }
 
+interface AuthState {
+	authenticated: boolean;
+	username: string | null;
+	avatarUrl: string | null;
+	loading: boolean;
+	error?: string | null;
+}
+
 type AppPhase = "connect" | "ask" | "chat";
 
 // Format tool calls in a CLI-like style for display
@@ -107,6 +115,12 @@ export function App() {
 	const [progress, setProgress] = useState<ProgressState>({ type: "idle" });
 	const [phase, setPhase] = useState<AppPhase>("connect");
 	const [buildTime, setBuildTime] = useState<string | null>(null);
+	const [auth, setAuth] = useState<AuthState>({
+		authenticated: false,
+		username: null,
+		avatarUrl: null,
+		loading: true,
+	});
 
 	const urlInputRef = useRef<HTMLInputElement>(null);
 	const askTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -123,6 +137,50 @@ export function App() {
 		() => createMarkedWithFileLinks(url, connection.commitish),
 		[url, connection.commitish],
 	);
+
+	// Check auth status on mount and handle OAuth errors
+	useEffect(() => {
+		// Check for OAuth error in URL
+		const params = new URLSearchParams(window.location.search);
+		const authError = params.get("error");
+		if (authError) {
+			// Clear the error from URL
+			window.history.replaceState({}, "", window.location.pathname);
+			// Map error codes to user-friendly messages
+			const errorMessages: Record<string, string> = {
+				oauth_denied: "GitHub authorization was denied",
+				invalid_callback: "Invalid OAuth callback",
+				invalid_state: "Invalid OAuth state - please try again",
+				token_exchange_failed: "Failed to exchange OAuth token",
+				user_fetch_failed: "Failed to fetch user info from GitHub",
+				user_not_found: "User not found",
+				auth_failed: "Authentication failed - please try again",
+			};
+			setAuth({
+				authenticated: false,
+				username: null,
+				avatarUrl: null,
+				loading: false,
+				error: errorMessages[authError] || "Authentication failed",
+			});
+			return;
+		}
+
+		fetch("/api/auth/status")
+			.then((res) => res.json())
+			.then((data) => {
+				setAuth({
+					authenticated: data.authenticated,
+					username: data.username || null,
+					avatarUrl: data.avatarUrl || null,
+					loading: false,
+					error: null,
+				});
+			})
+			.catch(() => {
+				setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false, error: null });
+			});
+	}, []);
 
 	// Load URL from localStorage on mount
 	useEffect(() => {
@@ -226,6 +284,15 @@ export function App() {
 		setPhase("connect");
 	}, [connection.sessionId]);
 
+	const handleLogin = useCallback(() => {
+		window.location.href = "/api/auth/github";
+	}, []);
+
+	const handleLogout = useCallback(async () => {
+		await fetch("/api/auth/logout", { method: "POST" });
+		setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false });
+	}, []);
+
 	// Generate unique request ID
 	const generateRequestId = useCallback(() => {
 		return `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -260,7 +327,8 @@ export function App() {
 
 		// Adaptive rate: speed up if buffer is growing to avoid falling behind
 		const bufferLen = textBufferRef.current.length;
-		const charsToRelease = bufferLen > 100 ? Math.min(bufferLen, CHARS_PER_TICK * 5) : bufferLen > 50 ? CHARS_PER_TICK * 2 : CHARS_PER_TICK;
+		const charsToRelease =
+			bufferLen > 100 ? Math.min(bufferLen, CHARS_PER_TICK * 5) : bufferLen > 50 ? CHARS_PER_TICK * 2 : CHARS_PER_TICK;
 
 		// Move chars from buffer to the last text block
 		const chars = textBufferRef.current.slice(0, charsToRelease);
@@ -411,8 +479,7 @@ export function App() {
 						if (streamingMessageIdRef.current) {
 							// Update streaming message with final content
 							// Use streamed blocks if available, otherwise use final blocks
-							const blocksToUse =
-								streamingBlocksRef.current.length > 0 ? streamingBlocksRef.current : finalBlocks;
+							const blocksToUse = streamingBlocksRef.current.length > 0 ? streamingBlocksRef.current : finalBlocks;
 							setMessages((prev) =>
 								prev.map((msg) =>
 									msg.id === streamingMessageIdRef.current
@@ -642,9 +709,56 @@ export function App() {
 
 	// Connect phase - centered input for repo URL
 	if (phase === "connect") {
+		// Show loading while checking auth
+		if (auth.loading) {
+			return (
+				<div className="app-container phase-connect">
+					<div className="connect-content">
+						<h1 className="logo">
+							<span className="logo-ask">ask</span>
+							<span className="logo-forge">forge</span>
+						</h1>
+						<div className="auth-loading">
+							<span className="spinner" />
+						</div>
+					</div>
+				</div>
+			);
+		}
+
+		// Show login if not authenticated
+		if (!auth.authenticated) {
+			return (
+				<div className="app-container phase-connect">
+					<div className="connect-content">
+						<h1 className="logo">
+							<span className="logo-ask">ask</span>
+							<span className="logo-forge">forge</span>
+						</h1>
+						{auth.error && <div className="error-message">{auth.error}</div>}
+						<button type="button" className="login-button" onClick={handleLogin}>
+							<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+								<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+							</svg>
+							Sign in with GitHub
+						</button>
+						<p className="hint">Sign in to start exploring repositories</p>
+					</div>
+				</div>
+			);
+		}
+
 		return (
 			<div className="app-container phase-connect">
 				<div className="connect-content">
+					<div className="user-header">
+						{auth.avatarUrl && <img src={auth.avatarUrl} alt="" className="user-avatar" />}
+						<span className="user-name">{auth.username}</span>
+						<button type="button" className="logout-link" onClick={handleLogout}>
+							Sign out
+						</button>
+					</div>
+
 					<h1 className="logo">
 						<span className="logo-ask">ask</span>
 						<span className="logo-forge">forge</span>
@@ -694,6 +808,14 @@ export function App() {
 		return (
 			<div className="app-container phase-ask">
 				<div className="ask-content">
+					<div className="user-header">
+						{auth.avatarUrl && <img src={auth.avatarUrl} alt="" className="user-avatar" />}
+						<span className="user-name">{auth.username}</span>
+						<button type="button" className="logout-link" onClick={handleLogout}>
+							Sign out
+						</button>
+					</div>
+
 					<h1 className="logo">
 						<span className="logo-ask">ask</span>
 						<span className="logo-forge">forge</span>
@@ -748,10 +870,18 @@ export function App() {
 						New
 					</button>
 				</div>
-				<div className="repo-status-inline">
-					<span className="status-indicator connected" />
-					<span className="repo-name">{connection.repoName}</span>
-					{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
+				<div className="header-right">
+					<div className="repo-status-inline">
+						<span className="status-indicator connected" />
+						<span className="repo-name">{connection.repoName}</span>
+						{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
+					</div>
+					<div className="user-menu">
+						{auth.avatarUrl && <img src={auth.avatarUrl} alt="" className="user-avatar-small" />}
+						<button type="button" className="logout-link" onClick={handleLogout}>
+							Sign out
+						</button>
+					</div>
 				</div>
 			</header>
 
@@ -786,9 +916,7 @@ export function App() {
 											<code>{formatToolCall(block.name, block.arguments)}</code>
 											{!block.isComplete && <span className="spinner small" />}
 										</summary>
-										{Object.keys(block.arguments).length > 0 && (
-											<pre>{JSON.stringify(block.arguments, null, 2)}</pre>
-										)}
+										{Object.keys(block.arguments).length > 0 && <pre>{JSON.stringify(block.arguments, null, 2)}</pre>}
 									</details>
 								),
 							)}
