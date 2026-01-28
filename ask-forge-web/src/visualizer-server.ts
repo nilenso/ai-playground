@@ -1,7 +1,7 @@
-import { Hono } from "hono";
-import { serveStatic } from "hono/bun";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 
 const app = new Hono();
 
@@ -17,28 +17,31 @@ app.get("/api/sessions", async (c) => {
 			.reverse(); // Most recent first (assuming naming convention)
 		return c.json({ success: true, files: jsonlFiles });
 	} catch (err) {
-		return c.json({
-			success: false,
-			error: err instanceof Error ? err.message : "Failed to list sessions",
-		}, 500);
+		return c.json(
+			{
+				success: false,
+				error: err instanceof Error ? err.message : "Failed to list sessions",
+			},
+			500,
+		);
 	}
 });
 
 // API to load a specific session file
 app.get("/api/session/:filename", async (c) => {
 	const filename = c.req.param("filename");
-	
+
 	// Security: ensure filename doesn't escape the directory
 	if (filename.includes("/") || filename.includes("\\") || filename.includes("..")) {
 		return c.json({ success: false, error: "Invalid filename" }, 400);
 	}
-	
+
 	if (!filename.endsWith(".jsonl")) {
 		return c.json({ success: false, error: "Invalid file type" }, 400);
 	}
-	
+
 	const filePath = join(sessionDir, filename);
-	
+
 	try {
 		const file = Bun.file(filePath);
 		const text = await file.text();
@@ -46,10 +49,13 @@ app.get("/api/session/:filename", async (c) => {
 		const events = lines.map((line) => JSON.parse(line));
 		return c.json({ success: true, events });
 	} catch (err) {
-		return c.json({ 
-			success: false, 
-			error: err instanceof Error ? err.message : "Failed to load session" 
-		}, 500);
+		return c.json(
+			{
+				success: false,
+				error: err instanceof Error ? err.message : "Failed to load session",
+			},
+			500,
+		);
 	}
 });
 
