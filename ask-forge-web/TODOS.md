@@ -5,6 +5,7 @@
 - [ ] Sandboxing
 - [ ] Managing repositories
 - [ ] Session management
+- [ ] Evaluation and Feedback
 
 ## UX Enhancements
 
