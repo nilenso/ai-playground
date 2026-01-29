@@ -40,6 +40,65 @@ interface AuthState {
 
 type AppPhase = "connect" | "ask" | "chat";
 
+// Profile menu component - fixed bottom left corner
+function ProfileMenu({
+	auth,
+	onLogout,
+}: {
+	auth: AuthState;
+	onLogout: () => void;
+}) {
+	const [isOpen, setIsOpen] = useState(false);
+	const menuRef = useRef<HTMLDivElement>(null);
+
+	// Close menu when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent) => {
+			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+				setIsOpen(false);
+			}
+		};
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, []);
+
+	if (!auth.authenticated) return null;
+
+	return (
+		<div className="profile-menu" ref={menuRef}>
+			{isOpen && (
+				<div className="profile-dropdown">
+					<div className="profile-dropdown-header">
+						<span className="profile-dropdown-name">@{auth.username}</span>
+					</div>
+					<div className="profile-dropdown-divider" />
+					<button type="button" className="profile-dropdown-item" onClick={onLogout}>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+							<polyline points="16 17 21 12 16 7" />
+							<line x1="21" y1="12" x2="9" y2="12" />
+						</svg>
+						Sign out
+					</button>
+				</div>
+			)}
+			<button
+				type="button"
+				className="profile-trigger"
+				onClick={() => setIsOpen(!isOpen)}
+				aria-label="Profile menu"
+			>
+				{auth.avatarUrl ? (
+					<img src={auth.avatarUrl} alt="" className="profile-trigger-avatar" />
+				) : (
+					<div className="profile-trigger-placeholder">{auth.username?.[0]?.toUpperCase() || "?"}</div>
+				)}
+				<span className="profile-trigger-name">{auth.username}</span>
+			</button>
+		</div>
+	);
+}
+
 // Format tool calls in a CLI-like style for display
 function formatToolCall(name: string, args: Record<string, unknown>): string {
 	switch (name) {
@@ -334,9 +393,45 @@ export function App() {
 	}, []);
 
 	const handleLogout = useCallback(async () => {
+		// Close WebSocket connection immediately
+		if (wsRef.current) {
+			wsRef.current.close();
+			wsRef.current = null;
+		}
+
+		// Clear any pending reconnect
+		if (reconnectTimeoutRef.current) {
+			clearTimeout(reconnectTimeoutRef.current);
+			reconnectTimeoutRef.current = null;
+		}
+
+		// Disconnect server session if active
+		if (connection.sessionId) {
+			fetch("/api/disconnect", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ sessionId: connection.sessionId }),
+			}).catch(() => {}); // Fire and forget
+		}
+
+		// Reset all UI state
+		setMessages([]);
+		setInputValue("");
+		setIsAsking(false);
+		setProgress({ type: "idle" });
+		setConnection({
+			status: "disconnected",
+			sessionId: null,
+			commitish: null,
+			error: null,
+			repoName: null,
+		});
+		setPhase("connect");
+
+		// Clear auth
 		await fetch("/api/auth/logout", { method: "POST" });
 		setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false });
-	}, []);
+	}, [connection.sessionId]);
 
 	// Generate unique request ID
 	const generateRequestId = useCallback(() => {
@@ -795,15 +890,8 @@ export function App() {
 
 		return (
 			<div className="app-container phase-connect">
+				<ProfileMenu auth={auth} onLogout={handleLogout} />
 				<div className="connect-content">
-					<div className="user-header">
-						{auth.avatarUrl && <img src={auth.avatarUrl} alt="" className="user-avatar" />}
-						<span className="user-name">{auth.username}</span>
-						<button type="button" className="logout-link" onClick={handleLogout}>
-							Sign out
-						</button>
-					</div>
-
 					<h1 className="logo">
 						<span className="logo-ask">ask</span>
 						<span className="logo-forge">forge</span>
@@ -852,15 +940,8 @@ export function App() {
 	if (phase === "ask") {
 		return (
 			<div className="app-container phase-ask">
+				<ProfileMenu auth={auth} onLogout={handleLogout} />
 				<div className="ask-content">
-					<div className="user-header">
-						{auth.avatarUrl && <img src={auth.avatarUrl} alt="" className="user-avatar" />}
-						<span className="user-name">{auth.username}</span>
-						<button type="button" className="logout-link" onClick={handleLogout}>
-							Sign out
-						</button>
-					</div>
-
 					<h1 className="logo">
 						<span className="logo-ask">ask</span>
 						<span className="logo-forge">forge</span>
@@ -897,6 +978,7 @@ export function App() {
 	// Chat phase - full conversation view
 	return (
 		<div className="app-container phase-chat">
+			<ProfileMenu auth={auth} onLogout={handleLogout} />
 			<header className="chat-header">
 				<div className="header-left">
 					<h1 className="logo-small">
@@ -915,18 +997,10 @@ export function App() {
 						New
 					</button>
 				</div>
-				<div className="header-right">
-					<div className="repo-status-inline">
-						<span className="status-indicator connected" />
-						<span className="repo-name">{connection.repoName}</span>
-						{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
-					</div>
-					<div className="user-menu">
-						{auth.avatarUrl && <img src={auth.avatarUrl} alt="" className="user-avatar-small" />}
-						<button type="button" className="logout-link" onClick={handleLogout}>
-							Sign out
-						</button>
-					</div>
+				<div className="repo-status-inline">
+					<span className="status-indicator connected" />
+					<span className="repo-name">{connection.repoName}</span>
+					{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
 				</div>
 			</header>
 
