@@ -57,31 +57,13 @@ auth.get("/github", (c) => {
 });
 
 /**
- * GET /api/auth/github/callback
- * Handles OAuth callback from GitHub
+ * Helper to process GitHub OAuth callback
+ * Returns user and JWT on success, or error redirect URL on failure
  */
-auth.get("/github/callback", async (c) => {
-	const code = c.req.query("code");
-	const state = c.req.query("state");
-	const error = c.req.query("error");
-
-	// Handle error from GitHub
-	if (error) {
-		console.error("[Auth] GitHub OAuth error:", error);
-		return c.redirect("/?error=oauth_denied");
-	}
-
-	// Validate required params
-	if (!code || !state) {
-		return c.redirect("/?error=invalid_callback");
-	}
-
-	// Validate state to prevent CSRF
-	if (!pendingStates.has(state)) {
-		return c.redirect("/?error=invalid_state");
-	}
-	pendingStates.delete(state);
-
+async function processGitHubCallback(
+	code: string,
+	callbackUrl: string,
+): Promise<{ success: true; user: NonNullable<ReturnType<typeof getUserById>>; jwt: string } | { success: false; redirectUrl: string }> {
 	try {
 		// Exchange code for access token
 		const tokenResponse = await fetch(AUTH_CONFIG.github.tokenUrl, {
@@ -94,7 +76,7 @@ auth.get("/github/callback", async (c) => {
 				client_id: AUTH_CONFIG.github.clientId,
 				client_secret: AUTH_CONFIG.github.clientSecret,
 				code,
-				redirect_uri: `${AUTH_CONFIG.app.url}/api/auth/github/callback`,
+				redirect_uri: callbackUrl,
 			}),
 		});
 
@@ -102,7 +84,7 @@ auth.get("/github/callback", async (c) => {
 
 		if (tokenData.error) {
 			console.error("[Auth] Token exchange error:", tokenData.error);
-			return c.redirect("/?error=token_exchange_failed");
+			return { success: false, redirectUrl: "/?error=token_exchange_failed" };
 		}
 
 		const accessToken = tokenData.access_token;
@@ -117,7 +99,7 @@ auth.get("/github/callback", async (c) => {
 
 		if (!userResponse.ok) {
 			console.error("[Auth] Failed to fetch user info");
-			return c.redirect("/?error=user_fetch_failed");
+			return { success: false, redirectUrl: "/?error=user_fetch_failed" };
 		}
 
 		const githubUser: GitHubUser = await userResponse.json();
@@ -160,22 +142,58 @@ auth.get("/github/callback", async (c) => {
 		}
 
 		if (!user) {
-			return c.redirect("/?error=user_not_found");
+			return { success: false, redirectUrl: "/?error=user_not_found" };
 		}
 
-		// Generate JWT and set cookie
+		// Generate JWT
 		const jwt = await generateJwt(user);
-		console.log("[Auth] Setting cookie for user:", user.username);
-		setAuthCookie(c, jwt);
-
-		console.log("[Auth] Redirecting to /");
-		// Redirect to app
-		return c.redirect("/");
+		return { success: true, user, jwt };
 	} catch (err) {
 		console.error("[Auth] OAuth callback error:", err);
-		return c.redirect("/?error=auth_failed");
+		return { success: false, redirectUrl: "/?error=auth_failed" };
 	}
+}
+
+/**
+ * GET /api/auth/github/callback
+ * Handles OAuth callback from GitHub (production)
+ */
+auth.get("/github/callback", async (c) => {
+	const code = c.req.query("code");
+	const state = c.req.query("state");
+	const error = c.req.query("error");
+
+	// Handle error from GitHub
+	if (error) {
+		console.error("[Auth] GitHub OAuth error:", error);
+		return c.redirect("/?error=oauth_denied");
+	}
+
+	// Validate required params
+	if (!code || !state) {
+		return c.redirect("/?error=invalid_callback");
+	}
+
+	// Validate state to prevent CSRF
+	if (!pendingStates.has(state)) {
+		return c.redirect("/?error=invalid_state");
+	}
+	pendingStates.delete(state);
+
+	const callbackUrl = `${AUTH_CONFIG.app.url}/api/auth/github/callback`;
+	const result = await processGitHubCallback(code, callbackUrl);
+
+	if (!result.success) {
+		return c.redirect(result.redirectUrl);
+	}
+
+	// Set cookie and redirect
+	console.log("[Auth] Setting cookie for user:", result.user.username);
+	setAuthCookie(c, result.jwt);
+	console.log("[Auth] Redirecting to /");
+	return c.redirect("/");
 });
+
 
 /**
  * POST /api/auth/logout
