@@ -18,6 +18,7 @@ interface AskEntry {
 		cacheWriteTokens: number;
 	};
 	inferenceTimeMs: number;
+	feedback?: "like" | "dislike";
 }
 
 export function wrapSession(session: Session): Session {
@@ -54,7 +55,7 @@ export function wrapSession(session: Session): Session {
 
 	resetTimeout();
 
-	return {
+	const wrapped = {
 		id: session.id,
 		repo: session.repo,
 
@@ -81,5 +82,16 @@ export function wrapSession(session: Session): Session {
 		close() {
 			endSession("closed");
 		},
+
+		/** Set feedback on the most recent ask, or a specific ask by index */
+		setFeedback(feedback: "like" | "dislike" | undefined, askIndex?: number) {
+			const idx = askIndex ?? asks.length - 1;
+			const entry = asks[idx];
+			if (entry) {
+				entry.feedback = feedback;
+			}
+		},
 	};
+
+	return wrapped;
 }

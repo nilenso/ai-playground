@@ -8,7 +8,8 @@ interface WebSocketData {
 type WSMessage =
 	| { type: "ask"; requestId: string; sessionId: string; question: string }
 	| { type: "ping" }
-	| { type: "cancel"; requestId: string };
+	| { type: "cancel"; requestId: string }
+	| { type: "feedback"; sessionId: string; askIndex: number; feedback: "like" | "dislike" | null };
 
 // Track in-flight requests for cancellation
 const activeRequests = new Map<string, AbortController>();
@@ -34,6 +35,12 @@ export const websocketHandler = {
 					activeRequests.delete(data.requestId);
 					ws.send(JSON.stringify({ type: "cancelled", requestId: data.requestId }));
 				}
+				return;
+			}
+
+			if (data.type === "feedback") {
+				const session = sessions.get(data.sessionId) as { setFeedback?: (f: "like" | "dislike" | undefined, i?: number) => void };
+				session?.setFeedback?.(data.feedback ?? undefined, data.askIndex);
 				return;
 			}
 

@@ -20,6 +20,7 @@ interface AskEntry {
 		cacheWriteTokens: number;
 	};
 	inferenceTimeMs?: number;
+	feedback?: "like" | "dislike";
 }
 
 interface SessionLog {
@@ -260,6 +261,24 @@ export function Visualizer() {
 									__html: markedWithLinks.parse(ask.response) as string,
 								}}
 							/>
+							<div style={styles.messageActions}>
+								<span
+									style={ask.feedback === "like" ? styles.actionIconActive : styles.actionIcon}
+									title="Thumbs up"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={16} height={16}>
+										<path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H3.75" />
+									</svg>
+								</span>
+								<span
+									style={ask.feedback === "dislike" ? styles.actionIconActive : styles.actionIcon}
+									title="Thumbs down"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={16} height={16}>
+										<path strokeLinecap="round" strokeLinejoin="round" d="M17.367 13.75c-.806 0-1.533.446-2.031 1.08a9.041 9.041 0 0 1-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.498 4.498 0 0 0-.322 1.672v.633a.75.75 0 0 1-.75.75 2.25 2.25 0 0 1-2.25-2.25c0-1.152.26-2.243.723-3.218.266-.558-.107-1.282-.725-1.282m0 0H4.372c-1.026 0-1.945-.694-2.054-1.715A12.134 12.134 0 0 1 2.25 12c0-2.848.992-5.464 2.649-7.521C5.287 3.997 5.886 3.75 6.504 3.75h4.016c.483 0 .964.078 1.423.23l3.114 1.04a4.501 4.501 0 0 0 1.423.23h2.27" />
+									</svg>
+								</span>
+							</div>
 						</div>
 					</div>
 				))}
@@ -515,5 +534,22 @@ const styles: Record<string, React.CSSProperties> = {
 		color: "#8898aa",
 		fontWeight: 400,
 		marginLeft: "auto",
+	},
+	messageActions: {
+		display: "flex",
+		alignItems: "center",
+		gap: "2px",
+		justifyContent: "flex-end",
+		marginTop: "8px",
+	},
+	actionIcon: {
+		display: "inline-flex",
+		padding: "4px 6px",
+		color: "#8898aa",
+	},
+	actionIconActive: {
+		display: "inline-flex",
+		padding: "4px 6px",
+		color: "#ec4899",
 	},
 };

@@ -363,6 +363,42 @@
 			padding: 16px 20px;
 		}
 
+		.message-actions {
+			display: flex;
+			align-items: center;
+			gap: 2px;
+			justify-content: flex-end;
+			margin-top: 8px;
+		}
+
+		.message-actions button {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			background: none;
+			border: 1px solid transparent;
+			border-radius: 6px;
+			padding: 4px 6px;
+			cursor: pointer;
+			color: var(--text-muted);
+			transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+		}
+
+		.message-actions button:hover {
+			color: var(--text-secondary);
+			background: var(--bg-tertiary);
+			border-color: var(--border-subtle);
+		}
+
+		.message-actions button.active {
+			color: var(--accent-pink);
+		}
+
+		.message-actions button svg {
+			width: 16px;
+			height: 16px;
+		}
+
 		.message-role {
 			font-size: 12px;
 			font-weight: 600;

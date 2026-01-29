@@ -122,6 +122,39 @@ export function App() {
 		loading: true,
 	});
 
+	const [votes, setVotes] = useState<Record<string, "like" | "dislike">>({});
+	const [copiedId, setCopiedId] = useState<string | null>(null);
+
+	const handleCopyMessage = useCallback((msgId: string, blocks: ContentBlock[]) => {
+		const text = blocks
+			.filter((b): b is ContentBlock & { type: "text" } => b.type === "text")
+			.map((b) => b.content)
+			.join("\n\n");
+		navigator.clipboard.writeText(text).then(() => {
+			setCopiedId(msgId);
+			setTimeout(() => setCopiedId((prev) => (prev === msgId ? null : prev)), 1500);
+		});
+	}, []);
+
+	const handleVote = useCallback(
+		(msgId: string, vote: "like" | "dislike") => {
+			let newVote: "like" | "dislike" | undefined;
+			setVotes((prev) => {
+				newVote = prev[msgId] === vote ? undefined : vote;
+				return { ...prev, [msgId]: newVote as never };
+			});
+
+			// Send feedback to server — derive ask index from assistant message order
+			const askIndex = messages.filter((m) => m.role === "assistant").findIndex((m) => m.id === msgId);
+			if (askIndex >= 0 && wsRef.current?.readyState === WebSocket.OPEN && connection.sessionId) {
+				wsRef.current.send(
+					JSON.stringify({ type: "feedback", sessionId: connection.sessionId, askIndex, feedback: newVote ?? null }),
+				);
+			}
+		},
+		[messages, connection.sessionId],
+	);
+
 	const urlInputRef = useRef<HTMLInputElement>(null);
 	const askTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const chatTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -142,13 +175,10 @@ export function App() {
 
 	// Check auth status on mount and handle OAuth errors
 	useEffect(() => {
-		// Check for OAuth error in URL
 		const params = new URLSearchParams(window.location.search);
 		const authError = params.get("error");
 		if (authError) {
-			// Clear the error from URL
 			window.history.replaceState({}, "", window.location.pathname);
-			// Map error codes to user-friendly messages
 			const errorMessages: Record<string, string> = {
 				oauth_denied: "GitHub authorization was denied",
 				invalid_callback: "Invalid OAuth callback",
@@ -934,6 +964,45 @@ export function App() {
 										{Object.keys(block.arguments).length > 0 && <pre>{JSON.stringify(block.arguments, null, 2)}</pre>}
 									</details>
 								),
+							)}
+							{msg.role === "assistant" && !isAsking && (
+								<div className="message-actions">
+									<button
+										type="button"
+										title={copiedId === msg.id ? "Copied!" : "Copy"}
+										onClick={() => handleCopyMessage(msg.id, msg.contentBlocks)}
+									>
+										{copiedId === msg.id ? (
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+												<path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+											</svg>
+										) : (
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+												<path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+											</svg>
+										)}
+									</button>
+									<button
+										type="button"
+										title="Thumbs up"
+										className={votes[msg.id] === "like" ? "active" : ""}
+										onClick={() => handleVote(msg.id, "like")}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+											<path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H3.75" />
+										</svg>
+									</button>
+									<button
+										type="button"
+										title="Thumbs down"
+										className={votes[msg.id] === "dislike" ? "active" : ""}
+										onClick={() => handleVote(msg.id, "dislike")}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+											<path strokeLinecap="round" strokeLinejoin="round" d="M17.367 13.75c-.806 0-1.533.446-2.031 1.08a9.041 9.041 0 0 1-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.498 4.498 0 0 0-.322 1.672v.633a.75.75 0 0 1-.75.75 2.25 2.25 0 0 1-2.25-2.25c0-1.152.26-2.243.723-3.218.266-.558-.107-1.282-.725-1.282m0 0H4.372c-1.026 0-1.945-.694-2.054-1.715A12.134 12.134 0 0 1 2.25 12c0-2.848.992-5.464 2.649-7.521C5.287 3.997 5.886 3.75 6.504 3.75h4.016c.483 0 .964.078 1.423.23l3.114 1.04a4.501 4.501 0 0 0 1.423.23h2.27" />
+										</svg>
+									</button>
+								</div>
 							)}
 						</div>
 					))}
