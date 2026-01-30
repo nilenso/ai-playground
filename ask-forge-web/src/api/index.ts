@@ -1,7 +1,17 @@
 import { connect, type Session } from "ask-forge";
 import { Hono } from "hono";
-import { findOrCreateRepository, getRepositoryByGitUrl, recordCheckout, updateRepositorySummary } from "../lib/db.ts";
+import {
+	createSession as createDbSession,
+	findOrCreateRepository,
+	getDb,
+	getMessagesBySession,
+	getRepositoryByGitUrl,
+	getSession,
+	recordCheckout,
+	updateRepositorySummary,
+} from "../lib/db.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
+import { buildSessionContext } from "../lib/session-context.ts";
 import { wrapSession } from "../lib/session-logger.ts";
 
 // Git environment to prevent interactive prompts and SSH key loading
@@ -99,11 +109,7 @@ api.post("/connect", async (c) => {
 	}
 
 	try {
-		const session = wrapSession(await connect(normalized, { commitish: commit }));
-
-		// Store the session
-		sessions.set(session.id, session);
-		sessionTimestamps.set(session.id, Date.now());
+		const rawSession = await connect(normalized, { commitish: commit });
 
 		// Check for cached summary
 		const existingRepo = getRepositoryByGitUrl(normalized);
@@ -113,14 +119,28 @@ api.post("/connect", async (c) => {
 		const repository = findOrCreateRepository({
 			userInputUrl: url,
 			gitUrl: normalized,
-			defaultCommit: session.repo.commitish,
+			defaultCommit: rawSession.repo.commitish,
 		});
 
 		// Record this checkout
-		recordCheckout({
+		const checkout = recordCheckout({
 			repositoryId: repository.id,
-			commitId: session.repo.commitish,
+			commitId: rawSession.repo.commitish,
 		});
+
+		// Create a DB session record so messages get persisted
+		createDbSession({
+			id: rawSession.id,
+			userId: 1, // TODO: use authenticated user ID
+			repositoryId: repository.id,
+			checkoutId: checkout.id,
+		});
+
+		const session = wrapSession(rawSession, rawSession.id);
+
+		// Store the session
+		sessions.set(session.id, session);
+		sessionTimestamps.set(session.id, Date.now());
 
 		return c.json({
 			success: true,
@@ -204,6 +224,76 @@ api.post("/ask", async (c) => {
 			Connection: "keep-alive",
 		},
 	});
+});
+
+/**
+ * Restore a previous session from the database
+ */
+api.post("/restore", async (c) => {
+	const body = await c.req.json<{ sessionId: string }>();
+	const { sessionId } = body;
+
+	if (!sessionId) {
+		return c.json({ success: false, error: "sessionId is required" }, 400);
+	}
+
+	// Load the DB session
+	const dbSession = getSession(sessionId);
+	if (!dbSession) {
+		return c.json({ success: false, error: "Session not found in database" }, 404);
+	}
+
+	const db = getDb();
+
+	// Load the repository by ID
+	const repoRow = db
+		.query<{ git_url: string; summary: string | null; id: number }, [number]>(
+			"SELECT id, git_url, summary FROM repositories WHERE id = ?",
+		)
+		.get(dbSession.repository_id);
+
+	if (!repoRow) {
+		return c.json({ success: false, error: "Repository not found for session" }, 404);
+	}
+
+	try {
+		// Look up the commit from the checkout record
+		let commitish: string | undefined;
+		if (dbSession.checkout_id) {
+			const checkoutRow = db
+				.query<{ commit_id: string }, [number]>("SELECT commit_id FROM checkouts WHERE id = ?")
+				.get(dbSession.checkout_id);
+			commitish = checkoutRow?.commit_id;
+		}
+
+		// Reconnect to the repository at the same commit
+		const session = wrapSession(await connect(repoRow.git_url, { commitish }), sessionId);
+
+		// Load messages from DB and restore them
+		const dbMessages = getMessagesBySession(sessionId);
+		if (dbMessages.length > 0) {
+			const messages = buildSessionContext(dbMessages);
+			session.replaceMessages(messages);
+		}
+
+		// Store the session in memory
+		sessions.set(session.id, session);
+		sessionTimestamps.set(session.id, Date.now());
+
+		return c.json({
+			success: true,
+			sessionId: session.id,
+			normalized: repoRow.git_url,
+			localPath: session.repo.localPath,
+			commitish: session.repo.commitish,
+			summary: repoRow.summary,
+			repositoryId: repoRow.id,
+			messageCount: dbMessages.length,
+		});
+	} catch (err) {
+		const message = err instanceof Error ? err.message : "Unknown error";
+		return c.json({ success: false, error: message }, 500);
+	}
 });
 
 /**

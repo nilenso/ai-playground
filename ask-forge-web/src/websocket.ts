@@ -39,7 +39,9 @@ export const websocketHandler = {
 			}
 
 			if (data.type === "feedback") {
-				const session = sessions.get(data.sessionId) as { setFeedback?: (f: "like" | "dislike" | undefined, i?: number) => void };
+				const session = sessions.get(data.sessionId) as {
+					setFeedback?: (f: "like" | "dislike" | undefined, i?: number) => void;
+				};
 				session?.setFeedback?.(data.feedback ?? undefined, data.askIndex);
 				return;
 			}

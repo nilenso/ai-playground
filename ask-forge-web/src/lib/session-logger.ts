@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { AskOptions, AskResult, Session, ToolCallRecord } from "ask-forge";
+import type { AskOptions, AskResult, Session, ToolCall, Usage } from "ask-forge";
+import { createMessage, getMessagesBySession } from "./db.ts";
 
 const SESSIONS_DIR = process.env.SESSION_DIR || "workdir/sessions";
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
@@ -8,24 +9,48 @@ const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 interface AskEntry {
 	timestamp: number;
 	question: string;
-	toolCalls: ToolCallRecord[];
+	toolCalls: ToolCall[];
 	response: string;
-	usage: {
-		inputTokens: number;
-		outputTokens: number;
-		totalTokens: number;
-		cacheReadTokens: number;
-		cacheWriteTokens: number;
-	};
+	usage: Usage;
 	inferenceTimeMs: number;
 	feedback?: "like" | "dislike";
 }
 
-export function wrapSession(session: Session): Session {
+export function wrapSession(session: Session, dbSessionId?: string): Session {
 	const startedAt = Date.now();
 	const asks: AskEntry[] = [];
 	let timeoutHandle: Timer | null = null;
 	let terminated = false;
+	let ordinal = dbSessionId ? getMessagesBySession(dbSessionId).length : 0;
+
+	const persistMessages = () => {
+		if (!dbSessionId) return;
+		const messages = session.getMessages();
+		// Persist only new messages (from ordinal onward)
+		for (let i = ordinal; i < messages.length; i++) {
+			const msg = messages[i];
+			if (msg.role === "user") {
+				const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+				createMessage({ sessionId: dbSessionId, role: "user", ordinal: i, content });
+			} else if (msg.role === "assistant") {
+				// Serialize the full content array as JSON to preserve all tool calls and thinking blocks
+				const content = JSON.stringify(msg.content);
+				createMessage({ sessionId: dbSessionId, role: "assistant", ordinal: i, content });
+			} else if (msg.role === "toolResult") {
+				const contentText = msg.content.map((c) => ("text" in c ? c.text : "")).join("");
+				createMessage({
+					sessionId: dbSessionId,
+					role: "tool",
+					ordinal: i,
+					content: contentText,
+					toolName: msg.toolName,
+					toolArguments: msg.toolCallId,
+					toolResult: contentText,
+				});
+			}
+		}
+		ordinal = messages.length;
+	};
 
 	const endSession = (reason: "closed" | "error" | "timeout", error?: string) => {
 		if (terminated) return;
@@ -72,11 +97,21 @@ export function wrapSession(session: Session): Session {
 				inferenceTimeMs: result.inferenceTimeMs,
 			});
 
+			persistMessages();
+
 			if (result.response.startsWith("[ERROR:")) {
 				endSession("error", result.response);
 			}
 
 			return result;
+		},
+
+		replaceMessages(messages: Parameters<Session["replaceMessages"]>[0]) {
+			session.replaceMessages(messages);
+		},
+
+		getMessages() {
+			return session.getMessages();
 		},
 
 		close() {

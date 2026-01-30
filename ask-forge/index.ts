@@ -1,7 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { type AssistantMessage, type Context, getModel, stream, type Tool } from "@mariozechner/pi-ai";
+import {
+	type AssistantMessage,
+	type Context,
+	getModel,
+	type Message,
+	stream,
+	type Tool,
+	type ToolCall,
+	type Usage,
+} from "@mariozechner/pi-ai";
+
+export type { Message, ToolCall, Usage } from "@mariozechner/pi-ai";
+
 import { Type } from "@sinclair/typebox";
 import * as config from "./config";
 
@@ -314,22 +326,11 @@ async function executeTool(toolName: string, args: Record<string, unknown>, repo
 	return `Unknown tool: ${toolName}`;
 }
 
-export interface ToolCallRecord {
-	name: string;
-	arguments: Record<string, unknown>;
-}
-
 export interface AskResult {
 	prompt: string;
-	toolCalls: ToolCallRecord[];
+	toolCalls: ToolCall[];
 	response: string;
-	usage: {
-		inputTokens: number;
-		outputTokens: number;
-		totalTokens: number;
-		cacheReadTokens: number;
-		cacheWriteTokens: number;
-	};
+	usage: Usage;
 	inferenceTimeMs: number;
 }
 
@@ -352,6 +353,8 @@ export interface Session {
 	id: string;
 	repo: Repo;
 	ask(question: string, options?: AskOptions): Promise<AskResult>;
+	replaceMessages(messages: Message[]): void;
+	getMessages(): Message[];
 	close(): void;
 }
 
@@ -390,13 +393,14 @@ function createSession(repo: Repo): Session {
 
 	async function doAsk(question: string, onProgress?: OnProgress): Promise<AskResult> {
 		const startTime = Date.now();
-		const toolCallRecords: ToolCallRecord[] = [];
-		const accumulatedUsage = {
-			inputTokens: 0,
-			outputTokens: 0,
+		const toolCallRecords: ToolCall[] = [];
+		const accumulatedUsage: Usage = {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
 			totalTokens: 0,
-			cacheReadTokens: 0,
-			cacheWriteTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 		};
 		context.messages.push({ role: "user", content: question, timestamp: Date.now() });
 
@@ -449,7 +453,7 @@ function createSession(repo: Repo): Session {
 								| undefined;
 							const errorText =
 								event.error?.errorMessage || firstTextBlock?.text || "Unknown API error";
-							
+
 							// Create detailed error object for logging
 							const errorDetails = {
 								message: errorText,
@@ -457,7 +461,7 @@ function createSession(repo: Repo): Session {
 								iteration: i + 1,
 								timestamp: new Date().toISOString(),
 							};
-							
+
 							logError(`API call failed (iteration ${i + 1})`, errorDetails);
 							return {
 								prompt: question,
@@ -485,7 +489,7 @@ function createSession(repo: Repo): Session {
 						cause: error.cause,
 					}),
 				};
-				
+
 				logError(`API call failed (iteration ${i + 1})`, errorDetails);
 				const errorMessage = error instanceof Error ? error.message : String(error);
 				return {
@@ -499,11 +503,18 @@ function createSession(repo: Repo): Session {
 
 			// Accumulate usage from this response
 			if (response.usage) {
-				accumulatedUsage.inputTokens += response.usage.input ?? 0;
-				accumulatedUsage.outputTokens += response.usage.output ?? 0;
+				accumulatedUsage.input += response.usage.input ?? 0;
+				accumulatedUsage.output += response.usage.output ?? 0;
 				accumulatedUsage.totalTokens += response.usage.totalTokens ?? 0;
-				accumulatedUsage.cacheReadTokens += response.usage.cacheRead ?? 0;
-				accumulatedUsage.cacheWriteTokens += response.usage.cacheWrite ?? 0;
+				accumulatedUsage.cacheRead += response.usage.cacheRead ?? 0;
+				accumulatedUsage.cacheWrite += response.usage.cacheWrite ?? 0;
+				if (response.usage.cost) {
+					accumulatedUsage.cost.input += response.usage.cost.input ?? 0;
+					accumulatedUsage.cost.output += response.usage.cost.output ?? 0;
+					accumulatedUsage.cost.cacheRead += response.usage.cost.cacheRead ?? 0;
+					accumulatedUsage.cost.cacheWrite += response.usage.cost.cacheWrite ?? 0;
+					accumulatedUsage.cost.total += response.usage.cost.total ?? 0;
+				}
 			}
 
 			const apiResponse = response as { stopReason?: string; errorMessage?: string };
@@ -578,10 +589,7 @@ function createSession(repo: Repo): Session {
 
 			// Push results back in request order to preserve conversation context
 			validCalls.forEach((call, j) => {
-				toolCallRecords.push({
-					name: call.name,
-					arguments: call.arguments,
-				});
+				toolCallRecords.push(call);
 				context.messages.push({
 					role: "toolResult",
 					toolCallId: call.id,
@@ -619,6 +627,14 @@ function createSession(repo: Repo): Session {
 			const result = await pending;
 			pending = null;
 			return result;
+		},
+
+		replaceMessages(messages: Message[]) {
+			context.messages = messages;
+		},
+
+		getMessages(): Message[] {
+			return context.messages;
 		},
 
 		close() {

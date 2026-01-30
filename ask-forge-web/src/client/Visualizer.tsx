@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createMarkedWithFileLinks } from "./file-linker.ts";
 
 interface ToolCallRecord {
+	type: string;
+	id: string;
 	name: string;
 	arguments: Record<string, unknown>;
 }
@@ -13,11 +15,11 @@ interface AskEntry {
 	response: string;
 	// Optional fields for backwards compatibility
 	usage?: {
-		inputTokens: number;
-		outputTokens: number;
+		input: number;
+		output: number;
 		totalTokens: number;
-		cacheReadTokens: number;
-		cacheWriteTokens: number;
+		cacheRead: number;
+		cacheWrite: number;
 	};
 	inferenceTimeMs?: number;
 	feedback?: "like" | "dislike";
@@ -99,8 +101,12 @@ export function Visualizer() {
 					setError(data.error);
 				}
 			})
-			.catch((err) => { if (!silent) setError(err.message); })
-			.finally(() => { if (!silent) setLoadingFiles(false); });
+			.catch((err) => {
+				if (!silent) setError(err.message);
+			})
+			.finally(() => {
+				if (!silent) setLoadingFiles(false);
+			});
 	}, []);
 
 	useEffect(() => {

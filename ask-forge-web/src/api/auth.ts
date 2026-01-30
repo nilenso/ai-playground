@@ -63,7 +63,10 @@ auth.get("/github", (c) => {
 async function processGitHubCallback(
 	code: string,
 	callbackUrl: string,
-): Promise<{ success: true; user: NonNullable<ReturnType<typeof getUserById>>; jwt: string } | { success: false; redirectUrl: string }> {
+): Promise<
+	| { success: true; user: NonNullable<ReturnType<typeof getUserById>>; jwt: string }
+	| { success: false; redirectUrl: string }
+> {
 	try {
 		// Exchange code for access token
 		const tokenResponse = await fetch(AUTH_CONFIG.github.tokenUrl, {
@@ -193,7 +196,6 @@ auth.get("/github/callback", async (c) => {
 	console.log("[Auth] Redirecting to /");
 	return c.redirect("/");
 });
-
 
 /**
  * POST /api/auth/logout
