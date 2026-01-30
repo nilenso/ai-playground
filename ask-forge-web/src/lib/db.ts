@@ -186,9 +186,236 @@ export function updateRepositorySummary(params: { repositoryId: number; summary:
 	const db = getDb();
 	const now = new Date().toISOString();
 	db.run(
-		`UPDATE repositories 
+		`UPDATE repositories
 		 SET summary = ?, summary_last_computed_at = ?, summary_last_computed_for = ?
 		 WHERE id = ?`,
 		[params.summary, now, params.commit, params.repositoryId],
 	);
+}
+
+// ─── Session types and functions ────────────────────────────────────────────
+
+export interface DbSession {
+	id: string;
+	user_id: number;
+	repository_id: number;
+	checkout_id: number | null;
+	title: string | null;
+	status: string;
+	created_at: string;
+	ended_at: string | null;
+}
+
+export interface DbMessage {
+	id: number;
+	session_id: string;
+	role: string;
+	content: string | null;
+	thinking: string | null;
+	tool_name: string | null;
+	tool_arguments: string | null;
+	tool_result: string | null;
+	ordinal: number;
+	created_at: string;
+}
+
+export interface DbMessageFeedback {
+	id: number;
+	message_id: number;
+	feedback: string;
+	created_at: string;
+}
+
+export interface DbUsageStats {
+	id: number;
+	session_id: string;
+	message_id: number;
+	input_tokens: number;
+	output_tokens: number;
+	total_tokens: number;
+	cache_read_tokens: number;
+	cache_write_tokens: number;
+	inference_time_ms: number;
+}
+
+/**
+ * Create a new session
+ */
+export function createSession(params: {
+	id: string;
+	userId: number;
+	repositoryId: number;
+	checkoutId?: number | null;
+	title?: string | null;
+}): DbSession {
+	const db = getDb();
+	const now = new Date().toISOString();
+	db.run(
+		`INSERT INTO sessions (id, user_id, repository_id, checkout_id, title, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, 'active', ?)`,
+		[params.id, params.userId, params.repositoryId, params.checkoutId ?? null, params.title ?? null, now],
+	);
+
+	return {
+		id: params.id,
+		user_id: params.userId,
+		repository_id: params.repositoryId,
+		checkout_id: params.checkoutId ?? null,
+		title: params.title ?? null,
+		status: "active",
+		created_at: now,
+		ended_at: null,
+	};
+}
+
+/**
+ * Get a session by ID
+ */
+export function getSession(id: string): DbSession | null {
+	const db = getDb();
+	return db.query<DbSession, [string]>("SELECT * FROM sessions WHERE id = ?").get(id) || null;
+}
+
+/**
+ * Update session status (and set ended_at for terminal states)
+ */
+export function updateSessionStatus(id: string, status: string): void {
+	const db = getDb();
+	const endedAt = status !== "active" ? new Date().toISOString() : null;
+	db.run("UPDATE sessions SET status = ?, ended_at = COALESCE(ended_at, ?) WHERE id = ?", [status, endedAt, id]);
+}
+
+/**
+ * List sessions for a user, ordered by most recent first
+ */
+export function listSessionsByUser(userId: number, options?: { repositoryId?: number; status?: string }): DbSession[] {
+	const db = getDb();
+	const conditions = ["user_id = ?"];
+	const params: (string | number)[] = [userId];
+
+	if (options?.repositoryId) {
+		conditions.push("repository_id = ?");
+		params.push(options.repositoryId);
+	}
+	if (options?.status) {
+		conditions.push("status = ?");
+		params.push(options.status);
+	}
+
+	const sql = `SELECT * FROM sessions WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`;
+	return db.query<DbSession, (string | number)[]>(sql).all(...params);
+}
+
+/**
+ * Create a message in a session
+ */
+export function createMessage(params: {
+	sessionId: string;
+	role: string;
+	ordinal: number;
+	content?: string | null;
+	thinking?: string | null;
+	toolName?: string | null;
+	toolArguments?: string | null;
+	toolResult?: string | null;
+}): DbMessage {
+	const db = getDb();
+	const now = new Date().toISOString();
+	const result = db.run(
+		`INSERT INTO messages (session_id, role, content, thinking, tool_name, tool_arguments, tool_result, ordinal, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		[
+			params.sessionId,
+			params.role,
+			params.content ?? null,
+			params.thinking ?? null,
+			params.toolName ?? null,
+			params.toolArguments ?? null,
+			params.toolResult ?? null,
+			params.ordinal,
+			now,
+		],
+	);
+
+	return {
+		id: Number(result.lastInsertRowid),
+		session_id: params.sessionId,
+		role: params.role,
+		content: params.content ?? null,
+		thinking: params.thinking ?? null,
+		tool_name: params.toolName ?? null,
+		tool_arguments: params.toolArguments ?? null,
+		tool_result: params.toolResult ?? null,
+		ordinal: params.ordinal,
+		created_at: now,
+	};
+}
+
+/**
+ * Get all messages for a session, ordered by ordinal
+ */
+export function getMessagesBySession(sessionId: string): DbMessage[] {
+	const db = getDb();
+	return db.query<DbMessage, [string]>("SELECT * FROM messages WHERE session_id = ? ORDER BY ordinal").all(sessionId);
+}
+
+/**
+ * Set feedback (like/dislike) for a message, upserting
+ */
+export function setMessageFeedback(messageId: number, feedback: string): DbMessageFeedback {
+	const db = getDb();
+	const now = new Date().toISOString();
+	db.run(
+		`INSERT INTO message_feedback (message_id, feedback, created_at)
+		 VALUES (?, ?, ?)
+		 ON CONFLICT(message_id) DO UPDATE SET feedback = excluded.feedback, created_at = excluded.created_at`,
+		[messageId, feedback, now],
+	);
+
+	const row = db
+		.query<DbMessageFeedback, [number]>("SELECT * FROM message_feedback WHERE message_id = ?")
+		.get(messageId);
+	return row as DbMessageFeedback;
+}
+
+/**
+ * Record token usage stats for a message
+ */
+export function createUsageStats(params: {
+	sessionId: string;
+	messageId: number;
+	inputTokens: number;
+	outputTokens: number;
+	totalTokens: number;
+	cacheReadTokens?: number;
+	cacheWriteTokens?: number;
+	inferenceTimeMs: number;
+}): DbUsageStats {
+	const db = getDb();
+	const result = db.run(
+		`INSERT INTO usage_stats (session_id, message_id, input_tokens, output_tokens, total_tokens, cache_read_tokens, cache_write_tokens, inference_time_ms)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		[
+			params.sessionId,
+			params.messageId,
+			params.inputTokens,
+			params.outputTokens,
+			params.totalTokens,
+			params.cacheReadTokens ?? 0,
+			params.cacheWriteTokens ?? 0,
+			params.inferenceTimeMs,
+		],
+	);
+
+	return {
+		id: Number(result.lastInsertRowid),
+		session_id: params.sessionId,
+		message_id: params.messageId,
+		input_tokens: params.inputTokens,
+		output_tokens: params.outputTokens,
+		total_tokens: params.totalTokens,
+		cache_read_tokens: params.cacheReadTokens ?? 0,
+		cache_write_tokens: params.cacheWriteTokens ?? 0,
+		inference_time_ms: params.inferenceTimeMs,
+	};
 }
