@@ -38,55 +38,17 @@ interface AuthState {
 	error?: string | null;
 }
 
-type AppPhase = "connect" | "ask" | "chat";
-
-// Profile menu component - fixed bottom left corner
-function ProfileMenu({ auth, onLogout }: { auth: AuthState; onLogout: () => void }) {
-	const [isOpen, setIsOpen] = useState(false);
-	const menuRef = useRef<HTMLDivElement>(null);
-
-	// Close menu when clicking outside
-	useEffect(() => {
-		const handleClickOutside = (event: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-				setIsOpen(false);
-			}
-		};
-		document.addEventListener("mousedown", handleClickOutside);
-		return () => document.removeEventListener("mousedown", handleClickOutside);
-	}, []);
-
-	if (!auth.authenticated) return null;
-
-	return (
-		<div className="profile-menu" ref={menuRef}>
-			{isOpen && (
-				<div className="profile-dropdown">
-					<div className="profile-dropdown-header">
-						<span className="profile-dropdown-name">@{auth.username}</span>
-					</div>
-					<div className="profile-dropdown-divider" />
-					<button type="button" className="profile-dropdown-item" onClick={onLogout}>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-							<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-							<polyline points="16 17 21 12 16 7" />
-							<line x1="21" y1="12" x2="9" y2="12" />
-						</svg>
-						Sign out
-					</button>
-				</div>
-			)}
-			<button type="button" className="profile-trigger" onClick={() => setIsOpen(!isOpen)} aria-label="Profile menu">
-				{auth.avatarUrl ? (
-					<img src={auth.avatarUrl} alt="" className="profile-trigger-avatar" />
-				) : (
-					<div className="profile-trigger-placeholder">{auth.username?.[0]?.toUpperCase() || "?"}</div>
-				)}
-				<span className="profile-trigger-name">{auth.username}</span>
-			</button>
-		</div>
-	);
+interface SessionSummary {
+	id: string;
+	title: string | null;
+	status: string;
+	created_at: string;
+	repository_name: string;
+	username_or_organization: string;
+	git_url: string;
 }
+
+type AppPhase = "connect" | "ask" | "chat";
 
 // Format tool calls in a CLI-like style for display
 function formatToolCall(name: string, args: Record<string, unknown>): string {
@@ -172,6 +134,11 @@ export function App() {
 
 	const [votes, setVotes] = useState<Record<string, "like" | "dislike">>({});
 	const [copiedId, setCopiedId] = useState<string | null>(null);
+	const [sessionHistory, setSessionHistory] = useState<SessionSummary[]>([]);
+	const [historyLoading, setHistoryLoading] = useState(false);
+	const [profileOpen, setProfileOpen] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const profileRef = useRef<HTMLDivElement>(null);
 
 	const handleCopyMessage = useCallback((msgId: string, blocks: ContentBlock[]) => {
 		const text = blocks
@@ -260,6 +227,17 @@ export function App() {
 			.catch(() => {
 				setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false, error: null });
 			});
+	}, []);
+
+	// Close profile menu on outside click
+	useEffect(() => {
+		const handleClick = (e: MouseEvent) => {
+			if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+				setProfileOpen(false);
+			}
+		};
+		document.addEventListener("mousedown", handleClick);
+		return () => document.removeEventListener("mousedown", handleClick);
 	}, []);
 
 	// Load URL from localStorage on mount
@@ -421,6 +399,128 @@ export function App() {
 		await fetch("/api/auth/logout", { method: "POST" });
 		setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false });
 	}, [connection.sessionId]);
+
+	const fetchSessionHistory = useCallback(() => {
+		if (!auth.authenticated) return;
+		setHistoryLoading(true);
+		fetch("/api/sessions")
+			.then((res) => res.json())
+			.then((data) => setSessionHistory(data))
+			.catch(() => {})
+			.finally(() => setHistoryLoading(false));
+	}, [auth.authenticated]);
+
+	// Fetch session history when authenticated
+	useEffect(() => {
+		fetchSessionHistory();
+	}, [fetchSessionHistory]);
+
+	const handleRestore = useCallback(
+		async (session: SessionSummary) => {
+			setConnection((prev) => ({ ...prev, status: "connecting", error: null }));
+
+			try {
+				const restoreRes = await fetch("/api/restore", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ sessionId: session.id }),
+				});
+				const restoreData = await restoreRes.json();
+				if (!restoreData.success) {
+					setConnection((prev) => ({ ...prev, status: "error", error: restoreData.error || "Failed to restore" }));
+					return;
+				}
+
+				// Fetch messages
+				const msgRes = await fetch(`/api/sessions/${session.id}/messages`);
+				const dbMessages: { role: string; content: string | null }[] = await msgRes.json();
+
+				// Convert DB messages to client Messages
+				const clientMessages: Message[] = [];
+				for (const msg of dbMessages) {
+					if (msg.role === "user" && msg.content) {
+						clientMessages.push({
+							id: `user-${clientMessages.length}`,
+							role: "user",
+							contentBlocks: [{ type: "text", content: msg.content }],
+						});
+					} else if (msg.role === "assistant" && msg.content) {
+						try {
+							const blocks: ContentBlock[] = [];
+							const parsed = JSON.parse(msg.content);
+							if (Array.isArray(parsed)) {
+								for (const block of parsed) {
+									if (block.type === "text" && typeof block.text === "string") {
+										blocks.push({ type: "text", content: block.text });
+									} else if (block.type === "toolCall" || block.type === "tool_use") {
+										blocks.push({
+											type: "tool_call",
+											name: block.name || block.toolName || "unknown",
+											arguments: block.arguments || block.input || {},
+											isComplete: true,
+										});
+									}
+								}
+							}
+							if (blocks.length > 0) {
+								clientMessages.push({
+									id: `assistant-${clientMessages.length}`,
+									role: "assistant",
+									contentBlocks: blocks,
+								});
+							}
+						} catch {
+							// Plain text fallback
+							clientMessages.push({
+								id: `assistant-${clientMessages.length}`,
+								role: "assistant",
+								contentBlocks: [{ type: "text", content: msg.content }],
+							});
+						}
+					}
+					// Skip tool role messages
+				}
+
+				const repoName = `${session.username_or_organization}/${session.repository_name}`;
+				setUrl(session.git_url);
+				setConnection({
+					status: "connected",
+					sessionId: restoreData.sessionId,
+					commitish: restoreData.commitish,
+					error: null,
+					repoName,
+				});
+				setMessages(clientMessages);
+				setPhase(clientMessages.length > 0 ? "chat" : "ask");
+				fetchSessionHistory();
+			} catch (err) {
+				setConnection((prev) => ({
+					...prev,
+					status: "error",
+					error: err instanceof Error ? err.message : "Network error",
+				}));
+			}
+		},
+		[fetchSessionHistory],
+	);
+
+	const handleDeleteSession = useCallback(
+		async (sessionId: string) => {
+			try {
+				await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+				// If deleted session is current, disconnect
+				if (connection.sessionId === sessionId) {
+					setConnection({ status: "disconnected", sessionId: null, commitish: null, error: null, repoName: null });
+					setMessages([]);
+					setPhase("connect");
+				}
+				setSessionHistory((prev) => prev.filter((s) => s.id !== sessionId));
+			} catch {
+				// Ignore
+			}
+		},
+		[connection.sessionId],
+	);
 
 	// Generate unique request ID
 	const generateRequestId = useCallback(() => {
@@ -836,19 +936,144 @@ export function App() {
 		}
 	};
 
+	// Group sessions by repo for sidebar
+	const groupedSessions = useMemo(() => {
+		const groups: Record<string, SessionSummary[]> = {};
+		for (const s of sessionHistory) {
+			const key = `${s.username_or_organization}/${s.repository_name}`;
+			if (!groups[key]) groups[key] = [];
+			groups[key].push(s);
+		}
+		return groups;
+	}, [sessionHistory]);
+
+	const sidebarElement = auth.authenticated ? (
+		<nav className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+			<div className="sidebar-top">
+				{!sidebarCollapsed && (
+					<h1 className="sidebar-logo">
+						<span className="logo-ask">ask</span>
+						<span className="logo-forge">forge</span>
+					</h1>
+				)}
+				<button
+					type="button"
+					className="sidebar-collapse-btn"
+					onClick={() => setSidebarCollapsed((c) => !c)}
+					aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+						<rect x="3" y="3" width="18" height="18" rx="2" />
+						<line x1="9" y1="3" x2="9" y2="21" />
+					</svg>
+				</button>
+			</div>
+			<button type="button" className="sidebar-new-chat" onClick={handleDisconnect} aria-label="New chat">
+				<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+					<path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
+				</svg>
+				{!sidebarCollapsed && "New chat"}
+			</button>
+			{!sidebarCollapsed && (
+				<div className="sidebar-content">
+					<div className="sidebar-section-label">Recents</div>
+					{historyLoading ? (
+						<div className="sidebar-loading">
+							<span className="spinner" />
+						</div>
+					) : sessionHistory.length === 0 ? (
+						<div className="sidebar-empty">No sessions yet</div>
+					) : (
+						Object.entries(groupedSessions).map(([repoKey, sessions]) => (
+							<div key={repoKey} className="sidebar-group">
+								<div className="sidebar-group-label">{repoKey}</div>
+								{sessions.map((s) => (
+									<div
+										key={s.id}
+										className="sidebar-item"
+										role="button"
+										tabIndex={0}
+										onClick={() => handleRestore(s)}
+										onKeyDown={(e) => {
+											if (e.key === "Enter") handleRestore(s);
+										}}
+									>
+										<div className="sidebar-item-title">{s.title || "Untitled session"}</div>
+										<button
+											type="button"
+											className="delete-btn"
+											onClick={(e) => {
+												e.stopPropagation();
+												if (confirm("Delete this session?")) {
+													handleDeleteSession(s.id);
+												}
+											}}
+											aria-label="Delete session"
+										>
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+												<polyline points="3 6 5 6 21 6" />
+												<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+											</svg>
+										</button>
+									</div>
+								))}
+							</div>
+						))
+					)}
+				</div>
+			)}
+			<div className="sidebar-spacer" />
+			<div className="sidebar-footer" ref={profileRef}>
+				{profileOpen && !sidebarCollapsed && (
+					<div className="sidebar-profile-menu">
+						<button
+							type="button"
+							className="sidebar-profile-menu-item"
+							onClick={() => {
+								setProfileOpen(false);
+								handleLogout();
+							}}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+								<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+								<polyline points="16 17 21 12 16 7" />
+								<line x1="21" y1="12" x2="9" y2="12" />
+							</svg>
+							Sign out
+						</button>
+					</div>
+				)}
+				<button
+					type="button"
+					className="sidebar-profile"
+					onClick={() => (sidebarCollapsed ? setSidebarCollapsed(false) : setProfileOpen((p) => !p))}
+				>
+					{auth.avatarUrl ? (
+						<img src={auth.avatarUrl} alt="" className="sidebar-profile-avatar" />
+					) : (
+						<div className="sidebar-profile-placeholder">{auth.username?.[0]?.toUpperCase() || "?"}</div>
+					)}
+					{!sidebarCollapsed && <span className="sidebar-profile-name">{auth.username}</span>}
+				</button>
+			</div>
+		</nav>
+	) : null;
+
 	// Connect phase - centered input for repo URL
 	if (phase === "connect") {
 		// Show loading while checking auth
 		if (auth.loading) {
 			return (
 				<div className="app-container phase-connect">
-					<div className="connect-content">
-						<h1 className="logo">
-							<span className="logo-ask">ask</span>
-							<span className="logo-forge">forge</span>
-						</h1>
-						<div className="auth-loading">
-							<span className="spinner" />
+					<div className="app-main">
+						<div className="connect-content">
+							<h1 className="logo">
+								<span className="logo-ask">ask</span>
+								<span className="logo-forge">forge</span>
+							</h1>
+							<div className="auth-loading">
+								<span className="spinner" />
+							</div>
 						</div>
 					</div>
 				</div>
@@ -859,19 +1084,21 @@ export function App() {
 		if (!auth.authenticated) {
 			return (
 				<div className="app-container phase-connect">
-					<div className="connect-content">
-						<h1 className="logo">
-							<span className="logo-ask">ask</span>
-							<span className="logo-forge">forge</span>
-						</h1>
-						{auth.error && <div className="error-message">{auth.error}</div>}
-						<button type="button" className="login-button" onClick={handleLogin}>
-							<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-								<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-							</svg>
-							Sign in with GitHub
-						</button>
-						<p className="hint">Sign in to start exploring repositories</p>
+					<div className="app-main">
+						<div className="connect-content">
+							<h1 className="logo">
+								<span className="logo-ask">ask</span>
+								<span className="logo-forge">forge</span>
+							</h1>
+							{auth.error && <div className="error-message">{auth.error}</div>}
+							<button type="button" className="login-button" onClick={handleLogin}>
+								<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+									<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+								</svg>
+								Sign in with GitHub
+							</button>
+							<p className="hint">Sign in to start exploring repositories</p>
+						</div>
 					</div>
 				</div>
 			);
@@ -879,48 +1106,47 @@ export function App() {
 
 		return (
 			<div className="app-container phase-connect">
-				<ProfileMenu auth={auth} onLogout={handleLogout} />
-				<div className="connect-content">
-					<h1 className="logo">
-						<span className="logo-ask">ask</span>
-						<span className="logo-forge">forge</span>
-					</h1>
+				{sidebarElement}
+				<div className="app-main">
+					<div className="connect-content">
+						<h2 className="greeting">What can I help with?</h2>
 
-					<div className="input-container">
-						<input
-							ref={urlInputRef}
-							type="text"
-							value={url}
-							onChange={(e) => setUrl(e.target.value)}
-							onKeyDown={handleKeyDown}
-							placeholder="Enter repository URL..."
-							className="main-input"
-							disabled={connection.status === "connecting"}
-						/>
-						<button
-							type="button"
-							className="connect-button"
-							onClick={handleConnect}
-							disabled={connection.status === "connecting" || !url.trim()}
-						>
-							{connection.status === "connecting" ? <span className="spinner" /> : "Connect"}
-						</button>
+						<div className="input-container">
+							<input
+								ref={urlInputRef}
+								type="text"
+								value={url}
+								onChange={(e) => setUrl(e.target.value)}
+								onKeyDown={handleKeyDown}
+								placeholder="Enter repository URL..."
+								className="main-input"
+								disabled={connection.status === "connecting"}
+							/>
+							<button
+								type="button"
+								className="connect-button"
+								onClick={handleConnect}
+								disabled={connection.status === "connecting" || !url.trim()}
+							>
+								{connection.status === "connecting" ? <span className="spinner" /> : "Connect"}
+							</button>
+						</div>
+
+						{connection.error && <div className="error-message">{connection.error}</div>}
+
+						<p className="hint">Paste a GitHub, GitLab, or Bitbucket URL</p>
 					</div>
-
-					{connection.error && <div className="error-message">{connection.error}</div>}
-
-					<p className="hint">Paste a GitHub, GitLab, or Bitbucket URL</p>
+					{buildTime && (
+						<div className="deploy-info">
+							{new Date(buildTime).toLocaleDateString("en-US", {
+								month: "short",
+								day: "numeric",
+								hour: "2-digit",
+								minute: "2-digit",
+							})}
+						</div>
+					)}
 				</div>
-				{buildTime && (
-					<div className="deploy-info">
-						{new Date(buildTime).toLocaleDateString("en-US", {
-							month: "short",
-							day: "numeric",
-							hour: "2-digit",
-							minute: "2-digit",
-						})}
-					</div>
-				)}
 			</div>
 		);
 	}
@@ -929,35 +1155,34 @@ export function App() {
 	if (phase === "ask") {
 		return (
 			<div className="app-container phase-ask">
-				<ProfileMenu auth={auth} onLogout={handleLogout} />
-				<div className="ask-content">
-					<h1 className="logo">
-						<span className="logo-ask">ask</span>
-						<span className="logo-forge">forge</span>
-					</h1>
+				{sidebarElement}
+				<div className="app-main">
+					<div className="ask-content">
+						<h2 className="greeting">What can I help with?</h2>
 
-					<div className="input-container">
-						<div className="input-wrapper">
-							<textarea
-								ref={askTextareaRef}
-								value={inputValue}
-								onChange={(e) => setInputValue(e.target.value)}
-								onKeyDown={handleKeyDown}
-								placeholder='Ask anything... "Explain the architecture"'
-								className="main-input"
-								disabled={isAsking}
-								rows={3}
-							/>
+						<div className="input-container">
+							<div className="input-wrapper">
+								<textarea
+									ref={askTextareaRef}
+									value={inputValue}
+									onChange={(e) => setInputValue(e.target.value)}
+									onKeyDown={handleKeyDown}
+									placeholder='Ask anything... "Explain the architecture"'
+									className="main-input"
+									disabled={isAsking}
+									rows={3}
+								/>
+							</div>
 						</div>
-					</div>
 
-					<div className="repo-status">
-						<span className="status-indicator connected" />
-						<span className="repo-name">{connection.repoName}</span>
-						{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
-						<button type="button" className="disconnect-link" onClick={handleDisconnect}>
-							Disconnect
-						</button>
+						<div className="repo-status">
+							<span className="status-indicator connected" />
+							<span className="repo-name">{connection.repoName}</span>
+							{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
+							<button type="button" className="disconnect-link" onClick={handleDisconnect}>
+								Disconnect
+							</button>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -967,85 +1192,90 @@ export function App() {
 	// Chat phase - full conversation view
 	return (
 		<div className="app-container phase-chat">
-			<ProfileMenu auth={auth} onLogout={handleLogout} />
-			<header className="chat-header">
-				<div className="header-left">
-					<h1 className="logo-small">
-						<span className="logo-ask">ask</span>
-						<span className="logo-forge">forge</span>
-					</h1>
-					<button
-						type="button"
-						className="new-question-button"
-						onClick={handleDisconnect}
-						aria-label="Start new question"
-					>
-						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-							<path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
-						</svg>
-						New
-					</button>
-				</div>
-				<div className="repo-status-inline">
-					<span className="status-indicator connected" />
-					<span className="repo-name">{connection.repoName}</span>
-					{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
-				</div>
-			</header>
+			{sidebarElement}
+			<div className="app-main">
+				<header className="chat-header">
+					<div className="repo-status-inline">
+						<span className="status-indicator connected" />
+						<span className="repo-name">{connection.repoName}</span>
+						{connection.commitish && <code className="commit-badge">{connection.commitish.slice(0, 7)}</code>}
+					</div>
+				</header>
 
-			<main className="chat-main">
-				<div className="messages" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
-					{messages.map((msg) => (
-						<div key={msg.id} className={`message message-${msg.role}${msg.isStreaming ? " streaming" : ""}`}>
-							<div className="message-role">
-								{msg.role === "user" ? "You" : "Assistant"}
-								{msg.isStreaming && <span className="streaming-indicator" />}
-							</div>
-							{msg.thinking && (
-								<details className="thinking-block" open={msg.isStreaming}>
-									<summary>Thinking...</summary>
-									<div className="thinking-content">{msg.thinking}</div>
-								</details>
-							)}
-							{msg.contentBlocks.map((block, idx) =>
-								block.type === "text" ? (
-									<div
-										key={`${msg.id}-text-${idx}`}
-										className="markdown-content"
-										dangerouslySetInnerHTML={{ __html: markedWithLinks.parse(block.content) as string }}
-									/>
-								) : (
-									<details
-										key={`${msg.id}-tool-${idx}`}
-										className="tool-call-inline"
-										open={msg.isStreaming && !block.isComplete}
-									>
-										<summary>
-											<code>{formatToolCall(block.name, block.arguments)}</code>
-											{!block.isComplete && <span className="spinner small" />}
-										</summary>
-										{Object.keys(block.arguments).length > 0 && <pre>{JSON.stringify(block.arguments, null, 2)}</pre>}
+				<main className="chat-main">
+					<div className="messages" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
+						{messages.map((msg) => (
+							<div key={msg.id} className={`message message-${msg.role}${msg.isStreaming ? " streaming" : ""}`}>
+								<div className="message-role">
+									{msg.role === "user" ? "You" : "Assistant"}
+									{msg.isStreaming && <span className="streaming-indicator" />}
+								</div>
+								{msg.thinking && (
+									<details className="thinking-block" open={msg.isStreaming}>
+										<summary>Thinking...</summary>
+										<div className="thinking-content">{msg.thinking}</div>
 									</details>
-								),
-							)}
-							{msg.role === "assistant" && !isAsking && (
-								<div className="message-actions">
-									<button
-										type="button"
-										title={copiedId === msg.id ? "Copied!" : "Copy"}
-										onClick={() => handleCopyMessage(msg.id, msg.contentBlocks)}
-									>
-										{copiedId === msg.id ? (
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												strokeWidth={1.5}
-												stroke="currentColor"
-											>
-												<path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-											</svg>
-										) : (
+								)}
+								{msg.contentBlocks.map((block, idx) =>
+									block.type === "text" ? (
+										<div
+											key={`${msg.id}-text-${idx}`}
+											className="markdown-content"
+											dangerouslySetInnerHTML={{ __html: markedWithLinks.parse(block.content) as string }}
+										/>
+									) : (
+										<details
+											key={`${msg.id}-tool-${idx}`}
+											className="tool-call-inline"
+											open={msg.isStreaming && !block.isComplete}
+										>
+											<summary>
+												<code>{formatToolCall(block.name, block.arguments)}</code>
+												{!block.isComplete && <span className="spinner small" />}
+											</summary>
+											{Object.keys(block.arguments).length > 0 && <pre>{JSON.stringify(block.arguments, null, 2)}</pre>}
+										</details>
+									),
+								)}
+								{msg.role === "assistant" && !isAsking && (
+									<div className="message-actions">
+										<button
+											type="button"
+											title={copiedId === msg.id ? "Copied!" : "Copy"}
+											onClick={() => handleCopyMessage(msg.id, msg.contentBlocks)}
+										>
+											{copiedId === msg.id ? (
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													strokeWidth={1.5}
+													stroke="currentColor"
+												>
+													<path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+												</svg>
+											) : (
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													strokeWidth={1.5}
+													stroke="currentColor"
+												>
+													<path
+														strokeLinecap="round"
+														strokeLinejoin="round"
+														d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
+													/>
+												</svg>
+											)}
+										</button>
+										<button
+											type="button"
+											title="Thumbs up"
+											className={votes[msg.id] === "like" ? "active" : ""}
+											onClick={() => handleVote(msg.id, "like")}
+										>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
 												fill="none"
@@ -1056,101 +1286,86 @@ export function App() {
 												<path
 													strokeLinecap="round"
 													strokeLinejoin="round"
-													d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
+													d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H3.75"
 												/>
 											</svg>
-										)}
-									</button>
-									<button
-										type="button"
-										title="Thumbs up"
-										className={votes[msg.id] === "like" ? "active" : ""}
-										onClick={() => handleVote(msg.id, "like")}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											strokeWidth={1.5}
-											stroke="currentColor"
+										</button>
+										<button
+											type="button"
+											title="Thumbs down"
+											className={votes[msg.id] === "dislike" ? "active" : ""}
+											onClick={() => handleVote(msg.id, "dislike")}
 										>
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H3.75"
-											/>
-										</svg>
-									</button>
-									<button
-										type="button"
-										title="Thumbs down"
-										className={votes[msg.id] === "dislike" ? "active" : ""}
-										onClick={() => handleVote(msg.id, "dislike")}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											strokeWidth={1.5}
-											stroke="currentColor"
-										>
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												d="M17.367 13.75c-.806 0-1.533.446-2.031 1.08a9.041 9.041 0 0 1-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.498 4.498 0 0 0-.322 1.672v.633a.75.75 0 0 1-.75.75 2.25 2.25 0 0 1-2.25-2.25c0-1.152.26-2.243.723-3.218.266-.558-.107-1.282-.725-1.282m0 0H4.372c-1.026 0-1.945-.694-2.054-1.715A12.134 12.134 0 0 1 2.25 12c0-2.848.992-5.464 2.649-7.521C5.287 3.997 5.886 3.75 6.504 3.75h4.016c.483 0 .964.078 1.423.23l3.114 1.04a4.501 4.501 0 0 0 1.423.23h2.27"
-											/>
-										</svg>
-									</button>
-								</div>
-							)}
-						</div>
-					))}
-					{/* Show status indicator only when asking but no streaming message yet */}
-					{isAsking && !messages.some((m) => m.isStreaming) && (
-						<div className="message message-assistant">
-							<div className="message-role">Assistant</div>
-							<div className="thinking-status">
-								{progress.type === "thinking" && (
-									<>
-										<span className="thinking-dots">
-											<span>.</span>
-											<span>.</span>
-											<span>.</span>
-										</span>
-										Thinking
-									</>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												strokeWidth={1.5}
+												stroke="currentColor"
+											>
+												<path
+													strokeLinecap="round"
+													strokeLinejoin="round"
+													d="M17.367 13.75c-.806 0-1.533.446-2.031 1.08a9.041 9.041 0 0 1-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.498 4.498 0 0 0-.322 1.672v.633a.75.75 0 0 1-.75.75 2.25 2.25 0 0 1-2.25-2.25c0-1.152.26-2.243.723-3.218.266-.558-.107-1.282-.725-1.282m0 0H4.372c-1.026 0-1.945-.694-2.054-1.715A12.134 12.134 0 0 1 2.25 12c0-2.848.992-5.464 2.649-7.521C5.287 3.997 5.886 3.75 6.504 3.75h4.016c.483 0 .964.078 1.423.23l3.114 1.04a4.501 4.501 0 0 0 1.423.23h2.27"
+												/>
+											</svg>
+										</button>
+									</div>
 								)}
-								{progress.type === "tool" && (
-									<>
-										<span className="tool-icon">&#8594;</span>
-										{progress.toolName}
-									</>
-								)}
-								{progress.type === "responding" && "Writing response..."}
 							</div>
-						</div>
-					)}
-					<div ref={messagesEndRef} />
-				</div>
-			</main>
+						))}
+						{/* Show status indicator only when asking but no streaming message yet */}
+						{isAsking && !messages.some((m) => m.isStreaming) && (
+							<div className="message message-assistant">
+								<div className="message-role">Assistant</div>
+								<div className="thinking-status">
+									{progress.type === "thinking" && (
+										<>
+											<span className="thinking-dots">
+												<span>.</span>
+												<span>.</span>
+												<span>.</span>
+											</span>
+											Thinking
+										</>
+									)}
+									{progress.type === "tool" && (
+										<>
+											<span className="tool-icon">&#8594;</span>
+											{progress.toolName}
+										</>
+									)}
+									{progress.type === "responding" && "Writing response..."}
+								</div>
+							</div>
+						)}
+						<div ref={messagesEndRef} />
+					</div>
+				</main>
 
-			<footer className="chat-footer">
-				<div className="chat-input-container">
-					<textarea
-						ref={chatTextareaRef}
-						value={inputValue}
-						onChange={(e) => setInputValue(e.target.value)}
-						onKeyDown={handleKeyDown}
-						placeholder="Ask a follow-up question..."
-						className="chat-textarea"
-						rows={1}
-						disabled={isAsking}
-					/>
-					<button type="button" className="send-button" onClick={handleSend} disabled={isAsking || !inputValue.trim()}>
-						{isAsking ? <span className="spinner small" /> : "Send"}
-					</button>
-				</div>
-			</footer>
+				<footer className="chat-footer">
+					<div className="chat-input-container">
+						<textarea
+							ref={chatTextareaRef}
+							value={inputValue}
+							onChange={(e) => setInputValue(e.target.value)}
+							onKeyDown={handleKeyDown}
+							placeholder="Ask a follow-up question..."
+							className="chat-textarea"
+							rows={1}
+							disabled={isAsking}
+						/>
+						<button
+							type="button"
+							className="send-button"
+							onClick={handleSend}
+							disabled={isAsking || !inputValue.trim()}
+						>
+							{isAsking ? <span className="spinner small" /> : "Send"}
+						</button>
+					</div>
+				</footer>
+			</div>
 		</div>
 	);
 }

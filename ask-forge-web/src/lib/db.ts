@@ -286,6 +286,22 @@ export function updateSessionStatus(id: string, status: string): void {
 }
 
 /**
+ * Delete a session by ID (CASCADE handles messages/feedback/usage)
+ */
+export function deleteSession(id: string): void {
+	const db = getDb();
+	db.run("DELETE FROM sessions WHERE id = ?", [id]);
+}
+
+/**
+ * Update session title
+ */
+export function updateSessionTitle(id: string, title: string): void {
+	const db = getDb();
+	db.run("UPDATE sessions SET title = ? WHERE id = ?", [title, id]);
+}
+
+/**
  * List sessions for a user, ordered by most recent first
  */
 export function listSessionsByUser(userId: number, options?: { repositoryId?: number; status?: string }): DbSession[] {

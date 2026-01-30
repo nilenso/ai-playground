@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AskOptions, AskResult, Session, ToolCall, Usage } from "ask-forge";
-import { createMessage, getMessagesBySession } from "./db.ts";
+import { createMessage, getMessagesBySession, updateSessionTitle } from "./db.ts";
 
 const SESSIONS_DIR = process.env.SESSION_DIR || "workdir/sessions";
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
@@ -88,6 +88,7 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 			resetTimeout();
 			const result = await session.ask(question, options);
 
+			const isFirstAsk = asks.length === 0;
 			asks.push({
 				timestamp: Date.now(),
 				question,
@@ -98,6 +99,12 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 			});
 
 			persistMessages();
+
+			// Auto-set session title from first question
+			if (isFirstAsk && dbSessionId) {
+				const title = question.length > 80 ? `${question.slice(0, 77)}...` : question;
+				updateSessionTitle(dbSessionId, title);
+			}
 
 			if (result.response.startsWith("[ERROR:")) {
 				endSession("error", result.response);

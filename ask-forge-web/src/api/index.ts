@@ -2,6 +2,7 @@ import { connect, type Session } from "ask-forge";
 import { Hono } from "hono";
 import {
 	createSession as createDbSession,
+	deleteSession,
 	findOrCreateRepository,
 	getDb,
 	getMessagesBySession,
@@ -314,6 +315,63 @@ api.post("/disconnect", async (c) => {
 		sessionTimestamps.delete(sessionId);
 	}
 
+	return c.json({ success: true });
+});
+
+/**
+ * List sessions for the current user with repository info
+ */
+api.get("/sessions", (c) => {
+	const db = getDb();
+	const rows = db
+		.query<
+			{
+				id: string;
+				title: string | null;
+				status: string;
+				created_at: string;
+				repository_name: string;
+				username_or_organization: string;
+				git_url: string;
+			},
+			[number]
+		>(
+			`SELECT s.id, s.title, s.status, s.created_at,
+				r.repository_name, r.username_or_organization, r.git_url
+			 FROM sessions s
+			 JOIN repositories r ON s.repository_id = r.id
+			 WHERE s.user_id = ?
+			 ORDER BY s.created_at DESC`,
+		)
+		.all(1); // TODO: use authenticated user ID
+
+	return c.json(rows);
+});
+
+/**
+ * Get messages for a session
+ */
+api.get("/sessions/:id/messages", (c) => {
+	const sessionId = c.req.param("id");
+	const messages = getMessagesBySession(sessionId);
+	return c.json(messages);
+});
+
+/**
+ * Delete a session
+ */
+api.delete("/sessions/:id", (c) => {
+	const sessionId = c.req.param("id");
+
+	// Close in-memory session if active
+	const session = sessions.get(sessionId);
+	if (session) {
+		session.close();
+		sessions.delete(sessionId);
+		sessionTimestamps.delete(sessionId);
+	}
+
+	deleteSession(sessionId);
 	return c.json({ success: true });
 });
 
