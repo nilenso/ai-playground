@@ -21,15 +21,17 @@ app.get("/api/sessions", async (c) => {
 					const text = await file.text();
 					const firstLine = text.trim().split("\n")[0] ?? "";
 					const data = JSON.parse(firstLine);
+					const firstQuestion = Array.isArray(data.asks) && data.asks.length > 0 ? data.asks[0].question : "";
 					return {
 						filename,
 						repo: data.repo?.url || "unknown",
 						startedAt: data.startedAt || 0,
 						endReason: data.endReason || "unknown",
 						askCount: Array.isArray(data.asks) ? data.asks.length : 0,
+						firstQuestion,
 					};
 				} catch {
-					return { filename, repo: "unknown", startedAt: 0, endReason: "unknown", askCount: 0 };
+					return { filename, repo: "unknown", startedAt: 0, endReason: "unknown", askCount: 0, firstQuestion: "" };
 				}
 			}),
 		);
