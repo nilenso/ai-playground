@@ -30,7 +30,7 @@ interface SessionLog {
 	repo: { url: string; commitish: string };
 	startedAt: number;
 	endedAt: number;
-	endReason: "active" | "closed" | "error" | "timeout";
+	endReason: "active" | "inactive" | "error";
 	error?: string;
 	asks: AskEntry[];
 }
@@ -50,16 +50,14 @@ function formatRepoName(url: string): string {
 
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
 	active: { bg: "rgba(59, 130, 246, 0.1)", fg: "#3b82f6" },
-	closed: { bg: "rgba(0, 212, 170, 0.1)", fg: "#00d4aa" },
+	inactive: { bg: "rgba(0, 212, 170, 0.1)", fg: "#00d4aa" },
 	error: { bg: "rgba(239, 68, 68, 0.1)", fg: "#df1b41" },
-	timeout: { bg: "rgba(234, 179, 8, 0.1)", fg: "#92400e" },
 };
 
 const STATUS_LABELS: Record<string, string> = {
 	active: "\u25CF Active",
-	closed: "\u2713 Closed",
+	inactive: "\u2713 Inactive",
 	error: "\u2717 Error",
-	timeout: "\u23F1 Timeout",
 };
 
 export function Visualizer() {
@@ -73,9 +71,7 @@ export function Visualizer() {
 
 	// Sidebar controls
 	const [searchQuery, setSearchQuery] = useState("");
-	const [statusFilter, setStatusFilter] = useState<Set<string>>(
-		() => new Set(["active", "closed", "error", "timeout"]),
-	);
+	const [statusFilter, setStatusFilter] = useState<Set<string>>(() => new Set(["active", "inactive", "error"]));
 
 	// Create a marked instance that links file paths to the forge
 	const markedWithLinks = useMemo(
@@ -240,7 +236,7 @@ export function Visualizer() {
 
 						{/* Status filter */}
 						<div className="viz-filter-row">
-							{(["active", "closed", "error", "timeout"] as const).map((status) => (
+							{(["active", "inactive", "error"] as const).map((status) => (
 								<label key={status} className="viz-filter-label">
 									<input
 										type="checkbox"
