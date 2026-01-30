@@ -185,6 +185,8 @@ export function App() {
 	const reconnectAttemptRef = useRef(0);
 	const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const pendingMessageRef = useRef<{ requestId: string; sessionId: string; question: string } | null>(null);
+	const requestToSessionRef = useRef<Map<string, string>>(new Map());
+	const sessionRequestRef = useRef<Map<string, string>>(new Map());
 
 	// Create a marked instance that links file paths to the forge
 	const markedWithLinks = useMemo(
@@ -424,6 +426,25 @@ export function App() {
 
 	const handleRestore = useCallback(
 		async (session: SessionSummary) => {
+			// Don't cancel in-flight requests — let them continue in the background.
+			// The server persists responses to DB, and we can resume streaming when switching back.
+
+			// Stop the text release loop for the current session's streaming
+			if (releaseIntervalRef.current !== null) {
+				clearInterval(releaseIntervalRef.current);
+				releaseIntervalRef.current = null;
+			}
+
+			// Reset client-side streaming state so the new session starts clean
+			currentRequestIdRef.current = null;
+			pendingMessageRef.current = null;
+			streamingMessageIdRef.current = null;
+			streamingThinkingRef.current = "";
+			streamingBlocksRef.current = [];
+			textBufferRef.current = "";
+			setIsAsking(false);
+			setProgress({ type: "idle" });
+
 			setConnection((prev) => ({ ...prev, status: "connecting", error: null }));
 
 			try {
@@ -500,6 +521,15 @@ export function App() {
 				setMessages(clientMessages);
 				setPhase(clientMessages.length > 0 ? "chat" : "ask");
 				fetchSessionHistory();
+
+				// Check if this session has an in-flight request we should resume streaming for
+				const activeRequestId = sessionRequestRef.current.get(session.id);
+				if (activeRequestId && requestToSessionRef.current.has(activeRequestId)) {
+					// Request is still in-flight — resume streaming by setting it as the current request
+					currentRequestIdRef.current = activeRequestId;
+					setIsAsking(true);
+					setProgress({ type: "thinking" });
+				}
 			} catch (err) {
 				setConnection((prev) => ({
 					...prev,
@@ -631,8 +661,19 @@ export function App() {
 			try {
 				const message = JSON.parse(event.data);
 
-				// Ignore messages for other requests (out of order protection)
+				// Ignore messages for background sessions (server persists to DB anyway)
 				if (message.requestId && message.requestId !== currentRequestIdRef.current) {
+					const msgSessionId = requestToSessionRef.current.get(message.requestId);
+					// If this is a "done", "error", or "cancelled" message, clean up tracking for the background request
+					if (message.type === "done" || message.type === "error" || message.type === "cancelled") {
+						if (msgSessionId) {
+							const tracked = sessionRequestRef.current.get(msgSessionId);
+							if (tracked === message.requestId) {
+								sessionRequestRef.current.delete(msgSessionId);
+							}
+						}
+						requestToSessionRef.current.delete(message.requestId);
+					}
 					return;
 				}
 
@@ -774,6 +815,16 @@ export function App() {
 					streamingBlocksRef.current = [];
 					textBufferRef.current = "";
 
+					// Clean up tracking maps
+					if (message.requestId) {
+						const sid = requestToSessionRef.current.get(message.requestId);
+						if (sid) {
+							const tracked = sessionRequestRef.current.get(sid);
+							if (tracked === message.requestId) sessionRequestRef.current.delete(sid);
+						}
+						requestToSessionRef.current.delete(message.requestId);
+					}
+
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
 					setIsAsking(false);
@@ -804,6 +855,16 @@ export function App() {
 					streamingBlocksRef.current = [];
 					textBufferRef.current = "";
 
+					// Clean up tracking maps
+					if (message.requestId) {
+						const sid = requestToSessionRef.current.get(message.requestId);
+						if (sid) {
+							const tracked = sessionRequestRef.current.get(sid);
+							if (tracked === message.requestId) sessionRequestRef.current.delete(sid);
+						}
+						requestToSessionRef.current.delete(message.requestId);
+					}
+
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
 					setIsAsking(false);
@@ -822,6 +883,16 @@ export function App() {
 					streamingThinkingRef.current = "";
 					streamingBlocksRef.current = [];
 					textBufferRef.current = "";
+
+					// Clean up tracking maps
+					if (message.requestId) {
+						const sid = requestToSessionRef.current.get(message.requestId);
+						if (sid) {
+							const tracked = sessionRequestRef.current.get(sid);
+							if (tracked === message.requestId) sessionRequestRef.current.delete(sid);
+						}
+						requestToSessionRef.current.delete(message.requestId);
+					}
 
 					currentRequestIdRef.current = null;
 					pendingMessageRef.current = null;
@@ -936,6 +1007,8 @@ export function App() {
 		// Store request info for correlation and reconnection recovery
 		currentRequestIdRef.current = requestId;
 		pendingMessageRef.current = { requestId, sessionId: connection.sessionId, question };
+		requestToSessionRef.current.set(requestId, connection.sessionId);
+		sessionRequestRef.current.set(connection.sessionId, requestId);
 
 		// Ensure WebSocket is connected and send
 		connectWebSocket();
@@ -1001,8 +1074,12 @@ export function App() {
 								className="sidebar-item"
 								role="button"
 								tabIndex={0}
-								onClick={() => { if (renamingSession !== s.id) handleRestore(s); }}
-								onKeyDown={(e) => { if (e.key === "Enter" && renamingSession !== s.id) handleRestore(s); }}
+								onClick={() => {
+									if (renamingSession !== s.id) handleRestore(s);
+								}}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" && renamingSession !== s.id) handleRestore(s);
+								}}
 							>
 								{renamingSession === s.id ? (
 									<input
