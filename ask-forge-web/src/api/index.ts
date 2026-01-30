@@ -10,6 +10,7 @@ import {
 	getSession,
 	recordCheckout,
 	updateRepositorySummary,
+	updateSessionTitle,
 } from "../lib/db.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
 import { buildSessionContext } from "../lib/session-context.ts";
@@ -355,6 +356,21 @@ api.get("/sessions/:id/messages", (c) => {
 	const sessionId = c.req.param("id");
 	const messages = getMessagesBySession(sessionId);
 	return c.json(messages);
+});
+
+/**
+ * Rename a session
+ */
+api.patch("/sessions/:id", async (c) => {
+	const sessionId = c.req.param("id");
+	const body = await c.req.json<{ title: string }>();
+
+	if (!body.title?.trim()) {
+		return c.json({ success: false, error: "Title is required" }, 400);
+	}
+
+	updateSessionTitle(sessionId, body.title.trim());
+	return c.json({ success: true });
 });
 
 /**

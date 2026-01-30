@@ -85,6 +85,10 @@ Biome configuration (all projects):
 
 Projects load environment variables from `.env` files automatically. Required variables vary by project (API keys, database paths, ports).
 
+## UI Design Conventions (ask-forge-web)
+
+- **All icons should be pink** (`var(--accent-pink)` / `#ec4899`). This applies to sidebar icons, dropdown menu icons, action buttons, and any other icon elements throughout the UI.
+
 ## Reference Documentation
 
 For Hono framework: `https://hono.dev/llms-full.txt`

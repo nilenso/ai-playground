@@ -983,12 +983,12 @@
 			border: none;
 			border-radius: 6px;
 			cursor: pointer;
-			color: var(--text-muted);
+			color: var(--accent-pink);
 			transition: color 0.15s, background 0.15s;
 		}
 
 		.sidebar-collapse-btn:hover {
-			color: var(--text-primary);
+			color: var(--accent-pink-hover);
 			background: var(--bg-tertiary);
 		}
 
@@ -1073,9 +1073,11 @@
 
 		.sidebar-section-label {
 			padding: 12px 16px 6px;
+			margin-top: 4px;
 			font-size: 12px;
 			font-weight: 500;
 			color: var(--text-muted);
+			border-top: 1px solid var(--border-subtle);
 		}
 
 		.sidebar-loading {
@@ -1115,6 +1117,7 @@
 
 		.sidebar-item:hover {
 			background: var(--bg-tertiary);
+			box-shadow: 0 0 0 1px var(--accent-pink);
 		}
 
 		.sidebar-item-title {
@@ -1126,30 +1129,97 @@
 			text-overflow: ellipsis;
 		}
 
-		.delete-btn {
-			background: none;
-			border: none;
-			padding: 2px;
-			cursor: pointer;
-			color: var(--text-muted);
-			opacity: 0;
-			transition: opacity 0.15s, color 0.15s;
+		.sidebar-item-menu-wrapper {
+			position: relative;
 			flex-shrink: 0;
-			display: flex;
-			align-items: center;
 		}
 
-		.sidebar-item:hover .delete-btn {
+		.sidebar-item-more {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 24px;
+			height: 24px;
+			background: none;
+			border: none;
+			border-radius: 4px;
+			cursor: pointer;
+			color: var(--accent-pink);
+			opacity: 0;
+			transition: opacity 0.15s, color 0.15s, background 0.15s;
+			padding: 0;
+		}
+
+		.sidebar-item:hover .sidebar-item-more {
 			opacity: 1;
 		}
 
-		.delete-btn:hover {
+		.sidebar-item-more:hover {
+			color: var(--accent-pink-hover);
+			background: var(--bg-secondary);
+		}
+
+		.sidebar-item-more svg {
+			width: 14px;
+			height: 14px;
+		}
+
+		.sidebar-item-dropdown {
+			position: absolute;
+			right: 0;
+			top: 100%;
+			min-width: 140px;
+			background: var(--bg-primary);
+			border: 1px solid var(--border-subtle);
+			border-radius: 8px;
+			box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+			overflow: hidden;
+			z-index: 200;
+			margin-top: 2px;
+		}
+
+		.sidebar-item-dropdown button {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			width: 100%;
+			padding: 8px 12px;
+			border: none;
+			background: none;
+			color: var(--text-secondary);
+			font-size: 13px;
+			font-family: inherit;
+			cursor: pointer;
+			transition: background 0.15s, color 0.15s;
+			text-align: left;
+		}
+
+		.sidebar-item-dropdown button:hover {
+			background: var(--bg-secondary);
+		}
+
+		.sidebar-item-dropdown button.danger:hover {
 			color: var(--error);
 		}
 
-		.delete-btn svg {
+		.sidebar-item-dropdown button svg {
 			width: 14px;
 			height: 14px;
+			flex-shrink: 0;
+			color: var(--accent-pink);
+		}
+
+		.sidebar-rename-input {
+			flex: 1;
+			min-width: 0;
+			padding: 2px 6px;
+			border: 1px solid var(--accent-pink);
+			border-radius: 4px;
+			font-size: 14px;
+			font-family: inherit;
+			color: var(--text-primary);
+			background: var(--bg-primary);
+			outline: none;
 		}
 
 		.sidebar-spacer {

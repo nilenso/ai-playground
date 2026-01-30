@@ -138,7 +138,11 @@ export function App() {
 	const [historyLoading, setHistoryLoading] = useState(false);
 	const [profileOpen, setProfileOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const [itemMenuOpen, setItemMenuOpen] = useState<string | null>(null);
+	const [renamingSession, setRenamingSession] = useState<string | null>(null);
+	const [renameValue, setRenameValue] = useState("");
 	const profileRef = useRef<HTMLDivElement>(null);
+	const itemMenuRef = useRef<HTMLDivElement>(null);
 
 	const handleCopyMessage = useCallback((msgId: string, blocks: ContentBlock[]) => {
 		const text = blocks
@@ -229,11 +233,14 @@ export function App() {
 			});
 	}, []);
 
-	// Close profile menu on outside click
+	// Close profile menu and item menu on outside click
 	useEffect(() => {
 		const handleClick = (e: MouseEvent) => {
 			if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
 				setProfileOpen(false);
+			}
+			if (itemMenuRef.current && !itemMenuRef.current.contains(e.target as Node)) {
+				setItemMenuOpen(null);
 			}
 		};
 		document.addEventListener("mousedown", handleClick);
@@ -521,6 +528,21 @@ export function App() {
 		},
 		[connection.sessionId],
 	);
+
+	const handleRenameSession = useCallback(async (sessionId: string, title: string) => {
+		if (!title.trim()) return;
+		try {
+			await fetch(`/api/sessions/${sessionId}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ title: title.trim() }),
+			});
+			setSessionHistory((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title: title.trim() } : s)));
+		} catch {
+			// Ignore
+		}
+		setRenamingSession(null);
+	}, []);
 
 	// Generate unique request ID
 	const generateRequestId = useCallback(() => {
@@ -936,17 +958,6 @@ export function App() {
 		}
 	};
 
-	// Group sessions by repo for sidebar
-	const groupedSessions = useMemo(() => {
-		const groups: Record<string, SessionSummary[]> = {};
-		for (const s of sessionHistory) {
-			const key = `${s.username_or_organization}/${s.repository_name}`;
-			if (!groups[key]) groups[key] = [];
-			groups[key].push(s);
-		}
-		return groups;
-	}, [sessionHistory]);
-
 	const sidebarElement = auth.authenticated ? (
 		<nav className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
 			<div className="sidebar-top">
@@ -984,39 +995,86 @@ export function App() {
 					) : sessionHistory.length === 0 ? (
 						<div className="sidebar-empty">No sessions yet</div>
 					) : (
-						Object.entries(groupedSessions).map(([repoKey, sessions]) => (
-							<div key={repoKey} className="sidebar-group">
-								<div className="sidebar-group-label">{repoKey}</div>
-								{sessions.map((s) => (
-									<div
-										key={s.id}
-										className="sidebar-item"
-										role="button"
-										tabIndex={0}
-										onClick={() => handleRestore(s)}
+						sessionHistory.map((s) => (
+							<div
+								key={s.id}
+								className="sidebar-item"
+								role="button"
+								tabIndex={0}
+								onClick={() => { if (renamingSession !== s.id) handleRestore(s); }}
+								onKeyDown={(e) => { if (e.key === "Enter" && renamingSession !== s.id) handleRestore(s); }}
+							>
+								{renamingSession === s.id ? (
+									<input
+										type="text"
+										className="sidebar-rename-input"
+										value={renameValue}
+										onChange={(e) => setRenameValue(e.target.value)}
 										onKeyDown={(e) => {
-											if (e.key === "Enter") handleRestore(s);
+											e.stopPropagation();
+											if (e.key === "Enter") handleRenameSession(s.id, renameValue);
+											if (e.key === "Escape") setRenamingSession(null);
 										}}
+										onBlur={() => handleRenameSession(s.id, renameValue)}
+										autoFocus
+										onClick={(e) => e.stopPropagation()}
+									/>
+								) : (
+									<div className="sidebar-item-title">{s.title || "Untitled session"}</div>
+								)}
+								<div className="sidebar-item-menu-wrapper" ref={itemMenuOpen === s.id ? itemMenuRef : undefined}>
+									<button
+										type="button"
+										className="sidebar-item-more"
+										onClick={(e) => {
+											e.stopPropagation();
+											setItemMenuOpen(itemMenuOpen === s.id ? null : s.id);
+										}}
+										aria-label="More options"
 									>
-										<div className="sidebar-item-title">{s.title || "Untitled session"}</div>
-										<button
-											type="button"
-											className="delete-btn"
-											onClick={(e) => {
-												e.stopPropagation();
-												if (confirm("Delete this session?")) {
-													handleDeleteSession(s.id);
-												}
-											}}
-											aria-label="Delete session"
-										>
-											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-												<polyline points="3 6 5 6 21 6" />
-												<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-											</svg>
-										</button>
-									</div>
-								))}
+										<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+											<circle cx="10" cy="4" r="1.5" />
+											<circle cx="10" cy="10" r="1.5" />
+											<circle cx="10" cy="16" r="1.5" />
+										</svg>
+									</button>
+									{itemMenuOpen === s.id && (
+										<div className="sidebar-item-dropdown">
+											<button
+												type="button"
+												onClick={(e) => {
+													e.stopPropagation();
+													setRenameValue(s.title || "");
+													setRenamingSession(s.id);
+													setItemMenuOpen(null);
+												}}
+											>
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+													<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+													<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+												</svg>
+												Rename
+											</button>
+											<button
+												type="button"
+												className="danger"
+												onClick={(e) => {
+													e.stopPropagation();
+													setItemMenuOpen(null);
+													if (confirm("Delete this session?")) {
+														handleDeleteSession(s.id);
+													}
+												}}
+											>
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+													<polyline points="3 6 5 6 21 6" />
+													<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+												</svg>
+												Delete
+											</button>
+										</div>
+									)}
+								</div>
 							</div>
 						))
 					)}
