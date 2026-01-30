@@ -30,13 +30,13 @@ interface SessionLog {
 	repo: { url: string; commitish: string };
 	startedAt: number;
 	endedAt: number;
-	endReason: "closed" | "error" | "timeout";
+	endReason: "active" | "closed" | "error" | "timeout";
 	error?: string;
 	asks: AskEntry[];
 }
 
 interface SessionSummary {
-	filename: string;
+	id: string;
 	repo: string;
 	startedAt: number;
 	endReason: string;
@@ -49,12 +49,14 @@ function formatRepoName(url: string): string {
 }
 
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
+	active: { bg: "rgba(59, 130, 246, 0.1)", fg: "#3b82f6" },
 	closed: { bg: "rgba(0, 212, 170, 0.1)", fg: "#00d4aa" },
 	error: { bg: "rgba(239, 68, 68, 0.1)", fg: "#df1b41" },
 	timeout: { bg: "rgba(234, 179, 8, 0.1)", fg: "#92400e" },
 };
 
 const STATUS_LABELS: Record<string, string> = {
+	active: "\u25CF Active",
 	closed: "\u2713 Closed",
 	error: "\u2717 Error",
 	timeout: "\u23F1 Timeout",
@@ -62,7 +64,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function Visualizer() {
 	const [sessions, setSessions] = useState<SessionSummary[]>([]);
-	const [selectedFile, setSelectedFile] = useState<string | null>(null);
+	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [session, setSession] = useState<SessionLog | null>(null);
 	const [loadingFiles, setLoadingFiles] = useState(true);
 	const [loadingSession, setLoadingSession] = useState(false);
@@ -71,7 +73,9 @@ export function Visualizer() {
 
 	// Sidebar controls
 	const [searchQuery, setSearchQuery] = useState("");
-	const [statusFilter, setStatusFilter] = useState<Set<string>>(() => new Set(["closed", "error", "timeout"]));
+	const [statusFilter, setStatusFilter] = useState<Set<string>>(
+		() => new Set(["active", "closed", "error", "timeout"]),
+	);
 
 	// Create a marked instance that links file paths to the forge
 	const markedWithLinks = useMemo(
@@ -91,9 +95,9 @@ export function Visualizer() {
 						if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
 						return next;
 					});
-					setSelectedFile((current) => {
+					setSelectedId((current) => {
 						if (!current && data.sessions.length > 0) {
-							return data.sessions[0].filename;
+							return data.sessions[0].id;
 						}
 						return current;
 					});
@@ -117,23 +121,23 @@ export function Visualizer() {
 
 	// Load selected session
 	useEffect(() => {
-		if (!selectedFile) return;
+		if (!selectedId) return;
 
 		setLoadingSession(true);
 		setError(null);
 
-		fetch(`/api/session/${encodeURIComponent(selectedFile)}`)
+		fetch(`/api/session/${encodeURIComponent(selectedId)}`)
 			.then((res) => res.json())
 			.then((data) => {
-				if (data.success && data.events.length > 0) {
-					setSession(data.events[0] as SessionLog);
+				if (data.success && data.session) {
+					setSession(data.session as SessionLog);
 				} else {
 					setError(data.error || "No session data found");
 				}
 			})
 			.catch((err) => setError(err.message))
 			.finally(() => setLoadingSession(false));
-	}, [selectedFile]);
+	}, [selectedId]);
 
 	// Filtered and sorted sessions
 	const filteredSessions = useMemo(() => {
@@ -167,7 +171,7 @@ export function Visualizer() {
 		return <div className="viz-loading">Loading sessions...</div>;
 	}
 
-	if (error && !selectedFile) {
+	if (error && !selectedId) {
 		return <div className="viz-error">Error: {error}</div>;
 	}
 
@@ -236,7 +240,7 @@ export function Visualizer() {
 
 						{/* Status filter */}
 						<div className="viz-filter-row">
-							{(["closed", "error", "timeout"] as const).map((status) => (
+							{(["active", "closed", "error", "timeout"] as const).map((status) => (
 								<label key={status} className="viz-filter-label">
 									<input
 										type="checkbox"
@@ -262,13 +266,13 @@ export function Visualizer() {
 						{filteredSessions.length === 0 && <div className="viz-no-results">No matching sessions</div>}
 						{filteredSessions.map((s) => (
 							<button
-								key={s.filename}
+								key={s.id}
 								type="button"
-								className={`viz-session-card ${selectedFile === s.filename ? "selected" : ""}`}
-								onClick={() => setSelectedFile(s.filename)}
+								className={`viz-session-card ${selectedId === s.id ? "selected" : ""}`}
+								onClick={() => setSelectedId(s.id)}
 							>
 								<div className="viz-card-repo">
-									{s.firstQuestion || (s.repo !== "unknown" ? formatRepoName(s.repo) : s.filename.slice(0, 12))}
+									{s.firstQuestion || (s.repo !== "unknown" ? formatRepoName(s.repo) : s.id.slice(0, 12))}
 								</div>
 								<div className="viz-card-meta">
 									<span>{s.startedAt ? formatShortDate(s.startedAt) : "—"}</span>

@@ -1,45 +1,47 @@
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import type { DbMessage } from "./lib/db.ts";
+import { getDb } from "./lib/db.ts";
 
 const app = new Hono();
 
-const sessionDir = process.env.SESSION_DIR || "workdir/sessions";
+interface SessionRow {
+	id: string;
+	title: string | null;
+	status: string;
+	created_at: string;
+	ended_at: string | null;
+	git_url: string;
+	repository_name: string;
+	username_or_organization: string;
+	ask_count: number;
+}
 
-// API to list available session files with metadata
-app.get("/api/sessions", async (c) => {
+// API to list available sessions from DB
+app.get("/api/sessions", (c) => {
 	try {
-		const files = await readdir(sessionDir);
-		const jsonlFiles = files.filter((f) => f.endsWith(".jsonl"));
+		const db = getDb();
+		const sessions = db
+			.query<SessionRow, []>(
+				`SELECT s.id, s.title, s.status, s.created_at, s.ended_at,
+				        r.git_url, r.repository_name, r.username_or_organization,
+				        (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') AS ask_count
+				 FROM sessions s
+				 JOIN repositories r ON s.repository_id = r.id
+				 ORDER BY s.created_at DESC`,
+			)
+			.all();
 
-		// Read metadata from each file for sorting and display
-		const sessions = await Promise.all(
-			jsonlFiles.map(async (filename) => {
-				try {
-					const file = Bun.file(join(sessionDir, filename));
-					const text = await file.text();
-					const firstLine = text.trim().split("\n")[0] ?? "";
-					const data = JSON.parse(firstLine);
-					const firstQuestion = Array.isArray(data.asks) && data.asks.length > 0 ? data.asks[0].question : "";
-					return {
-						filename,
-						repo: data.repo?.url || "unknown",
-						startedAt: data.startedAt || 0,
-						endReason: data.endReason || "unknown",
-						askCount: Array.isArray(data.asks) ? data.asks.length : 0,
-						firstQuestion,
-					};
-				} catch {
-					return { filename, repo: "unknown", startedAt: 0, endReason: "unknown", askCount: 0, firstQuestion: "" };
-				}
-			}),
-		);
+		const result = sessions.map((s) => ({
+			id: s.id,
+			repo: s.git_url,
+			startedAt: new Date(s.created_at).getTime(),
+			endReason: s.status,
+			askCount: s.ask_count,
+			firstQuestion: s.title || "",
+		}));
 
-		// Sort by startedAt descending (most recent first)
-		sessions.sort((a, b) => b.startedAt - a.startedAt);
-
-		return c.json({ success: true, sessions });
+		return c.json({ success: true, sessions: result });
 	} catch (err) {
 		return c.json(
 			{
@@ -51,27 +53,169 @@ app.get("/api/sessions", async (c) => {
 	}
 });
 
-// API to load a specific session file
-app.get("/api/session/:filename", async (c) => {
-	const filename = c.req.param("filename");
-
-	// Security: ensure filename doesn't escape the directory
-	if (filename.includes("/") || filename.includes("\\") || filename.includes("..")) {
-		return c.json({ success: false, error: "Invalid filename" }, 400);
-	}
-
-	if (!filename.endsWith(".jsonl")) {
-		return c.json({ success: false, error: "Invalid file type" }, 400);
-	}
-
-	const filePath = join(sessionDir, filename);
+// API to load a specific session by ID
+app.get("/api/session/:id", (c) => {
+	const id = c.req.param("id");
 
 	try {
-		const file = Bun.file(filePath);
-		const text = await file.text();
-		const lines = text.trim().split("\n");
-		const events = lines.map((line) => JSON.parse(line));
-		return c.json({ success: true, events });
+		const db = getDb();
+
+		// Get session + repository info
+		const session = db
+			.query<
+				{
+					id: string;
+					title: string | null;
+					status: string;
+					created_at: string;
+					ended_at: string | null;
+					git_url: string;
+					default_commit: string;
+				},
+				[string]
+			>(
+				`SELECT s.id, s.title, s.status, s.created_at, s.ended_at,
+				        r.git_url, r.default_commit
+				 FROM sessions s
+				 JOIN repositories r ON s.repository_id = r.id
+				 WHERE s.id = ?`,
+			)
+			.get(id);
+
+		if (!session) {
+			return c.json({ success: false, error: "Session not found" }, 404);
+		}
+
+		// Get messages ordered by ordinal
+		const messages = db
+			.query<DbMessage, [string]>("SELECT * FROM messages WHERE session_id = ? ORDER BY ordinal")
+			.all(id);
+
+		// Get usage stats keyed by message_id
+		const usageRows = db
+			.query<
+				{
+					message_id: number;
+					input_tokens: number;
+					output_tokens: number;
+					total_tokens: number;
+					cache_read_tokens: number;
+					cache_write_tokens: number;
+					inference_time_ms: number;
+				},
+				[string]
+			>("SELECT * FROM usage_stats WHERE session_id = ?")
+			.all(id);
+
+		const usageByMessageId = new Map(usageRows.map((u) => [u.message_id, u]));
+
+		// Get feedback keyed by message_id
+		const feedbackRows = db
+			.query<{ message_id: number; feedback: string }, [string]>(
+				`SELECT mf.message_id, mf.feedback
+				 FROM message_feedback mf
+				 JOIN messages m ON mf.message_id = m.id
+				 WHERE m.session_id = ?`,
+			)
+			.all(id);
+
+		const feedbackByMessageId = new Map(feedbackRows.map((f) => [f.message_id, f.feedback]));
+
+		// Reconstruct asks[] by pairing user messages with subsequent assistant messages
+		const asks: Array<{
+			timestamp: number;
+			question: string;
+			toolCalls: Array<{ type: string; id: string; name: string; arguments: Record<string, unknown> }>;
+			response: string;
+			usage?: {
+				input: number;
+				output: number;
+				totalTokens: number;
+				cacheRead: number;
+				cacheWrite: number;
+			};
+			inferenceTimeMs?: number;
+			feedback?: string;
+		}> = [];
+
+		let currentAsk: (typeof asks)[0] | null = null;
+
+		for (const msg of messages) {
+			if (msg.role === "user") {
+				// Start a new ask entry
+				if (currentAsk) {
+					asks.push(currentAsk);
+				}
+				currentAsk = {
+					timestamp: new Date(msg.created_at).getTime(),
+					question: msg.content || "",
+					toolCalls: [],
+					response: "",
+				};
+			} else if (msg.role === "assistant" && currentAsk) {
+				// Parse content JSON array to extract tool calls and text
+				if (msg.content) {
+					try {
+						const contentParts = JSON.parse(msg.content);
+						if (Array.isArray(contentParts)) {
+							for (const part of contentParts) {
+								if (part.type === "toolCall") {
+									currentAsk.toolCalls.push({
+										type: part.type,
+										id: part.id || "",
+										name: part.name || "",
+										arguments: part.arguments || {},
+									});
+								} else if (part.type === "text" && part.text) {
+									currentAsk.response += (currentAsk.response ? "\n" : "") + part.text;
+								}
+							}
+						} else {
+							// Plain string content
+							currentAsk.response += (currentAsk.response ? "\n" : "") + msg.content;
+						}
+					} catch {
+						// Not JSON, treat as plain text
+						currentAsk.response += (currentAsk.response ? "\n" : "") + msg.content;
+					}
+				}
+
+				// Attach usage stats if available
+				const usage = usageByMessageId.get(msg.id);
+				if (usage) {
+					currentAsk.usage = {
+						input: usage.input_tokens,
+						output: usage.output_tokens,
+						totalTokens: usage.total_tokens,
+						cacheRead: usage.cache_read_tokens,
+						cacheWrite: usage.cache_write_tokens,
+					};
+					currentAsk.inferenceTimeMs = usage.inference_time_ms;
+				}
+
+				// Attach feedback if available
+				const feedback = feedbackByMessageId.get(msg.id);
+				if (feedback) {
+					currentAsk.feedback = feedback;
+				}
+			}
+		}
+
+		// Don't forget the last ask
+		if (currentAsk) {
+			asks.push(currentAsk);
+		}
+
+		const sessionLog = {
+			sessionId: session.id,
+			repo: { url: session.git_url, commitish: session.default_commit },
+			startedAt: new Date(session.created_at).getTime(),
+			endedAt: session.ended_at ? new Date(session.ended_at).getTime() : Date.now(),
+			endReason: session.status,
+			asks,
+		};
+
+		return c.json({ success: true, session: sessionLog });
 	} catch (err) {
 		return c.json(
 			{

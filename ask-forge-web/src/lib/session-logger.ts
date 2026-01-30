@@ -1,24 +1,10 @@
-import { appendFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
-import type { AskOptions, AskResult, Session, ToolCall, Usage } from "ask-forge";
+import type { AskOptions, AskResult, Session } from "ask-forge";
 import { createMessage, getMessagesBySession, updateSessionTitle } from "./db.ts";
 
-const SESSIONS_DIR = process.env.SESSION_DIR || "workdir/sessions";
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
-interface AskEntry {
-	timestamp: number;
-	question: string;
-	toolCalls: ToolCall[];
-	response: string;
-	usage: Usage;
-	inferenceTimeMs: number;
-	feedback?: "like" | "dislike";
-}
-
 export function wrapSession(session: Session, dbSessionId?: string): Session {
-	const startedAt = Date.now();
-	const asks: AskEntry[] = [];
+	let askCount = 0;
 	let timeoutHandle: Timer | null = null;
 	let terminated = false;
 	let ordinal = dbSessionId ? getMessagesBySession(dbSessionId).length : 0;
@@ -52,30 +38,16 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 		ordinal = messages.length;
 	};
 
-	const endSession = (reason: "closed" | "error" | "timeout", error?: string) => {
+	const endSession = () => {
 		if (terminated) return;
 		terminated = true;
 		if (timeoutHandle) clearTimeout(timeoutHandle);
-
-		mkdirSync(SESSIONS_DIR, { recursive: true });
-		const log = {
-			sessionId: session.id,
-			repo: { url: session.repo.url, commitish: session.repo.commitish },
-			startedAt,
-			endedAt: Date.now(),
-			endReason: reason,
-			...(error && { error }),
-			asks,
-		};
-		const logPath = join(SESSIONS_DIR, `${session.id}.jsonl`);
-		appendFileSync(logPath, JSON.stringify(log) + "\n");
-		console.log(`Session logged to: ${logPath}`);
 		session.close();
 	};
 
 	const resetTimeout = () => {
 		if (timeoutHandle) clearTimeout(timeoutHandle);
-		timeoutHandle = setTimeout(() => endSession("timeout"), INACTIVITY_TIMEOUT_MS);
+		timeoutHandle = setTimeout(() => endSession(), INACTIVITY_TIMEOUT_MS);
 	};
 
 	resetTimeout();
@@ -88,26 +60,17 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 			resetTimeout();
 			const result = await session.ask(question, options);
 
-			const isFirstAsk = asks.length === 0;
-			asks.push({
-				timestamp: Date.now(),
-				question,
-				toolCalls: result.toolCalls,
-				response: result.response,
-				usage: result.usage,
-				inferenceTimeMs: result.inferenceTimeMs,
-			});
-
 			persistMessages();
 
 			// Auto-set session title from first question
-			if (isFirstAsk && dbSessionId) {
+			if (askCount === 0 && dbSessionId) {
 				const title = question.length > 80 ? `${question.slice(0, 77)}...` : question;
 				updateSessionTitle(dbSessionId, title);
 			}
+			askCount++;
 
 			if (result.response.startsWith("[ERROR:")) {
-				endSession("error", result.response);
+				endSession();
 			}
 
 			return result;
@@ -122,16 +85,7 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 		},
 
 		close() {
-			endSession("closed");
-		},
-
-		/** Set feedback on the most recent ask, or a specific ask by index */
-		setFeedback(feedback: "like" | "dislike" | undefined, askIndex?: number) {
-			const idx = askIndex ?? asks.length - 1;
-			const entry = asks[idx];
-			if (entry) {
-				entry.feedback = feedback;
-			}
+			endSession();
 		},
 	};
 
