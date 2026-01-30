@@ -351,12 +351,18 @@ export function Visualizer() {
 											</span>
 										)}
 									</div>
-									<div
-										className="markdown-content"
-										dangerouslySetInnerHTML={{
-											__html: markedWithLinks.parse(ask.response) as string,
-										}}
-									/>
+									{ask.response.startsWith("[ERROR:") ? (
+										<div className="viz-error-banner">
+											{ask.response.replace(/^\[ERROR:\s*/, "").replace(/\]$/, "")}
+										</div>
+									) : (
+										<div
+											className="markdown-content"
+											dangerouslySetInnerHTML={{
+												__html: markedWithLinks.parse(ask.response) as string,
+											}}
+										/>
+									)}
 									<div className="viz-msg-actions">
 										<span className={ask.feedback === "like" ? "viz-action-active" : "viz-action"} title="Thumbs up">
 											<svg
