@@ -9,7 +9,7 @@ import {
 	getRepositoryByGitUrl,
 	getSession,
 	recordCheckout,
-	updateRepositorySummary,
+	updateSessionStatus,
 	updateSessionTitle,
 } from "../lib/db.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
@@ -30,7 +30,7 @@ const GIT_ENV: Record<string, string> = {
 export const sessions = new Map<string, Session>();
 
 // Clean up sessions older than 30 minutes
-const SESSION_TTL = 30 * 60 * 1000;
+const SESSION_TTL = 10 * 60 * 1000;
 export const sessionTimestamps = new Map<string, number>();
 
 function cleanupSessions() {
@@ -43,6 +43,7 @@ function cleanupSessions() {
 				sessions.delete(id);
 			}
 			sessionTimestamps.delete(id);
+			updateSessionStatus(id, "inactive");
 		}
 	}
 }
@@ -315,6 +316,7 @@ api.post("/disconnect", async (c) => {
 		sessions.delete(sessionId);
 		sessionTimestamps.delete(sessionId);
 	}
+	updateSessionStatus(sessionId, "inactive");
 
 	return c.json({ success: true });
 });

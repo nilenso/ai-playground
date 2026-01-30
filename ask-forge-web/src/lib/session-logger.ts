@@ -1,12 +1,8 @@
 import type { AskOptions, AskResult, Session } from "ask-forge";
-import { createMessage, getMessagesBySession, updateSessionTitle } from "./db.ts";
-
-const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+import { createMessage, getMessagesBySession, updateSessionStatus, updateSessionTitle } from "./db.ts";
 
 export function wrapSession(session: Session, dbSessionId?: string): Session {
 	let askCount = 0;
-	let timeoutHandle: Timer | null = null;
-	let terminated = false;
 	let ordinal = dbSessionId ? getMessagesBySession(dbSessionId).length : 0;
 
 	const persistMessages = () => {
@@ -38,26 +34,11 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 		ordinal = messages.length;
 	};
 
-	const endSession = () => {
-		if (terminated) return;
-		terminated = true;
-		if (timeoutHandle) clearTimeout(timeoutHandle);
-		session.close();
-	};
-
-	const resetTimeout = () => {
-		if (timeoutHandle) clearTimeout(timeoutHandle);
-		timeoutHandle = setTimeout(() => endSession(), INACTIVITY_TIMEOUT_MS);
-	};
-
-	resetTimeout();
-
 	const wrapped = {
 		id: session.id,
 		repo: session.repo,
 
 		async ask(question: string, options?: AskOptions): Promise<AskResult> {
-			resetTimeout();
 			const result = await session.ask(question, options);
 
 			persistMessages();
@@ -69,8 +50,8 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 			}
 			askCount++;
 
-			if (result.response.startsWith("[ERROR:")) {
-				endSession();
+			if (result.response.startsWith("[ERROR:") && dbSessionId) {
+				updateSessionStatus(dbSessionId, "error");
 			}
 
 			return result;
@@ -85,7 +66,7 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 		},
 
 		close() {
-			endSession();
+			session.close();
 		},
 	};
 
