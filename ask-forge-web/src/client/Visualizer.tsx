@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createMarkedWithFileLinks } from "./file-linker.ts";
 
 interface ToolCallRecord {
@@ -33,8 +33,41 @@ interface SessionLog {
 	asks: AskEntry[];
 }
 
+interface SessionSummary {
+	filename: string;
+	repo: string;
+	startedAt: number;
+	endReason: string;
+	askCount: number;
+}
+
+function formatRepoName(url: string): string {
+	return url.replace(/^https?:\/\/(www\.)?github\.com\//, "").replace(/\.git$/, "");
+}
+
+function formatSessionLabel(s: SessionSummary): string {
+	const repo = s.repo !== "unknown" ? formatRepoName(s.repo) : s.filename;
+	const date = s.startedAt
+		? new Date(s.startedAt).toLocaleDateString("en-US", {
+				month: "short",
+				day: "numeric",
+				hour: "2-digit",
+				minute: "2-digit",
+			})
+		: "";
+	const status =
+		s.endReason === "closed"
+			? "\u2713"
+			: s.endReason === "error"
+				? "\u2717"
+				: s.endReason === "timeout"
+					? "\u23F1"
+					: "";
+	return `${status} ${repo}${date ? ` \u2014 ${date}` : ""} (${s.askCount}q)`;
+}
+
 export function Visualizer() {
-	const [files, setFiles] = useState<string[]>([]);
+	const [sessions, setSessions] = useState<SessionSummary[]>([]);
 	const [selectedFile, setSelectedFile] = useState<string | null>(null);
 	const [session, setSession] = useState<SessionLog | null>(null);
 	const [loadingFiles, setLoadingFiles] = useState(true);
@@ -49,16 +82,20 @@ export function Visualizer() {
 	);
 
 	// Load list of session files
-	useEffect(() => {
+	const loadSessions = useCallback(() => {
+		setLoadingFiles(true);
 		fetch("/api/sessions")
 			.then((res) => res.json())
 			.then((data) => {
 				if (data.success) {
-					setFiles(data.files);
-					// Auto-select first file if available
-					if (data.files.length > 0) {
-						setSelectedFile(data.files[0]);
-					}
+					setSessions(data.sessions);
+					// Auto-select first file if available and none selected
+					setSelectedFile((current) => {
+						if (!current && data.sessions.length > 0) {
+							return data.sessions[0].filename;
+						}
+						return current;
+					});
 				} else {
 					setError(data.error);
 				}
@@ -66,6 +103,10 @@ export function Visualizer() {
 			.catch((err) => setError(err.message))
 			.finally(() => setLoadingFiles(false));
 	}, []);
+
+	useEffect(() => {
+		loadSessions();
+	}, [loadSessions]);
 
 	// Load selected session
 	useEffect(() => {
@@ -96,8 +137,8 @@ export function Visualizer() {
 		return <div style={styles.error}>Error: {error}</div>;
 	}
 
-	if (files.length === 0) {
-		return <div style={styles.loading}>No .jsonl files found in workdir/sessions</div>;
+	if (sessions.length === 0) {
+		return <div style={styles.loading}>No sessions found. Start a conversation to see it here.</div>;
 	}
 
 	const formatTime = (ts: number) => new Date(ts).toLocaleString();
@@ -165,20 +206,29 @@ export function Visualizer() {
 					)}
 				</div>
 				<div style={styles.headerRight}>
-					{files.length > 0 && (
+					{sessions.length > 0 && (
 						<select
 							style={styles.fileSelect}
 							value={selectedFile || ""}
 							onChange={(e) => setSelectedFile(e.target.value)}
 							disabled={loadingSession}
 						>
-							{files.map((file) => (
-								<option key={file} value={file}>
-									{file}
+							{sessions.map((s) => (
+								<option key={s.filename} value={s.filename}>
+									{formatSessionLabel(s)}
 								</option>
 							))}
 						</select>
 					)}
+					<button
+						type="button"
+						style={styles.refreshButton}
+						onClick={loadSessions}
+						disabled={loadingFiles}
+						title="Refresh session list"
+					>
+						&#x21BB;
+					</button>
 				</div>
 			</header>
 			{session && (
@@ -262,20 +312,41 @@ export function Visualizer() {
 								}}
 							/>
 							<div style={styles.messageActions}>
-								<span
-									style={ask.feedback === "like" ? styles.actionIconActive : styles.actionIcon}
-									title="Thumbs up"
-								>
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={16} height={16}>
-										<path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H3.75" />
+								<span style={ask.feedback === "like" ? styles.actionIconActive : styles.actionIcon} title="Thumbs up">
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										strokeWidth={1.5}
+										stroke="currentColor"
+										width={16}
+										height={16}
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H3.75"
+										/>
 									</svg>
 								</span>
 								<span
 									style={ask.feedback === "dislike" ? styles.actionIconActive : styles.actionIcon}
 									title="Thumbs down"
 								>
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={16} height={16}>
-										<path strokeLinecap="round" strokeLinejoin="round" d="M17.367 13.75c-.806 0-1.533.446-2.031 1.08a9.041 9.041 0 0 1-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.498 4.498 0 0 0-.322 1.672v.633a.75.75 0 0 1-.75.75 2.25 2.25 0 0 1-2.25-2.25c0-1.152.26-2.243.723-3.218.266-.558-.107-1.282-.725-1.282m0 0H4.372c-1.026 0-1.945-.694-2.054-1.715A12.134 12.134 0 0 1 2.25 12c0-2.848.992-5.464 2.649-7.521C5.287 3.997 5.886 3.75 6.504 3.75h4.016c.483 0 .964.078 1.423.23l3.114 1.04a4.501 4.501 0 0 0 1.423.23h2.27" />
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										strokeWidth={1.5}
+										stroke="currentColor"
+										width={16}
+										height={16}
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											d="M17.367 13.75c-.806 0-1.533.446-2.031 1.08a9.041 9.041 0 0 1-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.498 4.498 0 0 0-.322 1.672v.633a.75.75 0 0 1-.75.75 2.25 2.25 0 0 1-2.25-2.25c0-1.152.26-2.243.723-3.218.266-.558-.107-1.282-.725-1.282m0 0H4.372c-1.026 0-1.945-.694-2.054-1.715A12.134 12.134 0 0 1 2.25 12c0-2.848.992-5.464 2.649-7.521C5.287 3.997 5.886 3.75 6.504 3.75h4.016c.483 0 .964.078 1.423.23l3.114 1.04a4.501 4.501 0 0 0 1.423.23h2.27"
+										/>
 									</svg>
 								</span>
 							</div>
@@ -551,5 +622,16 @@ const styles: Record<string, React.CSSProperties> = {
 		display: "inline-flex",
 		padding: "4px 6px",
 		color: "#ec4899",
+	},
+	refreshButton: {
+		padding: "8px 12px",
+		fontSize: "16px",
+		backgroundColor: "#ffffff",
+		color: "#425466",
+		border: "1px solid #e5e7eb",
+		borderRadius: "8px",
+		cursor: "pointer",
+		boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
+		lineHeight: 1,
 	},
 };

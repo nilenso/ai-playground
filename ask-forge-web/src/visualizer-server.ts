@@ -7,15 +7,37 @@ const app = new Hono();
 
 const sessionDir = process.env.SESSION_DIR || "workdir/sessions";
 
-// API to list available session files
+// API to list available session files with metadata
 app.get("/api/sessions", async (c) => {
 	try {
 		const files = await readdir(sessionDir);
-		const jsonlFiles = files
-			.filter((f) => f.endsWith(".jsonl"))
-			.sort()
-			.reverse(); // Most recent first (assuming naming convention)
-		return c.json({ success: true, files: jsonlFiles });
+		const jsonlFiles = files.filter((f) => f.endsWith(".jsonl"));
+
+		// Read metadata from each file for sorting and display
+		const sessions = await Promise.all(
+			jsonlFiles.map(async (filename) => {
+				try {
+					const file = Bun.file(join(sessionDir, filename));
+					const text = await file.text();
+					const firstLine = text.trim().split("\n")[0] ?? "";
+					const data = JSON.parse(firstLine);
+					return {
+						filename,
+						repo: data.repo?.url || "unknown",
+						startedAt: data.startedAt || 0,
+						endReason: data.endReason || "unknown",
+						askCount: Array.isArray(data.asks) ? data.asks.length : 0,
+					};
+				} catch {
+					return { filename, repo: "unknown", startedAt: 0, endReason: "unknown", askCount: 0 };
+				}
+			}),
+		);
+
+		// Sort by startedAt descending (most recent first)
+		sessions.sort((a, b) => b.startedAt - a.startedAt);
+
+		return c.json({ success: true, sessions });
 	} catch (err) {
 		return c.json(
 			{
