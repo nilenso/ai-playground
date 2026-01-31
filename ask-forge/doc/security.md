@@ -86,7 +86,7 @@ network requests, or write to the filesystem.
 | Layer | Mitigation |
 |-------|------------|
 | bwrap (tools) | `--tmpfs /home/forge/repos` hides ALL repos, then `--ro-bind <worktree> <worktree>` exposes only the session's worktree. Cross-repo access is impossible. |
-| bwrap (tools) | `--unshare-net` — complete network isolation. No outbound connections possible. |
+| gVisor + compose | Network isolation. The sandbox container is on an isolated compose network. bwrap `--unshare-net` is not used because gVisor doesn't support bwrap's loopback network setup. |
 | bwrap (tools) | `--unshare-pid` + `--proc /proc` — PID namespace isolation. Cannot see or signal other processes. |
 | bwrap (tools) | `--ro-bind / /` — entire filesystem is read-only. No writes possible. |
 | bwrap (tools) | `--tmpfs ~/.ssh`, `--tmpfs ~/.gnupg` — sensitive directories hidden behind empty tmpfs. |
@@ -106,7 +106,7 @@ attempts to escape to the host or to the web container.
 | Layer | Mitigation |
 |-------|------------|
 | gVisor (runsc) | Intercepts all syscalls in userspace. The container never directly interacts with the host kernel. Eliminates entire classes of kernel exploit. |
-| Container | `cap_drop: ALL` — no Linux capabilities granted. |
+| Container | `cap_drop: ALL` + `cap_add: SYS_ADMIN` — only `SYS_ADMIN` is granted (required for bwrap namespace creation). All other capabilities are dropped. gVisor intercepts the privileged syscalls so `SYS_ADMIN` cannot be used for host escape. |
 | Container | `no-new-privileges` — cannot gain privileges via setuid/setgid binaries. |
 | Container | Non-root user (`forge`) — no root access inside the container. |
 | Docker network | Sandbox container is on the `sandbox` network only. Cannot reach the `web` network where the database and API keys live. |
@@ -186,8 +186,8 @@ Tool call from LLM
   │
   ├─ Layer 2: bwrap (OS namespaces)
   │   Filesystem: only worktree visible.
-  │   Network: completely isolated.
   │   PID: only own process tree visible.
+  │   (Network: via gVisor + compose, not bwrap.)
   │
   ├─ Layer 1: gVisor (runsc)
   │   All syscalls intercepted in userspace.

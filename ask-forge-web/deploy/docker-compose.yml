@@ -8,6 +8,8 @@ services:
       - /tmp:rw,size=64m
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_ADMIN   # Required for bwrap namespace creation inside gVisor
     security_opt:
       - no-new-privileges
     networks:
@@ -44,7 +46,7 @@ services:
 networks:
   sandbox:
     # Sandbox needs outbound access for git clone.
-    # Isolation is enforced by: runsc (gVisor), cap_drop ALL,
-    # no-new-privileges, and non-root user.
+    # Isolation is enforced by: runsc (gVisor), cap_drop ALL + cap_add
+    # SYS_ADMIN (for bwrap), no-new-privileges, and non-root user.
   web:
     external: true

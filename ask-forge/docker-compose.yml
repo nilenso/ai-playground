@@ -12,6 +12,8 @@ services:
       - /tmp:rw,size=64m
     cap_drop:
       - ALL
+    cap_add:
+      - SYS_ADMIN   # Required for bwrap namespace creation
     security_opt:
       - no-new-privileges
     ports:

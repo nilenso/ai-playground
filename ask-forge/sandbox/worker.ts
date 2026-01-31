@@ -2,10 +2,13 @@
  * Sandbox worker — HTTP server that runs inside an isolated container.
  *
  * Defense in depth:
- *   Layer 1 — bwrap (bubblewrap): per-operation filesystem and namespace
+ *   Layer 1 — bwrap (bubblewrap): per-operation filesystem and PID namespace
  *             isolation. Tool calls are scoped to their worktree with no
- *             network and no visibility of other processes. Git clones get
- *             write access only to their target directory with hooks disabled.
+ *             visibility of other processes. Git clones get write access
+ *             only to their target directory with hooks disabled.
+ *             Note: --unshare-net is not used because gVisor doesn't support
+ *             bwrap's loopback setup. Network isolation comes from gVisor +
+ *             compose network instead.
  *   Layer 2 — gVisor (runsc): the container runtime provides kernel-level
  *             syscall sandboxing.
  *   Layer 3 — Path validation in the worker code itself.
@@ -121,10 +124,6 @@ function bwrapArgsForGit(repoBaseDir: string): string[] {
 		"--dev", "/dev",
 		// PID isolation — git can't see/signal other processes
 		"--unshare-pid",
-		"--proc", "/proc",
-		// Hide sensitive paths
-		"--tmpfs", "/home/forge/.ssh",
-		"--tmpfs", "/home/forge/.gnupg",
 		// Die if parent dies
 		"--die-with-parent",
 		"--",
@@ -136,7 +135,8 @@ function bwrapArgsForGit(repoBaseDir: string): string[] {
  *
  * Filesystem: read-only root, with /home/forge/repos replaced by tmpfs
  *             and only the specific worktree bind-mounted back through.
- * Network: fully isolated (--unshare-net).
+ * Network: NOT isolated via bwrap (--unshare-net fails under gVisor).
+ *          Network isolation is provided by gVisor + compose network instead.
  * PID: isolated.
  */
 function bwrapArgsForTool(worktree: string): string[] {
@@ -149,14 +149,8 @@ function bwrapArgsForTool(worktree: string): string[] {
 		"--ro-bind", worktree, worktree,
 		// Fresh /dev
 		"--dev", "/dev",
-		// No network
-		"--unshare-net",
 		// PID isolation
 		"--unshare-pid",
-		"--proc", "/proc",
-		// Hide sensitive paths
-		"--tmpfs", "/home/forge/.ssh",
-		"--tmpfs", "/home/forge/.gnupg",
 		// Die if parent dies
 		"--die-with-parent",
 		"--",
