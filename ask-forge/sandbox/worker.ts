@@ -27,6 +27,7 @@ import { resolve } from "node:path";
 
 const PORT = Number(process.env.PORT) || 8080;
 const REPO_BASE = "/home/forge/repos";
+const SANDBOX_SECRET = process.env.SANDBOX_SECRET || "";
 
 // =============================================================================
 // Helpers
@@ -44,10 +45,16 @@ const GIT_ENV: Record<string, string> = {
 	HOME: "/home/forge",
 };
 
+/** Default timeout for tool execution (30 seconds) */
+const TOOL_TIMEOUT_MS = 30_000;
+/** Default timeout for git operations (120 seconds) */
+const GIT_TIMEOUT_MS = 120_000;
+
 async function run(
 	cmd: string[],
 	cwd?: string,
 	env?: Record<string, string>,
+	timeoutMs?: number,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 	const proc = Bun.spawn(cmd, {
 		cwd,
@@ -55,6 +62,25 @@ async function run(
 		stderr: "pipe",
 		env: env ?? process.env,
 	});
+
+	if (timeoutMs) {
+		const timer = setTimeout(() => {
+			try { proc.kill(); } catch { /* already exited */ }
+		}, timeoutMs);
+
+		const [stdout, stderr] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+		]);
+		const exitCode = await proc.exited;
+		clearTimeout(timer);
+
+		if (exitCode === 137 || exitCode === -1) {
+			return { stdout, stderr: `${stderr}\nOperation timed out after ${timeoutMs}ms`, exitCode: 124 };
+		}
+		return { stdout, stderr, exitCode };
+	}
+
 	const [stdout, stderr] = await Promise.all([
 		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),
@@ -171,13 +197,25 @@ async function runGitSandboxed(
 		"git",
 		// Disable hooks to prevent arbitrary code execution from malicious repos
 		"-c", "core.hooksPath=/dev/null",
+		// Disable filter drivers (.gitattributes filter.*.process / filter.*.smudge)
+		"-c", "filter.lfs.process=",
+		"-c", "filter.lfs.smudge=",
+		"-c", "filter.lfs.clean=",
+		"-c", "filter.lfs.required=false",
+		// Restrict protocols to http(s) only — blocks file://, ext://, ssh:// submodules
 		"-c", "protocol.allow=never",
 		"-c", "protocol.https.allow=always",
 		"-c", "protocol.http.allow=always",
 		...gitArgs,
 	];
 
-	return run(cmd, cwd, { ...GIT_ENV });
+	return run(cmd, cwd, {
+		...GIT_ENV,
+		// Disable .gitattributes processing system-wide
+		GIT_ATTR_NOSYSTEM: "1",
+		// Prevent any global gitconfig from being loaded
+		GIT_CONFIG_NOSYSTEM: "1",
+	}, GIT_TIMEOUT_MS);
 }
 
 /**
@@ -192,7 +230,7 @@ async function runToolSandboxed(
 		...cmd,
 	];
 
-	return run(fullCmd, worktree);
+	return run(fullCmd, worktree, undefined, TOOL_TIMEOUT_MS);
 }
 
 // =============================================================================
@@ -385,14 +423,28 @@ async function handleReset(): Promise<Response> {
 
 await Bun.spawn(["mkdir", "-p", REPO_BASE]).exited;
 
+function checkAuth(req: Request): Response | null {
+	if (!SANDBOX_SECRET) return null; // No secret configured = no auth required
+	const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+	if (token !== SANDBOX_SECRET) {
+		return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+	}
+	return null;
+}
+
 const server = Bun.serve({
 	port: PORT,
 	async fetch(req) {
 		const url = new URL(req.url);
 
+		// Health check is unauthenticated (needed for Docker healthcheck)
 		if (url.pathname === "/health" && req.method === "GET") {
 			return Response.json({ ok: true });
 		}
+
+		// All other endpoints require auth
+		const authError = checkAuth(req);
+		if (authError) return authError;
 
 		if (url.pathname === "/clone" && req.method === "POST") {
 			const body = (await req.json()) as CloneRequest;

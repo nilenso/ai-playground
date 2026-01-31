@@ -10,11 +10,14 @@ export interface SandboxClientConfig {
 	baseUrl: string;
 	/** Request timeout in ms. Default: 120_000 */
 	timeoutMs: number;
+	/** Shared secret for authenticating with the sandbox worker. */
+	secret: string;
 }
 
 const DEFAULT_CONFIG: SandboxClientConfig = {
 	baseUrl: process.env.SANDBOX_URL || "http://sandbox:8080",
 	timeoutMs: 120_000,
+	secret: process.env.SANDBOX_SECRET || "",
 };
 
 export interface CloneResult {
@@ -28,6 +31,11 @@ export class SandboxClient {
 
 	constructor(config: Partial<SandboxClientConfig> = {}) {
 		this.config = { ...DEFAULT_CONFIG, ...config };
+	}
+
+	private authHeaders(): Record<string, string> {
+		if (!this.config.secret) return {};
+		return { Authorization: `Bearer ${this.config.secret}` };
 	}
 
 	/** Check if the sandbox worker is reachable. */
@@ -62,7 +70,7 @@ export class SandboxClient {
 	async clone(url: string, commitish?: string): Promise<CloneResult> {
 		const res = await fetch(`${this.config.baseUrl}/clone`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", ...this.authHeaders() },
 			body: JSON.stringify({ url, commitish }),
 			signal: AbortSignal.timeout(this.config.timeoutMs),
 		});
@@ -83,7 +91,7 @@ export class SandboxClient {
 	): Promise<string> {
 		const res = await fetch(`${this.config.baseUrl}/tool`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", ...this.authHeaders() },
 			body: JSON.stringify({ slug, sha, name, args }),
 			signal: AbortSignal.timeout(this.config.timeoutMs),
 		});
@@ -99,6 +107,7 @@ export class SandboxClient {
 	async reset(): Promise<void> {
 		const res = await fetch(`${this.config.baseUrl}/reset`, {
 			method: "POST",
+			headers: { ...this.authHeaders() },
 			signal: AbortSignal.timeout(10_000),
 		});
 		const body = (await res.json()) as { ok: boolean; error?: string };

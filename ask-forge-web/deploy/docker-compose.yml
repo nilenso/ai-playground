@@ -14,8 +14,14 @@ services:
       - no-new-privileges
     networks:
       - sandbox
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     environment:
       - PORT=8080
+      - SANDBOX_SECRET=${SANDBOX_SECRET}
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:8080/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -33,6 +39,7 @@ services:
       - SESSION_DIR=/app/data/sessions
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - SANDBOX_URL=http://sandbox:8080
+      - SANDBOX_SECRET=${SANDBOX_SECRET}
     volumes:
       - ./data:/app/data
     networks:

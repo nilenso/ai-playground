@@ -44,6 +44,7 @@ exfiltrate data.
 |-------|------------|
 | bwrap (clone) | `core.hooksPath=/dev/null` — disables all git hooks |
 | bwrap (clone) | `protocol.allow=never` + `protocol.https.allow=always` + `protocol.http.allow=always` — blocks `file://`, `ext://`, `ssh://` submodule protocols |
+| bwrap (clone) | `GIT_ATTR_NOSYSTEM=1` + `GIT_CONFIG_NOSYSTEM=1` + LFS filter drivers cleared — disables `.gitattributes` filter processing that could execute arbitrary commands |
 | bwrap (clone) | Filesystem writes restricted to the specific repo directory only |
 | bwrap (clone) | PID namespace isolation — hooks (if somehow executed) can't see/signal other processes |
 | bwrap (tools) | Symlinks resolved by `resolve()` and validated against the worktree root before access |
@@ -57,10 +58,6 @@ exfiltrate data.
   (needed to reach the remote). A malicious `.gitmodules` could trigger fetches
   to attacker-controlled URLs. Future work: proxy-based network filtering to
   allow only the intended git host.
-- **`.gitattributes` filter drivers**: Not explicitly disabled. The read-only
-  bwrap filesystem and hook disabling reduce risk but a `filter.*.process`
-  config could still be triggered during checkout. Consider
-  `GIT_ATTR_NOSYSTEM=1` and clearing local `.gitattributes` processing.
 
 ---
 
@@ -133,17 +130,15 @@ A malicious repo or LLM loop could exhaust resources.
 | Layer | Mitigation |
 |-------|------------|
 | tmpfs | `/tmp:rw,size=64m` limits temp storage to 64MB |
-| Container | Docker/Podman resource limits can be applied (CPU, memory) |
+| Container | Resource limits: 1 CPU, 512MB memory via compose `deploy.resources.limits` |
 | ask-forge | `MAX_TOOL_ITERATIONS` config limits the LLM tool call loop |
 | ask-forge-web | Session TTL (30 min) with automatic cleanup |
 | bwrap | PID namespace limits visibility but does not limit fork count |
 
+| Sandbox worker | Per-operation timeouts: 30s for tool calls, 120s for git operations. Processes killed on timeout. |
+
 ### Open items
 
-- **No explicit resource limits on the sandbox container** in compose.
-  Consider adding `deploy.resources.limits` for CPU and memory.
-- **No per-operation timeout** in the sandbox worker. A hung git clone or
-  tool call blocks the request indefinitely. Consider request-level timeouts.
 - **No repo size limit**. Consider a `--depth 1` shallow clone or checking
   `Content-Length` of the remote before cloning.
 
@@ -167,9 +162,9 @@ One user's session should not be able to access another user's data.
 - **Bare repo is shared across sessions** for the same repository URL. Two
   sessions querying the same repo at different commits share the same bare
   clone. This is a read-only resource but is worth noting.
-- **No authentication on the sandbox worker HTTP API**. Any process on the
-  `sandbox` compose network can call it. Currently only the web container is
-  on that network.
+- **Sandbox worker API is authenticated** via a shared `SANDBOX_SECRET` Bearer
+  token. The health endpoint is exempt (needed for Docker healthcheck). If no
+  secret is configured, auth is disabled (for local dev).
 
 ---
 
