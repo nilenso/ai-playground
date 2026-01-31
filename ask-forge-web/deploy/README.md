@@ -24,50 +24,18 @@ SSH into the new droplet:
 ssh root@ask.nilenso.ai
 ```
 
-Setup gateway and app directories:
+Run the setup script (installs gVisor, sets up Caddy gateway, creates directories):
 
 ```bash
-# Create directories
-mkdir -p ~/gateway ~/ask-forge-web
-
-# Setup gateway (Caddy for SSL termination)
-cd ~/gateway
-cat > docker-compose.yml << 'EOF'
-services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: gateway
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-    networks:
-      - web
-    restart: unless-stopped
-
-networks:
-  web:
-    name: web
-
-volumes:
-  caddy_data:
-EOF
-
-cat > Caddyfile << 'EOF'
-ask.nilenso.ai {
-    reverse_proxy ask-forge-web:3000
-}
-
-ask-forge-visualizer.nilenso.ai {
-    reverse_proxy ask-forge-web:3001
-}
-EOF
-
-# Start gateway
-docker compose up -d
+bash setup-server.sh
 ```
+
+This will:
+- Install **gVisor (runsc)** and register it as a Docker runtime — required for sandbox container isolation
+- Set up Caddy as a reverse proxy with automatic TLS
+- Create the app directory structure
+
+> **Note:** gVisor is mandatory. The sandbox container runs with `runtime: runsc` to provide kernel-level syscall interception. Without it, `docker compose up` will fail.
 
 ## 3. Deploy App
 

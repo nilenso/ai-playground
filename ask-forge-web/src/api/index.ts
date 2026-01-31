@@ -55,7 +55,9 @@ function cleanupSessions() {
 		if (now - timestamp > SESSION_TTL) {
 			const session = sessions.get(id);
 			if (session) {
-				session.close();
+				session.close().catch((err) => {
+					console.error(`[cleanup] Failed to close session ${id}:`, err);
+				});
 				sessions.delete(id);
 			}
 			sessionTimestamps.delete(id);
@@ -378,7 +380,7 @@ api.post("/disconnect", createAuthMiddleware(), async (c) => {
 
 	const session = sessions.get(sessionId);
 	if (session) {
-		session.close();
+		await session.close();
 		sessions.delete(sessionId);
 		sessionTimestamps.delete(sessionId);
 	}
