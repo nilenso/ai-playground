@@ -20,7 +20,6 @@
  * Tool execution has no network access (bwrap --unshare-net).
  */
 
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -362,12 +361,11 @@ async function handleTool(body: ToolRequest): Promise<Response> {
 			if (!fullPath) {
 				return Response.json({ ok: true, output: `Error: path traversal not allowed: ${path}` });
 			}
-			try {
-				const content = await readFile(fullPath, "utf-8");
-				return Response.json({ ok: true, output: content || "(empty file)" });
-			} catch (e) {
-				return Response.json({ ok: true, output: `Error reading file: ${(e as Error).message}` });
+			const result = await runToolSandboxed(["cat", fullPath], worktree);
+			if (result.exitCode !== 0) {
+				return Response.json({ ok: true, output: `Error reading file (exit ${result.exitCode}):\n${result.stderr}` });
 			}
+			return Response.json({ ok: true, output: result.stdout || "(empty file)" });
 		}
 		default:
 			return Response.json({ ok: false, error: `Unknown tool: ${name}` }, { status: 400 });
