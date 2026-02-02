@@ -1,27 +1,26 @@
 import type { AskOptions, AskResult, Session } from "ask-forge";
 import { createMessage, getMessagesBySession, updateSessionStatus, updateSessionTitle } from "./db.ts";
 
-export function wrapSession(session: Session, dbSessionId?: string): Session {
+export function wrapSession(session: Session, sessionId: string): Session {
 	let askCount = 0;
-	let ordinal = dbSessionId ? getMessagesBySession(dbSessionId).length : 0;
+	let ordinal = getMessagesBySession(sessionId).length;
 
 	const persistMessages = () => {
-		if (!dbSessionId) return;
 		const messages = session.getMessages();
 		// Persist only new messages (from ordinal onward)
 		for (let i = ordinal; i < messages.length; i++) {
 			const msg = messages[i];
 			if (msg.role === "user") {
 				const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-				createMessage({ sessionId: dbSessionId, role: "user", ordinal: i, content });
+				createMessage({ sessionId, role: "user", ordinal: i, content });
 			} else if (msg.role === "assistant") {
 				// Serialize the full content array as JSON to preserve all tool calls and thinking blocks
 				const content = JSON.stringify(msg.content);
-				createMessage({ sessionId: dbSessionId, role: "assistant", ordinal: i, content });
+				createMessage({ sessionId, role: "assistant", ordinal: i, content });
 			} else if (msg.role === "toolResult") {
 				const contentText = msg.content.map((c) => ("text" in c ? c.text : "")).join("");
 				createMessage({
-					sessionId: dbSessionId,
+					sessionId,
 					role: "tool",
 					ordinal: i,
 					content: contentText,
@@ -35,7 +34,7 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 	};
 
 	const wrapped = {
-		id: session.id,
+		id: sessionId,
 		repo: session.repo,
 
 		async ask(question: string, options?: AskOptions): Promise<AskResult> {
@@ -44,14 +43,14 @@ export function wrapSession(session: Session, dbSessionId?: string): Session {
 			persistMessages();
 
 			// Auto-set session title from first question
-			if (askCount === 0 && dbSessionId) {
+			if (askCount === 0) {
 				const title = question.length > 80 ? `${question.slice(0, 77)}...` : question;
-				updateSessionTitle(dbSessionId, title);
+				updateSessionTitle(sessionId, title);
 			}
 			askCount++;
 
-			if (result.response.startsWith("[ERROR:") && dbSessionId) {
-				updateSessionStatus(dbSessionId, "error");
+			if (result.response.startsWith("[ERROR:")) {
+				updateSessionStatus(sessionId, "error");
 			}
 
 			return result;

@@ -443,7 +443,6 @@ export function App() {
 
 	return (
 		<ChatPhase
-			sessionTitle={session.currentSessionTitle}
 			connection={connection}
 			messages={messages}
 			inputValue={inputValue}
@@ -459,7 +458,6 @@ export function App() {
 			handleResend={handleResend}
 			handleKeyDown={handleKeyDown}
 			handleShareSession={handleShareSession}
-			handleRenameSession={session.handleRenameSession}
 			messagesContainerRef={messagesContainerRef}
 			messagesEndRef={messagesEndRef}
 			handleMessagesScroll={handleMessagesScroll}

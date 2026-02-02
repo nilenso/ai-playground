@@ -1,11 +1,9 @@
 import type { Marked } from "marked";
-import { useRef, useState } from "react";
 import type { ConnectionState, ContentBlock, Message, ProgressState } from "../types.ts";
 import { MessageList } from "./MessageList.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 
 interface ChatPhaseProps {
-	sessionTitle: string | null;
 	connection: ConnectionState;
 	messages: Message[];
 	inputValue: string;
@@ -21,7 +19,6 @@ interface ChatPhaseProps {
 	handleResend: (question: string) => void;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
 	handleShareSession: (sessionId: string) => void;
-	handleRenameSession: (sessionId: string, title: string) => void;
 	messagesContainerRef: React.RefObject<HTMLDivElement | null>;
 	messagesEndRef: React.RefObject<HTMLDivElement | null>;
 	handleMessagesScroll: () => void;
@@ -30,7 +27,6 @@ interface ChatPhaseProps {
 }
 
 export function ChatPhase({
-	sessionTitle,
 	connection,
 	messages,
 	inputValue,
@@ -46,80 +42,18 @@ export function ChatPhase({
 	handleResend,
 	handleKeyDown,
 	handleShareSession,
-	handleRenameSession,
 	messagesContainerRef,
 	messagesEndRef,
 	handleMessagesScroll,
 	chatTextareaRef,
 	sidebarProps,
 }: ChatPhaseProps) {
-	const [editingTitle, setEditingTitle] = useState(false);
-	const [titleValue, setTitleValue] = useState("");
-	const [pendingTitle, setPendingTitle] = useState<string | null>(null);
-	const titleInputRef = useRef<HTMLInputElement>(null);
-	const committedRef = useRef(false);
-
-	// Derive a display title: pending rename > session title > first user message > placeholder
-	const firstUserMessage = messages.find((m) => m.role === "user");
-	const firstQuestion = firstUserMessage?.contentBlocks
-		.filter((b): b is ContentBlock & { type: "text" } => b.type === "text")
-		.map((b) => b.content)
-		.join(" ");
-	const displayTitle =
-		pendingTitle ||
-		sessionTitle ||
-		(firstQuestion
-			? firstQuestion.length > 60
-				? `${firstQuestion.slice(0, 57)}...`
-				: firstQuestion
-			: "New conversation");
-
-	// Clear pending title once sessionHistory catches up
-	if (pendingTitle && sessionTitle === pendingTitle) {
-		setPendingTitle(null);
-	}
-
-	const startEditing = () => {
-		committedRef.current = false;
-		setTitleValue(displayTitle);
-		setEditingTitle(true);
-		setTimeout(() => titleInputRef.current?.focus(), 0);
-	};
-
-	const commitTitle = () => {
-		if (committedRef.current) return;
-		committedRef.current = true;
-		setEditingTitle(false);
-		if (connection.sessionId && titleValue.trim()) {
-			setPendingTitle(titleValue.trim());
-			handleRenameSession(connection.sessionId, titleValue.trim());
-		}
-	};
-
 	return (
 		<div className="app-container phase-chat">
 			<Sidebar {...sidebarProps} />
 			<div className="app-main">
 				<header className="chat-header">
 					<div className="chat-header-info">
-						{editingTitle ? (
-							<input
-								ref={titleInputRef}
-								type="text"
-								className="chat-header-title-input"
-								value={titleValue}
-								onChange={(e) => setTitleValue(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter") commitTitle();
-									if (e.key === "Escape") setEditingTitle(false);
-								}}
-								onBlur={commitTitle}
-							/>
-						) : (
-							<span className="chat-header-title" onClick={startEditing} title="Click to rename">
-								{displayTitle}
-							</span>
-						)}
 						<span className="chat-header-subtitle">
 							<span className="status-indicator connected" />
 							{connection.repoName}
