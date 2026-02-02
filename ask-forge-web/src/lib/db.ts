@@ -462,8 +462,11 @@ export function getShareLink(shareToken: string):
 				},
 				[string]
 			>(
-				`SELECT sl.*, s.title, r.repository_name, r.git_url,
-				c.commit_id as commitish, s.created_at as session_created_at
+				`SELECT sl.*, s.title,
+				r.username_or_organization || '/' || r.repository_name as repository_name,
+				r.git_url,
+				COALESCE(c.commit_id, r.default_commit) as commitish,
+				s.created_at as session_created_at
 			 FROM share_links sl
 			 JOIN sessions s ON sl.session_id = s.id
 			 JOIN repositories r ON s.repository_id = r.id
