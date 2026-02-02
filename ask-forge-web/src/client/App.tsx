@@ -308,17 +308,24 @@ export function App() {
 		try {
 			const res = await fetch(`/api/sessions/${sessionId}/share`, { method: "POST" });
 			const data = await res.json();
-			if (!res.ok) return;
+			if (!res.ok) {
+				console.error("Share API error:", data);
+				return;
+			}
 			const shareUrl = `${window.location.origin}${data.shareUrl}`;
-			await navigator.clipboard.writeText(shareUrl);
-			// Brief visual feedback via a temporary alert (could be improved with a toast)
+			try {
+				await navigator.clipboard.writeText(shareUrl);
+			} catch {
+				// Clipboard API may fail if not HTTPS — use prompt fallback
+				window.prompt("Copy this share link:", shareUrl);
+			}
 			const el = document.createElement("div");
 			el.className = "share-toast";
 			el.textContent = "Share link copied to clipboard!";
 			document.body.appendChild(el);
 			setTimeout(() => el.remove(), 2500);
-		} catch {
-			// Silently fail
+		} catch (err) {
+			console.error("Share failed:", err);
 		}
 	}, []);
 
@@ -373,7 +380,6 @@ export function App() {
 		}
 		wasAskingRef.current = isAsking;
 	}, [isAsking, phase, session.fetchSessionHistory]);
-
 
 	// Auto-scroll to bottom when messages change
 	useEffect(() => {

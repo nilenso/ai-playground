@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
 import type { Marked } from "marked";
+import { useRef, useState } from "react";
 import type { ConnectionState, ContentBlock, Message, ProgressState } from "../types.ts";
 import { MessageList } from "./MessageList.tsx";
 import { Sidebar } from "./Sidebar.tsx";
@@ -65,7 +65,14 @@ export function ChatPhase({
 		.filter((b): b is ContentBlock & { type: "text" } => b.type === "text")
 		.map((b) => b.content)
 		.join(" ");
-	const displayTitle = pendingTitle || sessionTitle || (firstQuestion ? (firstQuestion.length > 60 ? `${firstQuestion.slice(0, 57)}...` : firstQuestion) : "New conversation");
+	const displayTitle =
+		pendingTitle ||
+		sessionTitle ||
+		(firstQuestion
+			? firstQuestion.length > 60
+				? `${firstQuestion.slice(0, 57)}...`
+				: firstQuestion
+			: "New conversation");
 
 	// Clear pending title once sessionHistory catches up
 	if (pendingTitle && sessionTitle === pendingTitle) {
@@ -109,11 +116,7 @@ export function ChatPhase({
 								onBlur={commitTitle}
 							/>
 						) : (
-							<span
-								className="chat-header-title"
-								onClick={startEditing}
-								title="Click to rename"
-							>
+							<span className="chat-header-title" onClick={startEditing} title="Click to rename">
 								{displayTitle}
 							</span>
 						)}

@@ -221,7 +221,7 @@ export function useSession({
 	}, []);
 
 	const currentSessionTitle = connectionSessionId
-		? sessionHistory.find((s) => s.id === connectionSessionId)?.title ?? null
+		? (sessionHistory.find((s) => s.id === connectionSessionId)?.title ?? null)
 		: null;
 
 	return {

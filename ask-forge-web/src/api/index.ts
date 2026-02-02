@@ -2,6 +2,7 @@ import { connect, type Session } from "ask-forge";
 import { Hono } from "hono";
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
 import {
+	createMessage,
 	createSession as createDbSession,
 	createShareLink,
 	deleteSession,
@@ -412,8 +413,52 @@ api.post("/sessions/:id/share", createAuthMiddleware(), (c) => {
 	const payload = getUserFromContext(c);
 	if (!payload) return c.json({ error: "Unauthorized" }, 401);
 
+	// Session must exist either in DB or in memory
 	const dbSession = getSession(sessionId);
-	if (!dbSession) return c.json({ error: "Session not found" }, 404);
+	const memSession = sessions.get(sessionId);
+	if (!dbSession && !memSession) return c.json({ error: "Session not found" }, 404);
+
+	// If session is in memory but missing from DB, create the DB record
+	if (!dbSession && memSession) {
+		const db = getDb();
+		const repoRow = db
+			.query<{ id: number }, [string]>("SELECT id FROM repositories WHERE git_url = ?")
+			.get(memSession.repo.url);
+		if (repoRow) {
+			try {
+				createDbSession({
+					id: sessionId,
+					userId: payload.sub,
+					repositoryId: repoRow.id,
+				});
+			} catch {
+				return c.json({ error: "Failed to persist session" }, 500);
+			}
+		} else {
+			return c.json({ error: "Repository not found" }, 404);
+		}
+	}
+
+	// Ensure messages are persisted from in-memory session
+	if (memSession) {
+		const existingMessages = getMessagesBySession(sessionId);
+		if (existingMessages.length === 0) {
+			const msgs = memSession.getMessages();
+			for (let i = 0; i < msgs.length; i++) {
+				const msg = msgs[i];
+				if (msg.role === "user") {
+					const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+					createMessage({ sessionId, role: "user", ordinal: i, content });
+				} else if (msg.role === "assistant") {
+					const content = JSON.stringify(msg.content);
+					createMessage({ sessionId, role: "assistant", ordinal: i, content });
+				} else if (msg.role === "toolResult") {
+					const contentText = msg.content.map((ct: { text?: string }) => ct.text ?? "").join("");
+					createMessage({ sessionId, role: "tool", ordinal: i, content: contentText, toolName: msg.toolName });
+				}
+			}
+		}
+	}
 
 	const shareLink = createShareLink(sessionId, payload.sub);
 	const shareUrl = `/share/${shareLink.share_token}`;
