@@ -279,9 +279,10 @@ api.post("/restore", async (c) => {
 			session.replaceMessages(messages);
 		}
 
-		// Store the session in memory
+		// Store the session in memory and mark as active
 		sessions.set(session.id, session);
 		sessionTimestamps.set(session.id, Date.now());
+		updateSessionStatus(sessionId, "active");
 
 		return c.json({
 			success: true,

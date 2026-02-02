@@ -370,13 +370,6 @@ function createSession(repo: Repo): Session {
 	let pending: Promise<AskResult> | null = null;
 	let closed = false;
 
-	const log = (label: string, content: string) => {
-		console.log(`\n${"─".repeat(60)}`);
-		console.log(`│ ${label}`);
-		console.log(`${"─".repeat(60)}`);
-		console.log(content);
-	};
-
 	const logError = (label: string, error: unknown) => {
 		console.error(`\n${"═".repeat(60)}`);
 		console.error(`│ ERROR: ${label}`);
@@ -451,8 +444,7 @@ function createSession(repo: Repo): Session {
 							const firstTextBlock = event.error?.content?.find((b: { type: string }) => b.type === "text") as
 								| { type: "text"; text: string }
 								| undefined;
-							const errorText =
-								event.error?.errorMessage || firstTextBlock?.text || "Unknown API error";
+							const errorText = event.error?.errorMessage || firstTextBlock?.text || "Unknown API error";
 
 							// Create detailed error object for logging
 							const errorDetails = {
@@ -561,7 +553,6 @@ function createSession(repo: Repo): Session {
 					};
 				}
 
-				log("RESPONSE", "");
 				return {
 					prompt: question,
 					toolCalls: toolCallRecords,
@@ -573,20 +564,12 @@ function createSession(repo: Repo): Session {
 
 			// Execute tool calls in parallel (all tools are I/O bound and read-only)
 			const validCalls = toolCalls.filter((call) => call.type === "toolCall");
-			for (const call of validCalls) {
-				log(`TOOL: ${call.name}`, JSON.stringify(call.arguments, null, 2));
-			}
-			const toolExecStart = Date.now();
 			const results = await Promise.all(
 				validCalls.map(async (call) => {
-					const t0 = Date.now();
 					const result = await executeTool(call.name, call.arguments, repo.localPath);
-					log(`TOOL_DONE: ${call.name}`, `${Date.now() - t0}ms`);
 					return result;
 				}),
 			);
-			log(`ALL_TOOLS_DONE: ${validCalls.length} calls`, `${Date.now() - toolExecStart}ms`);
-
 			// Push results back in request order to preserve conversation context
 			validCalls.forEach((call, j) => {
 				toolCallRecords.push(call);

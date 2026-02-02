@@ -15,9 +15,7 @@ type WSMessage =
 const activeRequests = new Map<string, AbortController>();
 
 export const websocketHandler = {
-	open(_ws: ServerWebSocket<WebSocketData>) {
-		console.log("[WS] Client connected");
-	},
+	open(_ws: ServerWebSocket<WebSocketData>) {},
 
 	async message(ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
 		try {
@@ -55,9 +53,7 @@ export const websocketHandler = {
 		}
 	},
 
-	close(_ws: ServerWebSocket<WebSocketData>, code: number, reason: string) {
-		console.log(`[WS] Client disconnected: ${code} ${reason}`);
-	},
+	close(_ws: ServerWebSocket<WebSocketData>, _code: number, _reason: string) {},
 };
 
 async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, sessionId: string, question: string) {

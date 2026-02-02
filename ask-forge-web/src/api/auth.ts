@@ -106,7 +106,6 @@ async function processGitHubCallback(
 		}
 
 		const githubUser: GitHubUser = await userResponse.json();
-		console.log("[Auth] GitHub user:", githubUser.login, githubUser.id);
 
 		// Check if this GitHub account is already linked
 		const authProvider = findAuthProvider(AuthProvider.GitHub, String(githubUser.id));
@@ -168,7 +167,6 @@ auth.get("/github/callback", async (c) => {
 
 	// Handle error from GitHub
 	if (error) {
-		console.error("[Auth] GitHub OAuth error:", error);
 		return c.redirect("/?error=oauth_denied");
 	}
 
@@ -190,10 +188,7 @@ auth.get("/github/callback", async (c) => {
 		return c.redirect(result.redirectUrl);
 	}
 
-	// Set cookie and redirect
-	console.log("[Auth] Setting cookie for user:", result.user.username);
 	setAuthCookie(c, result.jwt);
-	console.log("[Auth] Redirecting to /");
 	return c.redirect("/");
 });
 
@@ -243,7 +238,6 @@ auth.get("/status", async (c) => {
 	const { verify } = await import("hono/jwt");
 
 	const token = getCookie(c, "auth_token");
-	console.log("[Auth] Status check - token present:", !!token);
 
 	if (!token) {
 		return c.json({ authenticated: false });
@@ -251,25 +245,20 @@ auth.get("/status", async (c) => {
 
 	try {
 		const payload = await verify(token, AUTH_CONFIG.jwt.secret, "HS256");
-		console.log("[Auth] JWT verified, payload:", payload);
 		const now = Math.floor(Date.now() / 1000);
 
 		if (typeof payload.exp === "number" && payload.exp < now) {
-			console.log("[Auth] Token expired");
 			return c.json({ authenticated: false });
 		}
 
-		// Fetch full user data for avatar
 		const user = getUserById(payload.sub as number);
-		console.log("[Auth] User found:", user?.username);
 
 		return c.json({
 			authenticated: true,
 			username: payload.username,
 			avatarUrl: user?.avatar_url || null,
 		});
-	} catch (err) {
-		console.log("[Auth] JWT verification failed:", err);
+	} catch {
 		return c.json({ authenticated: false });
 	}
 });
