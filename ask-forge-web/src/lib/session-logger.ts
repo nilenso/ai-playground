@@ -1,8 +1,9 @@
 import type { AskOptions, AskResult, Session } from "ask-forge";
-import { createMessage, getMessagesBySession, updateSessionStatus, updateSessionTitle } from "./db.ts";
+import { createMessage, getMessagesBySession, getSession, updateSessionStatus, updateSessionTitle } from "./db.ts";
 
 export function wrapSession(session: Session, sessionId: string): Session {
-	let askCount = 0;
+	const existingSession = getSession(sessionId);
+	const hasTitle = !!existingSession?.title;
 	let ordinal = getMessagesBySession(sessionId).length;
 
 	const persistMessages = () => {
@@ -42,12 +43,11 @@ export function wrapSession(session: Session, sessionId: string): Session {
 
 			persistMessages();
 
-			// Auto-set session title from first question
-			if (askCount === 0) {
+			// Auto-set session title from first question (skip if already titled, e.g. restored sessions)
+			if (!hasTitle) {
 				const title = question.length > 80 ? `${question.slice(0, 77)}...` : question;
 				updateSessionTitle(sessionId, title);
 			}
-			askCount++;
 
 			if (result.response.startsWith("[ERROR:")) {
 				updateSessionStatus(sessionId, "error");
