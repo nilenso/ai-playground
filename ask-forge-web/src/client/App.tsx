@@ -239,6 +239,46 @@ export function App() {
 		sessionRequestRef,
 	]);
 
+	const handleResend = useCallback(
+		(question: string) => {
+			if (!connection.sessionId || isAsking) return;
+
+			const requestId = generateRequestId();
+
+			setIsAsking(true);
+			setProgress({ type: "thinking" });
+
+			const userMessage: Message = {
+				id: `user-${Date.now()}`,
+				role: "user",
+				contentBlocks: [{ type: "text", content: question }],
+			};
+			setMessages((prev) => [...prev, userMessage]);
+
+			currentRequestIdRef.current = requestId;
+			pendingMessageRef.current = { requestId, sessionId: connection.sessionId, question };
+			requestToSessionRef.current.set(requestId, connection.sessionId);
+			sessionRequestRef.current.set(connection.sessionId, requestId);
+
+			connectWebSocket();
+
+			if (wsRef.current?.readyState === WebSocket.OPEN) {
+				wsRef.current.send(JSON.stringify({ type: "ask", ...pendingMessageRef.current }));
+			}
+		},
+		[
+			connection.sessionId,
+			isAsking,
+			generateRequestId,
+			connectWebSocket,
+			wsRef,
+			currentRequestIdRef,
+			pendingMessageRef,
+			requestToSessionRef,
+			sessionRequestRef,
+		],
+	);
+
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
@@ -359,6 +399,7 @@ export function App() {
 			handleCopyMessage={handleCopyMessage}
 			handleVote={handleVote}
 			handleSend={handleSend}
+			handleResend={handleResend}
 			handleKeyDown={handleKeyDown}
 			messagesContainerRef={messagesContainerRef}
 			messagesEndRef={messagesEndRef}

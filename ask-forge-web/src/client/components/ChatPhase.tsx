@@ -16,6 +16,7 @@ interface ChatPhaseProps {
 	handleCopyMessage: (msgId: string, blocks: ContentBlock[]) => void;
 	handleVote: (msgId: string, vote: "like" | "dislike") => void;
 	handleSend: () => void;
+	handleResend: (question: string) => void;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
 	messagesContainerRef: React.RefObject<HTMLDivElement | null>;
 	messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -37,6 +38,7 @@ export function ChatPhase({
 	handleCopyMessage,
 	handleVote,
 	handleSend,
+	handleResend,
 	handleKeyDown,
 	messagesContainerRef,
 	messagesEndRef,
@@ -65,6 +67,7 @@ export function ChatPhase({
 						copiedId={copiedId}
 						markedWithLinks={markedWithLinks}
 						handleCopyMessage={handleCopyMessage}
+						handleResend={handleResend}
 						handleVote={handleVote}
 						messagesContainerRef={messagesContainerRef}
 						messagesEndRef={messagesEndRef}
