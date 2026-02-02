@@ -34,7 +34,7 @@ const GIT_ENV: Record<string, string> = {
 // In-memory session store (exported for WebSocket handler)
 export const sessions = new Map<string, Session>();
 
-// Clean up sessions older than 30 minutes
+// Clean up sessions idle for more than 10 minutes (no connect/restore/ask activity)
 const SESSION_TTL = 10 * 60 * 1000;
 export const sessionTimestamps = new Map<string, number>();
 
