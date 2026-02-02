@@ -35,6 +35,7 @@ export function useWebSocket({
 	const currentRequestIdRef = useRef<string | null>(null);
 	const requestToSessionRef = useRef<Map<string, string>>(new Map());
 	const sessionRequestRef = useRef<Map<string, string>>(new Map());
+	const restoreAttemptedRef = useRef<string | null>(null);
 
 	const {
 		streamingMessageIdRef,
@@ -209,36 +210,84 @@ export function useWebSocket({
 				} else if (message.type === "error") {
 					stopReleaseLoop();
 
-					if (streamingMessageIdRef.current) {
-						setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
-					}
-					setMessages((prev) => [
-						...prev,
-						{
-							id: `error-${Date.now()}`,
-							role: "assistant",
-							contentBlocks: [{ type: "text", content: `Error: ${message.error || "Failed to get response"}` }],
-						},
-					]);
+					// Auto-restore expired sessions transparently
+					const isSessionExpired = message.error === "Session not found or expired";
+					const pending = pendingMessageRef.current;
+					const alreadyRetried = restoreAttemptedRef.current === pending?.requestId;
 
-					streamingMessageIdRef.current = null;
-					streamingThinkingRef.current = "";
-					streamingBlocksRef.current = [];
-					textBufferRef.current = "";
+					if (isSessionExpired && pending && !alreadyRetried) {
+						restoreAttemptedRef.current = pending.requestId;
 
-					if (message.requestId) {
-						const sid = requestToSessionRef.current.get(message.requestId);
-						if (sid) {
-							const tracked = sessionRequestRef.current.get(sid);
-							if (tracked === message.requestId) sessionRequestRef.current.delete(sid);
+						// Clean up any partial streaming UI
+						if (streamingMessageIdRef.current) {
+							setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
 						}
-						requestToSessionRef.current.delete(message.requestId);
-					}
+						streamingMessageIdRef.current = null;
+						streamingThinkingRef.current = "";
+						streamingBlocksRef.current = [];
+						textBufferRef.current = "";
 
-					currentRequestIdRef.current = null;
-					pendingMessageRef.current = null;
-					setIsAsking(false);
-					setProgress({ type: "idle" });
+						// Attempt to restore the session, then retry the ask
+						fetch("/api/restore", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ sessionId: pending.sessionId }),
+						})
+							.then((res) => {
+								if (res.ok && wsRef.current?.readyState === WebSocket.OPEN) {
+									wsRef.current.send(JSON.stringify({ type: "ask", ...pending }));
+								} else {
+									throw new Error("Restore failed");
+								}
+							})
+							.catch(() => {
+								// Restore failed — show the original error
+								setMessages((prev) => [
+									...prev,
+									{
+										id: `error-${Date.now()}`,
+										role: "assistant",
+										contentBlocks: [{ type: "text", content: `Error: ${message.error || "Failed to get response"}` }],
+									},
+								]);
+								currentRequestIdRef.current = null;
+								pendingMessageRef.current = null;
+								setIsAsking(false);
+								setProgress({ type: "idle" });
+							});
+						// Don't reset pending/isAsking yet — we're retrying
+					} else {
+						if (streamingMessageIdRef.current) {
+							setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
+						}
+						setMessages((prev) => [
+							...prev,
+							{
+								id: `error-${Date.now()}`,
+								role: "assistant",
+								contentBlocks: [{ type: "text", content: `Error: ${message.error || "Failed to get response"}` }],
+							},
+						]);
+
+						streamingMessageIdRef.current = null;
+						streamingThinkingRef.current = "";
+						streamingBlocksRef.current = [];
+						textBufferRef.current = "";
+
+						if (message.requestId) {
+							const sid = requestToSessionRef.current.get(message.requestId);
+							if (sid) {
+								const tracked = sessionRequestRef.current.get(sid);
+								if (tracked === message.requestId) sessionRequestRef.current.delete(sid);
+							}
+							requestToSessionRef.current.delete(message.requestId);
+						}
+
+						currentRequestIdRef.current = null;
+						pendingMessageRef.current = null;
+						setIsAsking(false);
+						setProgress({ type: "idle" });
+					}
 				} else if (message.type === "cancelled") {
 					stopReleaseLoop();
 
@@ -302,7 +351,6 @@ export function useWebSocket({
 		wsRef.current = ws;
 
 		ws.onopen = () => {
-			console.log("[WS] Connected");
 			reconnectAttemptRef.current = 0;
 
 			if (pendingMessageRef.current) {
@@ -312,17 +360,13 @@ export function useWebSocket({
 
 		ws.onmessage = handleWsMessage;
 
-		ws.onerror = (error) => {
-			console.error("[WS] Error:", error);
-		};
+		ws.onerror = () => {};
 
-		ws.onclose = (event) => {
-			console.log(`[WS] Closed: ${event.code} ${event.reason}`);
+		ws.onclose = () => {
 			wsRef.current = null;
 
 			if (pendingMessageRef.current && reconnectAttemptRef.current < 5) {
 				const delay = Math.min(1000 * 2 ** reconnectAttemptRef.current, 30000);
-				console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current + 1})`);
 				reconnectAttemptRef.current++;
 				reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
 			} else if (pendingMessageRef.current) {
