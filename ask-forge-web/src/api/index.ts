@@ -64,7 +64,7 @@ api.get("/health", (c) => {
 /**
  * Validate a git URL by checking if it's cloneable
  */
-api.post("/validate", async (c) => {
+api.post("/validate", createAuthMiddleware(), async (c) => {
 	const body = await c.req.json<{ url: string }>();
 	const { url } = body;
 
@@ -170,7 +170,7 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 /**
  * Ask a question in an existing session (streaming progress via SSE)
  */
-api.post("/ask", async (c) => {
+api.post("/ask", createAuthMiddleware(), async (c) => {
 	const body = await c.req.json<{ sessionId: string; question: string }>();
 	const { sessionId, question } = body;
 
@@ -239,7 +239,7 @@ api.post("/ask", async (c) => {
 /**
  * Restore a previous session from the database
  */
-api.post("/restore", async (c) => {
+api.post("/restore", createAuthMiddleware(), async (c) => {
 	const body = await c.req.json<{ sessionId: string }>();
 	const { sessionId } = body;
 
@@ -310,7 +310,7 @@ api.post("/restore", async (c) => {
 /**
  * Close a session
  */
-api.post("/disconnect", async (c) => {
+api.post("/disconnect", createAuthMiddleware(), async (c) => {
 	const body = await c.req.json<{ sessionId: string }>();
 	const { sessionId } = body;
 
@@ -365,7 +365,7 @@ api.get("/sessions", createAuthMiddleware(), (c) => {
 /**
  * Get messages for a session
  */
-api.get("/sessions/:id/messages", (c) => {
+api.get("/sessions/:id/messages", createAuthMiddleware(), (c) => {
 	const sessionId = c.req.param("id");
 	const messages = getMessagesBySession(sessionId);
 	return c.json(messages);
@@ -374,7 +374,7 @@ api.get("/sessions/:id/messages", (c) => {
 /**
  * Rename a session
  */
-api.patch("/sessions/:id", async (c) => {
+api.patch("/sessions/:id", createAuthMiddleware(), async (c) => {
 	const sessionId = c.req.param("id");
 	const body = await c.req.json<{ title: string }>();
 
@@ -389,7 +389,7 @@ api.patch("/sessions/:id", async (c) => {
 /**
  * Delete a session
  */
-api.delete("/sessions/:id", (c) => {
+api.delete("/sessions/:id", createAuthMiddleware(), (c) => {
 	const sessionId = c.req.param("id");
 
 	// Close in-memory session if active
