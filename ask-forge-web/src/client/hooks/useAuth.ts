@@ -72,7 +72,8 @@ export function useAuth({ connectionSessionId, onLogout }: UseAuthOptions) {
 			}).catch(() => {}); // Fire and forget
 		}
 
-		// Clear auth
+		// Clear auth and cached state
+		localStorage.removeItem("askforge_repo_url");
 		await fetch("/api/auth/logout", { method: "POST" });
 		setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false });
 	}, [connectionSessionId, onLogout]);
