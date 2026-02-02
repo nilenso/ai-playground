@@ -1,4 +1,4 @@
-import type { AskOptions, AskResult, Session } from "ask-forge";
+import type { AskOptions, AskResult, Session } from "@nilenso/ask-forge";
 import { createMessage, getMessagesBySession, getSession, updateSessionStatus, updateSessionTitle } from "./db.ts";
 
 export function wrapSession(session: Session, sessionId: string): Session {

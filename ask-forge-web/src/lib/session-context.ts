@@ -1,4 +1,4 @@
-import type { Message } from "ask-forge";
+import type { Message } from "@nilenso/ask-forge";
 import type { DbMessage } from "./db.ts";
 
 /**
