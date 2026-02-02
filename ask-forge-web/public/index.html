@@ -377,6 +377,17 @@
 			margin: 0 auto;
 		}
 
+		/* Offset centering to account for sidebar so content is viewport-centered */
+		.sidebar:not(.collapsed) ~ .app-main .message {
+			margin-left: max(0px, calc(50% - 400px - 130px));
+			margin-right: auto;
+		}
+
+		.sidebar.collapsed ~ .app-main .message {
+			margin-left: max(0px, calc(50% - 400px - 28px));
+			margin-right: auto;
+		}
+
 		.message-user {
 			background: var(--bg-tertiary);
 			border: 1px solid var(--border-subtle);
@@ -544,6 +555,16 @@
 			border-radius: 12px;
 			padding: 6px 6px 6px 20px;
 			transition: border-color 0.2s, box-shadow 0.2s;
+		}
+
+		.sidebar:not(.collapsed) ~ .app-main .chat-input-container {
+			margin-left: max(0px, calc(50% - 400px - 130px));
+			margin-right: auto;
+		}
+
+		.sidebar.collapsed ~ .app-main .chat-input-container {
+			margin-left: max(0px, calc(50% - 400px - 28px));
+			margin-right: auto;
 		}
 
 		.chat-input-container:focus-within {
