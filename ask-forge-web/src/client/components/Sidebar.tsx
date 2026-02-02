@@ -181,7 +181,6 @@ export function Sidebar({
 					)}
 				</div>
 			)}
-			<div className="sidebar-spacer" />
 			<div className="sidebar-footer" ref={profileRef}>
 				{profileOpen && !sidebarCollapsed && (
 					<div className="sidebar-profile-menu">
