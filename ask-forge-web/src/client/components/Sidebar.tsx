@@ -121,7 +121,7 @@ export function Sidebar({
 										onClick={(e) => e.stopPropagation()}
 									/>
 								) : (
-									<div className="sidebar-item-title">{s.title || "Untitled session"}</div>
+									<div className="sidebar-item-title">{s.title || "New conversation"}</div>
 								)}
 								<div className="sidebar-item-menu-wrapper" ref={itemMenuOpen === s.id ? itemMenuRef : undefined}>
 									<button

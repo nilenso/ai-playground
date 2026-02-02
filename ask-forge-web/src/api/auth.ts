@@ -25,7 +25,7 @@ function generateState(): string {
 }
 
 // In-memory state store
-const pendingStates = new Map<string, { createdAt: number }>();
+const pendingStates = new Map<string, { createdAt: number; returnTo?: string }>();
 const STATE_TTL = 10 * 60 * 1000; // 10 minutes
 
 // Cleanup old states periodically
@@ -44,7 +44,8 @@ setInterval(() => {
  */
 auth.get("/github", (c) => {
 	const state = generateState();
-	pendingStates.set(state, { createdAt: Date.now() });
+	const returnTo = c.req.query("returnTo");
+	pendingStates.set(state, { createdAt: Date.now(), returnTo: returnTo || undefined });
 
 	const params = new URLSearchParams({
 		client_id: AUTH_CONFIG.github.clientId,
@@ -176,9 +177,11 @@ auth.get("/github/callback", async (c) => {
 	}
 
 	// Validate state to prevent CSRF
-	if (!pendingStates.has(state)) {
+	const stateData = pendingStates.get(state);
+	if (!stateData) {
 		return c.redirect("/?error=invalid_state");
 	}
+	const returnTo = stateData.returnTo;
 	pendingStates.delete(state);
 
 	const callbackUrl = `${AUTH_CONFIG.app.url}/api/auth/github/callback`;
@@ -189,6 +192,10 @@ auth.get("/github/callback", async (c) => {
 	}
 
 	setAuthCookie(c, result.jwt);
+	// Redirect to returnTo if provided and it's a relative path (prevent open redirect)
+	if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+		return c.redirect(returnTo);
+	}
 	return c.redirect("/");
 });
 

@@ -1,13 +1,17 @@
 import { connect, type Session } from "ask-forge";
 import { Hono } from "hono";
+import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
 import {
 	createSession as createDbSession,
+	createShareLink,
 	deleteSession,
+	deleteShareLink,
 	findOrCreateRepository,
 	getDb,
 	getMessagesBySession,
 	getRepositoryByGitUrl,
 	getSession,
+	getShareLink,
 	recordCheckout,
 	updateSessionStatus,
 	updateSessionTitle,
@@ -97,7 +101,10 @@ api.post("/validate", async (c) => {
 /**
  * Connect to a repository and create a session
  */
-api.post("/connect", async (c) => {
+api.post("/connect", createAuthMiddleware(), async (c) => {
+	const payload = getUserFromContext(c);
+	if (!payload) return c.json({ success: false, error: "Unauthorized" }, 401);
+
 	const body = await c.req.json<{ url: string; commit?: string }>();
 	const { url, commit } = body;
 
@@ -134,7 +141,7 @@ api.post("/connect", async (c) => {
 		// Create a DB session record so messages get persisted
 		createDbSession({
 			id: rawSession.id,
-			userId: 1, // TODO: use authenticated user ID
+			userId: payload.sub,
 			repositoryId: repository.id,
 			checkoutId: checkout.id,
 		});
@@ -325,7 +332,10 @@ api.post("/disconnect", async (c) => {
 /**
  * List sessions for the current user with repository info
  */
-api.get("/sessions", (c) => {
+api.get("/sessions", createAuthMiddleware(), (c) => {
+	const payload = getUserFromContext(c);
+	if (!payload) return c.json([], 401);
+
 	const db = getDb();
 	const rows = db
 		.query<
@@ -347,7 +357,7 @@ api.get("/sessions", (c) => {
 			 WHERE s.user_id = ?
 			 ORDER BY s.created_at DESC`,
 		)
-		.all(1); // TODO: use authenticated user ID
+		.all(payload.sub);
 
 	return c.json(rows);
 });
@@ -392,6 +402,60 @@ api.delete("/sessions/:id", (c) => {
 
 	deleteSession(sessionId);
 	return c.json({ success: true });
+});
+
+/**
+ * Create a share link for a session (auth required)
+ */
+api.post("/sessions/:id/share", createAuthMiddleware(), (c) => {
+	const sessionId = c.req.param("id");
+	const payload = getUserFromContext(c);
+	if (!payload) return c.json({ error: "Unauthorized" }, 401);
+
+	const dbSession = getSession(sessionId);
+	if (!dbSession) return c.json({ error: "Session not found" }, 404);
+
+	const shareLink = createShareLink(sessionId, payload.sub);
+	const shareUrl = `/share/${shareLink.share_token}`;
+
+	return c.json({ shareToken: shareLink.share_token, shareUrl });
+});
+
+/**
+ * Delete a share link for a session (auth required)
+ */
+api.delete("/sessions/:id/share", createAuthMiddleware(), (c) => {
+	const sessionId = c.req.param("id");
+	const payload = getUserFromContext(c);
+	if (!payload) return c.json({ error: "Unauthorized" }, 401);
+
+	deleteShareLink(sessionId);
+	return c.json({ success: true });
+});
+
+/**
+ * Get shared session data (public - no auth required)
+ */
+api.get("/share/:token", (c) => {
+	const token = c.req.param("token");
+	const shareLink = getShareLink(token);
+
+	if (!shareLink) {
+		return c.json({ error: "Share link not found" }, 404);
+	}
+
+	const messages = getMessagesBySession(shareLink.session_id);
+
+	return c.json({
+		session: {
+			title: shareLink.title,
+			repoName: shareLink.repository_name,
+			gitUrl: shareLink.git_url,
+			commitish: shareLink.commitish,
+			createdAt: shareLink.session_created_at,
+		},
+		messages,
+	});
 });
 
 export default api;

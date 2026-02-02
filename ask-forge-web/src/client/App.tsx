@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AskPhase } from "./components/AskPhase.tsx";
 import { ChatPhase } from "./components/ChatPhase.tsx";
 import { ConnectPhase } from "./components/ConnectPhase.tsx";
+import { SharedView } from "./components/SharedView.tsx";
 import type { Sidebar } from "./components/Sidebar.tsx";
 import { createMarkedWithFileLinks } from "./file-linker.ts";
 import { useAuth } from "./hooks/useAuth.ts";
@@ -11,7 +12,19 @@ import { useWebSocket } from "./hooks/useWebSocket.ts";
 import type { AppPhase, ConnectionState, ContentBlock, Message, ProgressState } from "./types.ts";
 import { extractRepoName } from "./utils.ts";
 
+// Check if we're on a /share/:token route
+function getShareToken(): string | null {
+	const match = window.location.pathname.match(/^\/share\/([a-f0-9]+)$/);
+	return match?.[1] ?? null;
+}
+
 export function App() {
+	// Handle /share/:token route
+	const shareToken = getShareToken();
+	if (shareToken) {
+		return <SharedView token={shareToken} />;
+	}
+
 	const [url, setUrl] = useState("");
 	const [connection, setConnection] = useState<ConnectionState>({
 		status: "disconnected",
@@ -168,6 +181,7 @@ export function App() {
 			localStorage.setItem("askforge_repo_url", url.trim());
 			setPhase("ask");
 			setMessages([]);
+			session.fetchSessionHistory();
 		} catch (err) {
 			setConnection((prev) => ({
 				...prev,
@@ -290,6 +304,24 @@ export function App() {
 		}
 	};
 
+	const handleShareSession = useCallback(async (sessionId: string) => {
+		try {
+			const res = await fetch(`/api/sessions/${sessionId}/share`, { method: "POST" });
+			const data = await res.json();
+			if (!res.ok) return;
+			const shareUrl = `${window.location.origin}${data.shareUrl}`;
+			await navigator.clipboard.writeText(shareUrl);
+			// Brief visual feedback via a temporary alert (could be improved with a toast)
+			const el = document.createElement("div");
+			el.className = "share-toast";
+			el.textContent = "Share link copied to clipboard!";
+			document.body.appendChild(el);
+			setTimeout(() => el.remove(), 2500);
+		} catch {
+			// Silently fail
+		}
+	}, []);
+
 	const handleMessagesScroll = useCallback(() => {
 		const container = messagesContainerRef.current;
 		if (!container) return;
@@ -300,10 +332,18 @@ export function App() {
 
 	// --- Effects ---
 
-	// Load URL from localStorage on mount
+	// Load URL from query param or localStorage on mount
 	useEffect(() => {
-		const savedUrl = localStorage.getItem("askforge_repo_url");
-		if (savedUrl) setUrl(savedUrl);
+		const params = new URLSearchParams(window.location.search);
+		const repoParam = params.get("repo");
+		if (repoParam) {
+			setUrl(repoParam);
+			// Clean up the URL
+			window.history.replaceState({}, "", window.location.pathname);
+		} else {
+			const savedUrl = localStorage.getItem("askforge_repo_url");
+			if (savedUrl) setUrl(savedUrl);
+		}
 	}, []);
 
 	// Fetch build info on mount
@@ -324,6 +364,16 @@ export function App() {
 			chatTextareaRef.current?.focus();
 		}
 	}, [phase]);
+
+	// Refresh session history when a question finishes (picks up auto-generated titles)
+	const wasAskingRef = useRef(false);
+	useEffect(() => {
+		if (wasAskingRef.current && !isAsking && phase === "chat") {
+			session.fetchSessionHistory();
+		}
+		wasAskingRef.current = isAsking;
+	}, [isAsking, phase, session.fetchSessionHistory]);
+
 
 	// Auto-scroll to bottom when messages change
 	useEffect(() => {
@@ -387,6 +437,7 @@ export function App() {
 
 	return (
 		<ChatPhase
+			sessionTitle={session.currentSessionTitle}
 			connection={connection}
 			messages={messages}
 			inputValue={inputValue}
@@ -401,6 +452,8 @@ export function App() {
 			handleSend={handleSend}
 			handleResend={handleResend}
 			handleKeyDown={handleKeyDown}
+			handleShareSession={handleShareSession}
+			handleRenameSession={session.handleRenameSession}
 			messagesContainerRef={messagesContainerRef}
 			messagesEndRef={messagesEndRef}
 			handleMessagesScroll={handleMessagesScroll}

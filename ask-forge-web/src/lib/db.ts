@@ -397,6 +397,99 @@ export function setMessageFeedback(messageId: number, feedback: string): DbMessa
 /**
  * Record token usage stats for a message
  */
+// ─── Share link types and functions ──────────────────────────────────────────
+
+export interface DbShareLink {
+	id: number;
+	session_id: string;
+	share_token: string;
+	created_by: number;
+	created_at: string;
+}
+
+/**
+ * Create a share link for a session. Returns existing link if one already exists.
+ */
+export function createShareLink(sessionId: string, userId: number): DbShareLink {
+	const db = getDb();
+
+	// Check if a share link already exists
+	const existing = db.query<DbShareLink, [string]>("SELECT * FROM share_links WHERE session_id = ?").get(sessionId);
+	if (existing) return existing;
+
+	// Generate a random token
+	const array = new Uint8Array(16);
+	crypto.getRandomValues(array);
+	const shareToken = Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+	const now = new Date().toISOString();
+	const result = db.run(
+		"INSERT INTO share_links (session_id, share_token, created_by, created_at) VALUES (?, ?, ?, ?)",
+		[sessionId, shareToken, userId, now],
+	);
+
+	return {
+		id: Number(result.lastInsertRowid),
+		session_id: sessionId,
+		share_token: shareToken,
+		created_by: userId,
+		created_at: now,
+	};
+}
+
+/**
+ * Get a share link by token, joined with session and repository info
+ */
+export function getShareLink(shareToken: string):
+	| (DbShareLink & {
+			title: string | null;
+			repository_name: string;
+			git_url: string;
+			commitish: string | null;
+			session_created_at: string;
+	  })
+	| null {
+	const db = getDb();
+	return (
+		db
+			.query<
+				DbShareLink & {
+					title: string | null;
+					repository_name: string;
+					git_url: string;
+					commitish: string | null;
+					session_created_at: string;
+				},
+				[string]
+			>(
+				`SELECT sl.*, s.title, r.repository_name, r.git_url,
+				c.commit_id as commitish, s.created_at as session_created_at
+			 FROM share_links sl
+			 JOIN sessions s ON sl.session_id = s.id
+			 JOIN repositories r ON s.repository_id = r.id
+			 LEFT JOIN checkouts c ON s.checkout_id = c.id
+			 WHERE sl.share_token = ?`,
+			)
+			.get(shareToken) || null
+	);
+}
+
+/**
+ * Get share link by session ID
+ */
+export function getShareLinkBySession(sessionId: string): DbShareLink | null {
+	const db = getDb();
+	return db.query<DbShareLink, [string]>("SELECT * FROM share_links WHERE session_id = ?").get(sessionId) || null;
+}
+
+/**
+ * Delete share link for a session
+ */
+export function deleteShareLink(sessionId: string): void {
+	const db = getDb();
+	db.run("DELETE FROM share_links WHERE session_id = ?", [sessionId]);
+}
+
 export function createUsageStats(params: {
 	sessionId: string;
 	messageId: number;

@@ -220,11 +220,16 @@ export function useSession({
 		setRenamingSession(null);
 	}, []);
 
+	const currentSessionTitle = connectionSessionId
+		? sessionHistory.find((s) => s.id === connectionSessionId)?.title ?? null
+		: null;
+
 	return {
 		sessionHistory,
 		historyLoading,
 		renamingSession,
 		renameValue,
+		currentSessionTitle,
 		setRenamingSession,
 		setRenameValue,
 		fetchSessionHistory,
