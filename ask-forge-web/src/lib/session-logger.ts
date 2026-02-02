@@ -3,8 +3,20 @@ import { createMessage, getMessagesBySession, getSession, updateSessionStatus, u
 
 export function wrapSession(session: Session, sessionId: string): Session {
 	const existingSession = getSession(sessionId);
-	const hasTitle = !!existingSession?.title;
-	let ordinal = getMessagesBySession(sessionId).length;
+	let hasTitle = !!existingSession?.title;
+	const dbMessages = getMessagesBySession(sessionId);
+	let ordinal = dbMessages.length;
+
+	// Backfill title from first user message if missing
+	if (!hasTitle && dbMessages.length > 0) {
+		const firstUserMsg = dbMessages.find((m) => m.role === "user");
+		if (firstUserMsg?.content) {
+			const title =
+				firstUserMsg.content.length > 80 ? `${firstUserMsg.content.slice(0, 77)}...` : firstUserMsg.content;
+			updateSessionTitle(sessionId, title);
+			hasTitle = true;
+		}
+	}
 
 	const persistMessages = () => {
 		const messages = session.getMessages();

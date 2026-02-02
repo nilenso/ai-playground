@@ -4,6 +4,7 @@ import { MessageList } from "./MessageList.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 
 interface ChatPhaseProps {
+	sessionTitle: string | null;
 	connection: ConnectionState;
 	messages: Message[];
 	inputValue: string;
@@ -27,6 +28,7 @@ interface ChatPhaseProps {
 }
 
 export function ChatPhase({
+	sessionTitle,
 	connection,
 	messages,
 	inputValue,
@@ -54,6 +56,7 @@ export function ChatPhase({
 			<div className="app-main">
 				<header className="chat-header">
 					<div className="chat-header-info">
+						{sessionTitle && <span className="chat-header-title">{sessionTitle}</span>}
 						<span className="chat-header-subtitle">
 							<span className="status-indicator connected" />
 							{connection.repoName}

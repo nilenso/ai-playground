@@ -443,6 +443,7 @@ export function App() {
 
 	return (
 		<ChatPhase
+			sessionTitle={session.currentSessionTitle}
 			connection={connection}
 			messages={messages}
 			inputValue={inputValue}
