@@ -18,7 +18,7 @@ export function wrapSession(session: Session, sessionId: string): Session {
 	}
 
 	const persistMessages = () => {
-		const messages = session.getMessages();
+		const messages = session.getMessages() as any[];
 		// Persist only new messages (from ordinal onward)
 		for (let i = ordinal; i < messages.length; i++) {
 			const msg = messages[i];
@@ -61,15 +61,20 @@ export function wrapSession(session: Session, sessionId: string): Session {
 				hasTitle = true;
 			}
 
-			const result = await session.ask(question, options);
+			try {
+				const result = await session.ask(question, options);
 
-			persistMessages();
+				if (result.response.startsWith("[ERROR:")) {
+					updateSessionStatus(sessionId, "error");
+				}
 
-			if (result.response.startsWith("[ERROR:")) {
+				return result;
+			} catch (err) {
 				updateSessionStatus(sessionId, "error");
+				throw err;
+			} finally {
+				persistMessages();
 			}
-
-			return result;
 		},
 
 		replaceMessages(messages: Parameters<Session["replaceMessages"]>[0]) {
