@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - "ask-forge-web/**"
-      - "ask-forge/**"
   workflow_dispatch:
 
 env:
@@ -41,9 +40,6 @@ jobs:
           tags: |
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Copy ask-forge into build context
-        run: cp -r ask-forge ask-forge-web/ask-forge
 
       - name: Build and push
         uses: docker/build-push-action@v6

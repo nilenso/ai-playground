@@ -3,16 +3,10 @@ FROM oven/bun:1-alpine AS builder
 
 WORKDIR /app
 
-# Copy ask-forge dependency first (from build context)
-COPY ask-forge ./ask-forge
-
 # Copy package files
 COPY package.json bun.lock ./
 
-# Update local dependency path for Docker context
-RUN sed -i 's|file:../ask-forge|file:./ask-forge|' package.json
-
-# Install dependencies
+# Install dependencies (pulls @nilenso/ask-forge from JSR)
 RUN bun install
 
 # Copy source files
@@ -41,10 +35,8 @@ RUN apk add --no-cache git openssh-client curl ripgrep fd && \
       -o /usr/local/bin/litem8 && \
     chmod +x /usr/local/bin/litem8
 
-# Copy ask-forge dependency and install production dependencies
-COPY ask-forge ./ask-forge
+# Copy package files and node_modules from builder
 COPY package.json bun.lock ./
-RUN sed -i 's|file:../ask-forge|file:./ask-forge|' package.json
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy built assets and source
