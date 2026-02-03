@@ -56,6 +56,17 @@ function cleanupSessions() {
 // Run cleanup every 5 minutes
 setInterval(cleanupSessions, 5 * 60 * 1000);
 
+// On startup, mark all "active" sessions as "inactive" since in-memory state is lost on restart
+(function cleanupStaleActiveSessions() {
+	const db = getDb();
+	const result = db.run("UPDATE sessions SET status = 'inactive', ended_at = ? WHERE status = 'active'", [
+		new Date().toISOString(),
+	]);
+	if (result.changes > 0) {
+		console.log(`Marked ${result.changes} stale active session(s) as inactive on startup`);
+	}
+})();
+
 const api = new Hono();
 
 api.get("/health", (c) => {
