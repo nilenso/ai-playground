@@ -1,6 +1,7 @@
 import { connect, type Session } from "@nilenso/ask-forge";
 import { Hono } from "hono";
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
+import { getActiveRequest } from "../websocket.ts";
 import {
 	createSession as createDbSession,
 	createMessage,
@@ -259,6 +260,34 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 		return c.json({ success: false, error: "sessionId is required" }, 400);
 	}
 
+	// Check if session is already in memory (e.g., switching tabs or resuming)
+	const existingSession = sessions.get(sessionId);
+	if (existingSession) {
+		// Session already active - just update timestamp and return
+		sessionTimestamps.set(sessionId, Date.now());
+
+		const db = getDb();
+		const repoRow = db
+			.query<{ git_url: string; summary: string | null; id: number }, [string]>(
+				"SELECT r.id, r.git_url, r.summary FROM repositories r JOIN sessions s ON s.repository_id = r.id WHERE s.id = ?",
+			)
+			.get(sessionId);
+
+		const activeReq = getActiveRequest(sessionId);
+
+		return c.json({
+			success: true,
+			sessionId: existingSession.id,
+			normalized: repoRow?.git_url,
+			localPath: existingSession.repo.localPath,
+			commitish: existingSession.repo.commitish,
+			summary: repoRow?.summary,
+			repositoryId: repoRow?.id,
+			messageCount: existingSession.getMessages().length,
+			activeRequest: activeReq,
+		});
+	}
+
 	// Load the DB session
 	const dbSession = getSession(sessionId);
 	if (!dbSession) {
@@ -303,6 +332,9 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 		sessionTimestamps.set(session.id, Date.now());
 		updateSessionStatus(sessionId, "active");
 
+		// Check if there's an active streaming request for this session
+		const activeReq = getActiveRequest(sessionId);
+
 		return c.json({
 			success: true,
 			sessionId: session.id,
@@ -312,6 +344,7 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 			summary: repoRow.summary,
 			repositoryId: repoRow.id,
 			messageCount: dbMessages.length,
+			activeRequest: activeReq,
 		});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : "Unknown error";

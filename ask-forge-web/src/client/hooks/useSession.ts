@@ -19,6 +19,7 @@ interface UseSessionOptions {
 	textBufferRef: React.MutableRefObject<string>;
 	releaseIntervalRef: React.MutableRefObject<number | null>;
 	connectionSessionId: string | null;
+	resumeStreaming: (sessionId: string) => void;
 }
 
 export function useSession({
@@ -39,6 +40,7 @@ export function useSession({
 	textBufferRef,
 	releaseIntervalRef,
 	connectionSessionId,
+	resumeStreaming,
 }: UseSessionOptions) {
 	const [sessionHistory, setSessionHistory] = useState<SessionSummary[]>([]);
 	const [historyLoading, setHistoryLoading] = useState(false);
@@ -97,6 +99,7 @@ export function useSession({
 				const dbMessages: { role: string; content: string | null }[] = await msgRes.json();
 
 				// Convert DB messages to client Messages
+				// Merge consecutive assistant messages into one (agentic loop creates multiple turns)
 				const clientMessages: Message[] = [];
 				for (const msg of dbMessages) {
 					if (msg.role === "user" && msg.content) {
@@ -124,18 +127,29 @@ export function useSession({
 								}
 							}
 							if (blocks.length > 0) {
+								// Merge with previous assistant message if exists
+								const lastMsg = clientMessages[clientMessages.length - 1];
+								if (lastMsg && lastMsg.role === "assistant") {
+									lastMsg.contentBlocks = [...lastMsg.contentBlocks, ...blocks];
+								} else {
+									clientMessages.push({
+										id: `assistant-${clientMessages.length}`,
+										role: "assistant",
+										contentBlocks: blocks,
+									});
+								}
+							}
+						} catch {
+							const lastMsg = clientMessages[clientMessages.length - 1];
+							if (lastMsg && lastMsg.role === "assistant") {
+								lastMsg.contentBlocks.push({ type: "text", content: msg.content });
+							} else {
 								clientMessages.push({
 									id: `assistant-${clientMessages.length}`,
 									role: "assistant",
-									contentBlocks: blocks,
+									contentBlocks: [{ type: "text", content: msg.content }],
 								});
 							}
-						} catch {
-							clientMessages.push({
-								id: `assistant-${clientMessages.length}`,
-								role: "assistant",
-								contentBlocks: [{ type: "text", content: msg.content }],
-							});
 						}
 					}
 				}
@@ -154,11 +168,35 @@ export function useSession({
 				fetchSessionHistory();
 
 				// Check if this session has an in-flight request we should resume streaming for
-				const activeRequestId = sessionRequestRef.current.get(session.id);
-				if (activeRequestId && requestToSessionRef.current.has(activeRequestId)) {
-					currentRequestIdRef.current = activeRequestId;
-					setIsAsking(true);
-					setProgress({ type: "thinking" });
+				// First check server-side (handles page refresh case)
+				if (restoreData.activeRequest) {
+					// Add the user's question as a message if not already present
+					const questionAlreadyShown = clientMessages.some(
+						(m) =>
+							m.role === "user" &&
+							m.contentBlocks.some((b) => b.type === "text" && b.content === restoreData.activeRequest.question),
+					);
+					if (!questionAlreadyShown) {
+						setMessages((prev) => [
+							...prev,
+							{
+								id: `user-${Date.now()}`,
+								role: "user",
+								contentBlocks: [{ type: "text", content: restoreData.activeRequest.question }],
+							},
+						]);
+					}
+					// Resume streaming from server buffer
+					resumeStreaming(session.id);
+					setPhase("chat");
+				} else {
+					// Check client-side tracking (handles tab switching case)
+					const activeRequestId = sessionRequestRef.current.get(session.id);
+					if (activeRequestId && requestToSessionRef.current.has(activeRequestId)) {
+						currentRequestIdRef.current = activeRequestId;
+						setIsAsking(true);
+						setProgress({ type: "thinking" });
+					}
 				}
 			} catch (err) {
 				setConnection((prev) => ({
@@ -185,6 +223,7 @@ export function useSession({
 			streamingBlocksRef,
 			textBufferRef,
 			releaseIntervalRef,
+			resumeStreaming,
 		],
 	);
 

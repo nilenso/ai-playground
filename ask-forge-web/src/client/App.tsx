@@ -18,6 +18,12 @@ function getShareToken(): string | null {
 	return match?.[1] ?? null;
 }
 
+// Check if we're on a /c/:sessionId route (session permalink)
+function getSessionIdFromUrl(): string | null {
+	const match = window.location.pathname.match(/^\/c\/([a-f0-9-]+)$/);
+	return match?.[1] ?? null;
+}
+
 export function App() {
 	// Handle /share/:token route
 	const shareToken = getShareToken();
@@ -79,6 +85,7 @@ export function App() {
 		pendingMessageRef,
 		connectWebSocket,
 		generateRequestId,
+		resumeStreaming,
 	} = useWebSocket({
 		streaming,
 		setMessages,
@@ -106,6 +113,7 @@ export function App() {
 		textBufferRef: streaming.textBufferRef,
 		releaseIntervalRef: streaming.releaseIntervalRef,
 		connectionSessionId: connection.sessionId,
+		resumeStreaming,
 	});
 
 	// --- Memos ---
@@ -206,6 +214,9 @@ export function App() {
 		setConnection({ status: "disconnected", sessionId: null, commitish: null, error: null, repoName: null });
 		setMessages([]);
 		setPhase("connect");
+		// Clear initial session ID so we don't show "restoring" spinner
+		setInitialSessionId(null);
+		restoringFromUrlRef.current = false;
 	}, [connection.sessionId]);
 
 	const handleSend = useCallback(() => {
@@ -339,8 +350,57 @@ export function App() {
 
 	// --- Effects ---
 
+	// Check for session permalink on mount (/c/:sessionId)
+	// Use state so it can be cleared when user navigates away
+	const [initialSessionId, setInitialSessionId] = useState<string | null>(() => getSessionIdFromUrl());
+	const restoringFromUrlRef = useRef(false);
+
+	// Auto-restore session from URL permalink
+	useEffect(() => {
+		if (!initialSessionId || !auth.authenticated || restoringFromUrlRef.current) return;
+		if (connection.sessionId === initialSessionId) return; // Already restored
+
+		// Wait for session history to load
+		if (session.historyLoading) return;
+
+		// Find the session in history and restore it
+		const sessionToRestore = session.sessionHistory.find((s) => s.id === initialSessionId);
+		if (sessionToRestore) {
+			restoringFromUrlRef.current = true;
+			session.handleRestore(sessionToRestore);
+		} else if (session.sessionHistory.length > 0) {
+			// Session not found in history - it might not belong to this user or doesn't exist
+			// Redirect to home
+			window.history.replaceState({}, "", "/");
+		}
+	}, [initialSessionId, auth.authenticated, session.sessionHistory, session.historyLoading, connection.sessionId]);
+
+	// Update URL when session changes (but not on initial load from permalink)
+	useEffect(() => {
+		// Don't update URL while we're trying to restore from a permalink
+		if (initialSessionId && connection.sessionId !== initialSessionId) {
+			return;
+		}
+
+		if (!connection.sessionId) {
+			// Only update URL if we're not already on home and not waiting to restore
+			if (window.location.pathname !== "/" && !window.location.pathname.startsWith("/share/") && !initialSessionId) {
+				window.history.replaceState({}, "", "/");
+			}
+			return;
+		}
+
+		const expectedPath = `/c/${connection.sessionId}`;
+		if (window.location.pathname !== expectedPath) {
+			window.history.replaceState({}, "", expectedPath);
+		}
+	}, [connection.sessionId, initialSessionId]);
+
 	// Load URL from query param or localStorage on mount
 	useEffect(() => {
+		// Skip if we're restoring from a session permalink
+		if (initialSessionId) return;
+
 		const params = new URLSearchParams(window.location.search);
 		const repoParam = params.get("repo");
 		if (repoParam) {
@@ -351,7 +411,7 @@ export function App() {
 			const savedUrl = localStorage.getItem("askforge_repo_url");
 			if (savedUrl) setUrl(savedUrl);
 		}
-	}, []);
+	}, [initialSessionId]);
 
 	// Fetch build info on mount
 	useEffect(() => {
@@ -408,6 +468,26 @@ export function App() {
 	};
 
 	// --- Render ---
+
+	// Show loading when restoring session from URL permalink
+	if (initialSessionId && connection.sessionId !== initialSessionId && auth.authenticated) {
+		return (
+			<div className="app-container phase-connect">
+				<div className="app-main">
+					<div className="connect-content">
+						<h1 className="logo">
+							<span className="logo-ask">ask</span>
+							<span className="logo-forge">forge</span>
+						</h1>
+						<div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
+							<span className="spinner" />
+						</div>
+						<p className="hint">Restoring session...</p>
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	if (phase === "connect") {
 		return (

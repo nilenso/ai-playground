@@ -36,6 +36,7 @@ export function useWebSocket({
 	const requestToSessionRef = useRef<Map<string, string>>(new Map());
 	const sessionRequestRef = useRef<Map<string, string>>(new Map());
 	const restoreAttemptedRef = useRef<string | null>(null);
+	const isResumingRef = useRef(false);
 
 	const {
 		streamingMessageIdRef,
@@ -58,6 +59,51 @@ export function useWebSocket({
 		(event: MessageEvent) => {
 			try {
 				const message = JSON.parse(event.data);
+
+				// Handle resume-related messages
+				if (message.type === "resume_start") {
+					// Server is replaying buffered events - set up state
+					currentRequestIdRef.current = message.requestId;
+					isResumingRef.current = true;
+					setIsAsking(!message.completed);
+					if (!message.completed) {
+						setProgress({ type: "thinking" });
+					}
+					return;
+				}
+
+				if (message.type === "resume_complete") {
+					// Resume finished - streaming was already done, finalize the message
+					isResumingRef.current = false;
+					// Finalize the streaming message
+					if (streamingMessageIdRef.current) {
+						setMessages((prev) =>
+							prev.map((msg) =>
+								msg.id === streamingMessageIdRef.current ? { ...msg, isStreaming: false } : msg,
+							),
+						);
+					}
+					streamingMessageIdRef.current = null;
+					streamingThinkingRef.current = "";
+					streamingBlocksRef.current = [];
+					textBufferRef.current = "";
+					setIsAsking(false);
+					setProgress({ type: "idle" });
+					return;
+				}
+
+				if (message.type === "resume_caught_up") {
+					// Buffer replay done, but streaming still in progress
+					// Switch back to normal mode - new events will be processed normally
+					isResumingRef.current = false;
+					return;
+				}
+
+				if (message.type === "resume_none") {
+					// No active request to resume
+					isResumingRef.current = false;
+					return;
+				}
 
 				// Ignore messages for background sessions (server persists to DB anyway)
 				if (message.requestId && message.requestId !== currentRequestIdRef.current) {
@@ -160,7 +206,7 @@ export function useWebSocket({
 							setMessages((prev) =>
 								prev.map((msg) =>
 									msg.id === streamingMessageIdRef.current
-										? { ...msg, contentBlocks: blocksToUse, isStreaming: false }
+										? { ...msg, contentBlocks: blocksToUse, isStreaming: !isResumingRef.current }
 										: msg,
 								),
 							);
@@ -182,6 +228,11 @@ export function useWebSocket({
 								contentBlocks: [{ type: "text", content: `Error: ${data.error || "Failed to get response"}` }],
 							},
 						]);
+					}
+
+					// During resume, don't reset streaming state - wait for resume_complete
+					if (isResumingRef.current) {
+						return;
 					}
 
 					// Reset streaming state
@@ -401,6 +452,24 @@ export function useWebSocket({
 		};
 	}, [streaming.releaseIntervalRef]);
 
+	// Resume streaming for a session (after page refresh)
+	const resumeStreaming = useCallback(
+		(sessionId: string) => {
+			connectWebSocket();
+
+			// Wait for connection to be ready, then send resume request
+			const checkAndSend = () => {
+				if (wsRef.current?.readyState === WebSocket.OPEN) {
+					wsRef.current.send(JSON.stringify({ type: "resume", sessionId }));
+				} else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+					setTimeout(checkAndSend, 50);
+				}
+			};
+			checkAndSend();
+		},
+		[connectWebSocket],
+	);
+
 	return {
 		wsRef,
 		currentRequestIdRef,
@@ -410,5 +479,6 @@ export function useWebSocket({
 		reconnectTimeoutRef,
 		connectWebSocket,
 		generateRequestId,
+		resumeStreaming,
 	};
 }
