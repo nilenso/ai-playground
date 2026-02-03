@@ -1,4 +1,6 @@
+import hljs from "highlight.js";
 import { Marked, type MarkedExtension } from "marked";
+import { markedHighlight } from "marked-highlight";
 
 /**
  * Known file extensions that indicate a path is a source file reference.
@@ -158,11 +160,27 @@ function createFileLinkExtension(repoUrl: string, commitish: string): MarkedExte
 }
 
 /**
- * Create a configured Marked instance that links file references to the forge.
- * If repoUrl or commitish are missing, returns a plain Marked instance.
+ * Create a configured Marked instance that links file references to the forge
+ * and provides syntax highlighting for code blocks.
+ * If repoUrl or commitish are missing, file linking is skipped but highlighting still works.
  */
 export function createMarkedWithFileLinks(repoUrl?: string | null, commitish?: string | null): Marked {
 	const instance = new Marked();
+
+	// Add syntax highlighting for code blocks
+	instance.use(
+		markedHighlight({
+			emptyLangClass: "hljs",
+			langPrefix: "hljs language-",
+			highlight(code, lang) {
+				if (lang && hljs.getLanguage(lang)) {
+					return hljs.highlight(code, { language: lang }).value;
+				}
+				// No language specified or unknown language - return code as-is
+				return code;
+			},
+		}),
+	);
 
 	if (repoUrl && commitish) {
 		instance.use(createFileLinkExtension(repoUrl, commitish));

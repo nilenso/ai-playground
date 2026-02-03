@@ -22,8 +22,10 @@
 	},
 	"dependencies": {
 		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.2",
+		"highlight.js": "^11.11.1",
 		"hono": "^4.7.10",
 		"marked": "^17.0.1",
+		"marked-highlight": "^2.2.3",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
 		"react-markdown": "^10.1.0"
