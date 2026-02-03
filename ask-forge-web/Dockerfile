@@ -3,8 +3,8 @@ FROM oven/bun:1-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lock ./
+# Copy package files and registry config
+COPY package.json bun.lock .npmrc ./
 
 # Install dependencies (pulls @nilenso/ask-forge from JSR)
 RUN bun install
