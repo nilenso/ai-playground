@@ -51,15 +51,20 @@ export function wrapSession(session: Session, sessionId: string): Session {
 		repo: session.repo,
 
 		async ask(question: string, options?: AskOptions): Promise<AskResult> {
-			const result = await session.ask(question, options);
-
-			persistMessages();
+			// Persist user message immediately so it's available if user switches away
+			createMessage({ sessionId, role: "user", ordinal, content: question });
+			ordinal++;
 
 			// Auto-set session title from first question (skip if already titled, e.g. restored sessions)
 			if (!hasTitle) {
 				const title = question.length > 80 ? `${question.slice(0, 77)}...` : question;
 				updateSessionTitle(sessionId, title);
+				hasTitle = true;
 			}
+
+			const result = await session.ask(question, options);
+
+			persistMessages();
 
 			if (result.response.startsWith("[ERROR:")) {
 				updateSessionStatus(sessionId, "error");
