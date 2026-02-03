@@ -338,7 +338,7 @@ export function createMessage(params: {
 	const db = getDb();
 	const now = new Date().toISOString();
 	const result = db.run(
-		`INSERT INTO messages (session_id, role, content, thinking, tool_name, tool_arguments, tool_result, ordinal, created_at)
+		`INSERT OR IGNORE INTO messages (session_id, role, content, thinking, tool_name, tool_arguments, tool_result, ordinal, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		[
 			params.sessionId,
