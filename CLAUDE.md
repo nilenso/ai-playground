@@ -6,21 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A polyglot AI/ML experimentation monorepo using **Bun** runtime and **TypeScript** throughout. Contains:
 
-- **ask-forge** - Library for safely querying remote git repositories using LLM agents
-- **ask-forge-web** - Web UI and server wrapping ask-forge
+- **ask-forge-web** - Web UI and server wrapping the [ask-forge](https://github.com/nilenso/ask-forge) library
 - **fivetwo** - Long-term memory/project tracking system for AI coding agents
 - **lenso2** - Real-time voice/video meeting assistant using Google Gemini API
 
 ## Build Commands
 
 All projects use Bun. Run commands from each project's directory.
-
-### ask-forge
-```bash
-bun install
-bun run check        # Format + lint with auto-fix (Biome)
-bun run web          # Run web server on port 3000
-```
 
 ### ask-forge-web
 ```bash
@@ -69,8 +61,8 @@ bun run tunnel       # Expose via Cloudflare Tunnel (for HTTPS/WebRTC)
 
 **Dual Interfaces (fivetwo):** Supports both React web frontend and Terminal UI (TUI) for the same backend.
 
-### Local Dependencies
-ask-forge-web depends on ask-forge via local file reference (`file:../ask-forge`). Changes to ask-forge require rebuilding ask-forge-web.
+### External Dependencies
+ask-forge-web depends on the [ask-forge](https://github.com/nilenso/ask-forge) library, published to JSR as `@nilenso/ask-forge`. Updates to ask-forge require bumping the dependency version in ask-forge-web.
 
 ## Code Quality
 
