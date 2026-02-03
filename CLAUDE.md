@@ -81,6 +81,25 @@ Projects load environment variables from `.env` files automatically. Required va
 
 - **All icons should be pink** (`var(--accent-pink)` / `#ec4899`). This applies to sidebar icons, dropdown menu icons, action buttons, and any other icon elements throughout the UI.
 
+## Git Workflow
+
+- **Always raise PRs** - Never push directly to main. Create a feature branch and open a PR.
+- **Check branch status before pushing** - If a PR is already merged, pushing to that branch won't help. Always check if the PR is still open before pushing fixes.
+- **Verify remote state** - Run `git pull origin main` and check PR status with `gh pr view <number>` before making changes.
+
+## JSR Packages in Docker
+
+When using JSR packages (like `@nilenso/ask-forge`) in Docker builds:
+- The `.npmrc` file must be copied **before** `bun install`
+- It configures the JSR npm bridge: `@jsr:registry=https://npm.jsr.io`
+- Without this, bun looks at npmjs.org and fails with 404
+
+```dockerfile
+# Correct order in Dockerfile
+COPY package.json bun.lock .npmrc ./
+RUN bun install
+```
+
 ## Reference Documentation
 
 For Hono framework: `https://hono.dev/llms-full.txt`
