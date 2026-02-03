@@ -21,7 +21,7 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
-		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge",
+		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.2",
 		"hono": "^4.7.10",
 		"marked": "^17.0.1",
 		"react": "^19.1.0",
