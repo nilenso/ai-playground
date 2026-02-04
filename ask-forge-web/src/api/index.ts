@@ -1,7 +1,6 @@
 import { connect, type Session } from "@nilenso/ask-forge";
 import { Hono } from "hono";
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
-import { getActiveRequest } from "../websocket.ts";
 import {
 	createSession as createDbSession,
 	createMessage,
@@ -21,6 +20,7 @@ import {
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
 import { buildSessionContext } from "../lib/session-context.ts";
 import { wrapSession } from "../lib/session-logger.ts";
+import { getActiveRequest } from "../websocket.ts";
 
 // Git environment to prevent interactive prompts and SSH key loading
 const GIT_ENV: Record<string, string> = {

@@ -29,7 +29,7 @@ app.route("/api", api);
 // These must come before the static file middleware
 // /c/:sessionId - session permalink
 app.get("/c/:sessionId", serveStatic({ path: "./public/index.html" }));
-// /share/:token - shared session view  
+// /share/:token - shared session view
 app.get("/share/:token", serveStatic({ path: "./public/index.html" }));
 
 // Serve static files from public directory

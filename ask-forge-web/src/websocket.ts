@@ -97,12 +97,14 @@ export const websocketHandler = {
 					registerConnection(ws, data.sessionId);
 
 					// Send resume acknowledgment with the question
-					ws.send(JSON.stringify({ 
-						type: "resume_start", 
-						requestId: buffer.requestId, 
-						question: buffer.question,
-						completed: buffer.completed 
-					}));
+					ws.send(
+						JSON.stringify({
+							type: "resume_start",
+							requestId: buffer.requestId,
+							question: buffer.question,
+							completed: buffer.completed,
+						}),
+					);
 
 					// Replay all buffered events
 					for (const event of buffer.events) {
@@ -149,7 +151,10 @@ export const websocketHandler = {
 };
 
 // Broadcast to all connections for a session and buffer the event
-function broadcastAndBuffer(sessionId: string, event: { type: string; requestId: string; data?: unknown; error?: string }) {
+function broadcastAndBuffer(
+	sessionId: string,
+	event: { type: string; requestId: string; data?: unknown; error?: string },
+) {
 	// Buffer the event
 	const buffer = streamBuffers.get(sessionId);
 	if (buffer && !buffer.completed) {

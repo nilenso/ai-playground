@@ -11,8 +11,7 @@ export function wrapSession(session: Session, sessionId: string): Session {
 	if (!hasTitle && dbMessages.length > 0) {
 		const firstUserMsg = dbMessages.find((m) => m.role === "user");
 		if (firstUserMsg?.content) {
-			const title =
-				firstUserMsg.content.length > 80 ? `${firstUserMsg.content.slice(0, 77)}...` : firstUserMsg.content;
+			const title = firstUserMsg.content.length > 80 ? `${firstUserMsg.content.slice(0, 77)}...` : firstUserMsg.content;
 			updateSessionTitle(sessionId, title);
 			hasTitle = true;
 		}

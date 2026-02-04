@@ -78,9 +78,7 @@ export function useWebSocket({
 					// Finalize the streaming message
 					if (streamingMessageIdRef.current) {
 						setMessages((prev) =>
-							prev.map((msg) =>
-								msg.id === streamingMessageIdRef.current ? { ...msg, isStreaming: false } : msg,
-							),
+							prev.map((msg) => (msg.id === streamingMessageIdRef.current ? { ...msg, isStreaming: false } : msg)),
 						);
 					}
 					streamingMessageIdRef.current = null;
