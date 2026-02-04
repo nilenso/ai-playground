@@ -1678,6 +1678,39 @@
 			to { opacity: 0; }
 		}
 
+		/* Example Questions */
+		.example-questions {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 12px;
+			margin-top: 32px;
+		}
+
+		.example-question {
+			padding: 16px;
+			background: var(--bg-secondary);
+			border: 1px solid var(--border-subtle);
+			border-radius: 10px;
+			color: var(--text-secondary);
+			font-size: 14px;
+			font-family: inherit;
+			line-height: 1.5;
+			text-align: left;
+			cursor: pointer;
+			transition: border-color 0.2s, background 0.2s, color 0.2s;
+		}
+
+		.example-question:hover:not(:disabled) {
+			border-color: var(--accent-pink);
+			background: rgba(236, 72, 153, 0.04);
+			color: var(--text-primary);
+		}
+
+		.example-question:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
 	</style>
 </head>
 <body>

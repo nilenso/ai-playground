@@ -12,6 +12,12 @@ interface AskPhaseProps {
 	sidebarProps: React.ComponentProps<typeof Sidebar>;
 }
 
+const EXAMPLE_QUESTIONS = [
+	"Explain the architecture of this project",
+	"Show me how to use this project with an example",
+	"How can I quickly run this tool locally",
+];
+
 export function AskPhase({
 	connection,
 	inputValue,
@@ -22,6 +28,11 @@ export function AskPhase({
 	askTextareaRef,
 	sidebarProps,
 }: AskPhaseProps) {
+	const handleExampleClick = (question: string) => {
+		setInputValue(question);
+		askTextareaRef.current?.focus();
+	};
+
 	return (
 		<div className="app-container phase-ask">
 			<Sidebar {...sidebarProps} />
@@ -45,7 +56,16 @@ export function AskPhase({
 					</div>
 
 					<div className="repo-status">
-						<svg className="forge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+						<svg
+							className="forge-icon"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							aria-hidden="true"
+						>
 							<circle cx="12" cy="18" r="3" />
 							<circle cx="6" cy="6" r="3" />
 							<circle cx="18" cy="6" r="3" />
@@ -57,6 +77,20 @@ export function AskPhase({
 						<button type="button" className="disconnect-link" onClick={handleDisconnect}>
 							Disconnect
 						</button>
+					</div>
+
+					<div className="example-questions">
+						{EXAMPLE_QUESTIONS.map((question) => (
+							<button
+								key={question}
+								type="button"
+								className="example-question"
+								onClick={() => handleExampleClick(question)}
+								disabled={isAsking}
+							>
+								{question}
+							</button>
+						))}
 					</div>
 				</div>
 			</div>
