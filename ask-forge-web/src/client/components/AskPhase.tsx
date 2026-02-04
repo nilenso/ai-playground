@@ -7,7 +7,6 @@ interface AskPhaseProps {
 	setInputValue: (value: string) => void;
 	isAsking: boolean;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
-	handleSend: () => void;
 	handleDisconnect: () => void;
 	askTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
 	sidebarProps: React.ComponentProps<typeof Sidebar>;
@@ -25,7 +24,6 @@ export function AskPhase({
 	setInputValue,
 	isAsking,
 	handleKeyDown,
-	handleSend,
 	handleDisconnect,
 	askTextareaRef,
 	sidebarProps,
@@ -55,14 +53,6 @@ export function AskPhase({
 								rows={3}
 							/>
 						</div>
-						<button
-							type="button"
-							className="send-button"
-							onClick={handleSend}
-							disabled={isAsking || !inputValue.trim()}
-						>
-							{isAsking ? <span className="spinner small" /> : "Ask"}
-						</button>
 					</div>
 
 					<div className="repo-status">
