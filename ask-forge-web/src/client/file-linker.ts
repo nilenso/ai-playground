@@ -90,6 +90,26 @@ const KNOWN_EXTENSIONS = new Set([
  */
 const FILE_PATH_RE = /^\.?\/?(([\w@./-]+)\.(\w+))(?::(\d+))?$/;
 
+/**
+ * Check if text looks like a file path that should be linked to the repo.
+ *
+ * Excluded paths (not linked):
+ *   .crush/logs/crush.log   - hidden directory
+ *   .config/settings.json   - hidden directory
+ *   .github/workflows/ci.yml - hidden directory
+ *   .env                    - hidden file
+ *   .gitignore              - hidden file
+ *   ~/Documents/file.ts     - home directory path
+ *   ~/.config/settings.json - home directory path
+ *   ./src/index.ts          - relative path (ambiguous)
+ *   ./package.json          - relative path (ambiguous)
+ *
+ * Included paths (linked):
+ *   src/server.ts           - normal repo path
+ *   src/server.ts:42        - normal repo path with line number
+ *   package.json            - root file
+ *   lib/utils/helper.ts     - nested path
+ */
 function looksLikeFilePath(text: string): { filePath: string; line?: string } | null {
 	const match = text.match(FILE_PATH_RE);
 	if (!match) return null;
@@ -100,8 +120,8 @@ function looksLikeFilePath(text: string): { filePath: string; line?: string } | 
 
 	if (!fullPath || !extension) return null;
 
-	// Exclude paths that start with a dot (hidden/system directories like .crush/, .config/, etc.)
-	if (fullPath.startsWith(".")) return null;
+	// Exclude paths starting with: dot (hidden), tilde (home dir), or ./ (relative)
+	if (text.match(/^(\.[^/]|~|\.\/)/)) return null;
 
 	// Must either contain a "/" (clearly a path) or have a known file extension
 	const hasSlash = fullPath.includes("/");
