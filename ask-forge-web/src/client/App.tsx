@@ -273,10 +273,6 @@ export function App() {
 			setIsAsking(true);
 			setProgress({ type: "thinking" });
 
-			if (phase === "ask") {
-				setPhase("chat");
-			}
-
 			const userMessage: Message = {
 				id: `user-${Date.now()}`,
 				role: "user",
@@ -298,7 +294,6 @@ export function App() {
 		[
 			connection.sessionId,
 			isAsking,
-			phase,
 			generateRequestId,
 			connectWebSocket,
 			wsRef,
@@ -520,7 +515,6 @@ export function App() {
 				isAsking={isAsking}
 				handleKeyDown={handleKeyDown}
 				handleDisconnect={handleDisconnect}
-				handleAskQuestion={handleResend}
 				askTextareaRef={askTextareaRef}
 				sidebarProps={sidebarProps}
 			/>
