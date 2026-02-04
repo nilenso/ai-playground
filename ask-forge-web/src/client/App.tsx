@@ -514,6 +514,7 @@ export function App() {
 				setInputValue={setInputValue}
 				isAsking={isAsking}
 				handleKeyDown={handleKeyDown}
+				handleSend={handleSend}
 				handleDisconnect={handleDisconnect}
 				askTextareaRef={askTextareaRef}
 				sidebarProps={sidebarProps}
