@@ -100,6 +100,9 @@ function looksLikeFilePath(text: string): { filePath: string; line?: string } | 
 
 	if (!fullPath || !extension) return null;
 
+	// Exclude paths that start with a dot (hidden/system directories like .crush/, .config/, etc.)
+	if (fullPath.startsWith(".")) return null;
+
 	// Must either contain a "/" (clearly a path) or have a known file extension
 	const hasSlash = fullPath.includes("/");
 	const hasKnownExt = KNOWN_EXTENSIONS.has(extension);
