@@ -1,5 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import { sessions, sessionTimestamps } from "./api/index.ts";
+import { forceCompact } from "./lib/compaction.ts";
+import { createCompaction, getLatestCompaction } from "./lib/db.ts";
 
 interface WebSocketData {
 	sessionId: string | null;
@@ -221,6 +223,89 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 				error: "Session not found or expired",
 			}),
 		);
+		return;
+	}
+
+	// Handle /compact command
+	if (question.startsWith("/compact")) {
+		const customInstructions = question.slice("/compact".length).trim() || undefined;
+
+		// Initialize stream buffer
+		streamBuffers.set(sessionId, {
+			requestId,
+			sessionId,
+			question,
+			events: [],
+			completed: false,
+		});
+
+		broadcastAndBuffer(sessionId, { type: "progress", requestId, data: { type: "thinking" } });
+
+		try {
+			const currentMessages = session.getMessages();
+			const previousCompaction = getLatestCompaction(sessionId);
+			const compactionResult = await forceCompact(currentMessages, previousCompaction?.summary, customInstructions);
+
+			if (compactionResult.wasCompacted && compactionResult.summary) {
+				// Replace session messages with compacted version
+				session.replaceMessages(compactionResult.messages);
+
+				// Persist compaction to database
+				createCompaction({
+					sessionId,
+					summary: compactionResult.summary,
+					firstKeptOrdinal: compactionResult.firstKeptOrdinal,
+					tokensBefore: compactionResult.tokensBefore,
+					tokensAfter: compactionResult.tokensAfter,
+					readFiles: compactionResult.readFiles,
+					modifiedFiles: compactionResult.modifiedFiles,
+				});
+
+				// Send compaction notification
+				broadcastAndBuffer(sessionId, {
+					type: "progress",
+					requestId,
+					data: {
+						type: "compaction",
+						tokensBefore: compactionResult.tokensBefore,
+						tokensAfter: compactionResult.tokensAfter,
+						messagesSummarized: currentMessages.length - compactionResult.messages.length,
+					},
+				});
+
+				// Send done with compaction result
+				const doneEvent = {
+					type: "done",
+					requestId,
+					data: {
+						success: true,
+						response: `✅ Context compacted: ${compactionResult.tokensBefore.toLocaleString()} → ${compactionResult.tokensAfter.toLocaleString()} tokens (summarized ${currentMessages.length - compactionResult.messages.length} messages)`,
+						toolCalls: [],
+					},
+				};
+				broadcastAndBuffer(sessionId, doneEvent);
+			} else {
+				const doneEvent = {
+					type: "done",
+					requestId,
+					data: {
+						success: true,
+						response: "ℹ️ Nothing to compact - conversation is too short.",
+						toolCalls: [],
+					},
+				};
+				broadcastAndBuffer(sessionId, doneEvent);
+			}
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : "Unknown error";
+			broadcastAndBuffer(sessionId, { type: "error", requestId, error: `Compaction failed: ${errorMessage}` });
+		} finally {
+			const buffer = streamBuffers.get(sessionId);
+			if (buffer) {
+				buffer.completed = true;
+				buffer.completedAt = Date.now();
+			}
+		}
 		return;
 	}
 

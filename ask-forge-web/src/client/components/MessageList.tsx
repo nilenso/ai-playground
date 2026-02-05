@@ -218,6 +218,18 @@ export function MessageList({
 								Thinking
 							</>
 						)}
+						{progress.type === "compaction" && (
+							<>
+								<span className="compaction-icon">📝</span>
+								Compacting context...
+								{progress.tokensBefore && progress.tokensAfter && (
+									<span className="compaction-info">
+										{" "}
+										({progress.tokensBefore.toLocaleString()} → {progress.tokensAfter.toLocaleString()} tokens)
+									</span>
+								)}
+							</>
+						)}
 						{progress.type === "tool" && (
 							<>
 								<span className="tool-icon">&#8594;</span>

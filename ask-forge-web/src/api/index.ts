@@ -9,7 +9,9 @@ import {
 	deleteShareLink,
 	findOrCreateRepository,
 	getDb,
+	getLatestCompaction,
 	getMessagesBySession,
+	getNonCompactedMessages,
 	getRepositoryByGitUrl,
 	getSession,
 	getShareLink,
@@ -320,10 +322,12 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 		// Reconnect to the repository at the same commit
 		const session = wrapSession(await connect(repoRow.git_url, { commitish }), sessionId);
 
-		// Load messages from DB and restore them
-		const dbMessages = getMessagesBySession(sessionId);
-		if (dbMessages.length > 0) {
-			const messages = buildSessionContext(dbMessages);
+		// Load messages from DB and restore them, considering compaction
+		const compaction = getLatestCompaction(sessionId);
+		const dbMessages = compaction ? getNonCompactedMessages(sessionId) : getMessagesBySession(sessionId);
+
+		if (dbMessages.length > 0 || compaction) {
+			const messages = buildSessionContext(dbMessages, compaction);
 			session.replaceMessages(messages);
 		}
 

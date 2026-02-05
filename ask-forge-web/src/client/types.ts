@@ -20,11 +20,15 @@ export interface ConnectionState {
 }
 
 export interface ProgressState {
-	type: "idle" | "thinking" | "tool" | "responding";
+	type: "idle" | "thinking" | "tool" | "responding" | "compaction";
 	toolName?: string;
 	toolArgs?: Record<string, unknown>;
 	thinkingContent?: string;
 	textContent?: string;
+	// Compaction info
+	tokensBefore?: number;
+	tokensAfter?: number;
+	messagesSummarized?: number;
 }
 
 export interface AuthState {

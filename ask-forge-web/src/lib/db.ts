@@ -531,3 +531,99 @@ export function createUsageStats(params: {
 		inference_time_ms: params.inferenceTimeMs,
 	};
 }
+
+// ─── Compaction types and functions ──────────────────────────────────────────
+
+export interface DbCompaction {
+	id: number;
+	session_id: string;
+	summary: string;
+	first_kept_ordinal: number;
+	tokens_before: number | null;
+	tokens_after: number | null;
+	read_files: string | null;
+	modified_files: string | null;
+	created_at: string;
+}
+
+/**
+ * Create a compaction record and mark old messages as compacted
+ */
+export function createCompaction(params: {
+	sessionId: string;
+	summary: string;
+	firstKeptOrdinal: number;
+	tokensBefore?: number;
+	tokensAfter?: number;
+	readFiles?: string[];
+	modifiedFiles?: string[];
+}): DbCompaction {
+	const db = getDb();
+	const now = new Date().toISOString();
+
+	// Mark messages before firstKeptOrdinal as compacted
+	db.run("UPDATE messages SET compacted = 1 WHERE session_id = ? AND ordinal < ?", [
+		params.sessionId,
+		params.firstKeptOrdinal,
+	]);
+
+	// Insert compaction record
+	const result = db.run(
+		`INSERT INTO compactions (session_id, summary, first_kept_ordinal, tokens_before, tokens_after, read_files, modified_files, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		[
+			params.sessionId,
+			params.summary,
+			params.firstKeptOrdinal,
+			params.tokensBefore ?? null,
+			params.tokensAfter ?? null,
+			params.readFiles ? JSON.stringify(params.readFiles) : null,
+			params.modifiedFiles ? JSON.stringify(params.modifiedFiles) : null,
+			now,
+		],
+	);
+
+	return {
+		id: Number(result.lastInsertRowid),
+		session_id: params.sessionId,
+		summary: params.summary,
+		first_kept_ordinal: params.firstKeptOrdinal,
+		tokens_before: params.tokensBefore ?? null,
+		tokens_after: params.tokensAfter ?? null,
+		read_files: params.readFiles ? JSON.stringify(params.readFiles) : null,
+		modified_files: params.modifiedFiles ? JSON.stringify(params.modifiedFiles) : null,
+		created_at: now,
+	};
+}
+
+/**
+ * Get the latest compaction for a session (if any)
+ */
+export function getLatestCompaction(sessionId: string): DbCompaction | null {
+	const db = getDb();
+	return (
+		db
+			.query<DbCompaction, [string]>("SELECT * FROM compactions WHERE session_id = ? ORDER BY created_at DESC LIMIT 1")
+			.get(sessionId) || null
+	);
+}
+
+/**
+ * Get all compactions for a session, ordered by creation time
+ */
+export function getCompactionsBySession(sessionId: string): DbCompaction[] {
+	const db = getDb();
+	return db
+		.query<DbCompaction, [string]>("SELECT * FROM compactions WHERE session_id = ? ORDER BY created_at")
+		.all(sessionId);
+}
+
+/**
+ * Get non-compacted messages for a session (for restore after compaction)
+ */
+export function getNonCompactedMessages(sessionId: string): DbMessage[] {
+	const db = getDb();
+	return db
+		.query<DbMessage, [string]>("SELECT * FROM messages WHERE session_id = ? AND compacted = 0 ORDER BY ordinal")
+		.all(sessionId);
+}

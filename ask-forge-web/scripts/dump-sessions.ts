@@ -15,9 +15,9 @@
  */
 
 import { Database } from "bun:sqlite";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 
 const DB_PATH = process.env.DB_PATH || "./data/ask-forge.db";
 const outputDir = process.argv[2];
@@ -51,6 +51,15 @@ function generateId(): string {
 for (const session of sessions as any[]) {
 	const messages = db.query("SELECT * FROM messages WHERE session_id = ? ORDER BY ordinal ASC").all(session.id);
 	const repository = db.query("SELECT * FROM repositories WHERE id = ?").get(session.repository_id) as any;
+	const compactions = db
+		.query("SELECT * FROM compactions WHERE session_id = ? ORDER BY created_at ASC")
+		.all(session.id) as any[];
+
+	// Build a map of ordinal -> compaction (compaction applies BEFORE messages at first_kept_ordinal)
+	const compactionByFirstKeptOrdinal = new Map<number, any>();
+	for (const c of compactions) {
+		compactionByFirstKeptOrdinal.set(c.first_kept_ordinal, c);
+	}
 
 	const lines: string[] = [];
 	const sessionTimestamp = new Date(session.created_at).toISOString();
@@ -71,10 +80,39 @@ for (const session of sessions as any[]) {
 	// Track parent ID for tree structure (linear chain in this case)
 	let parentId: string | null = null;
 
+	// Track entry IDs by ordinal for compaction's firstKeptEntryId reference
+	const entryIdByOrdinal = new Map<number, string>();
+
 	// Convert each message to pi format SessionEntry
 	for (const msg of messages as any[]) {
 		const entryId = generateId();
 		const msgTimestamp = new Date(msg.created_at).toISOString();
+
+		// Store entry ID for this ordinal (needed for compaction's firstKeptEntryId)
+		entryIdByOrdinal.set(msg.ordinal, entryId);
+
+		// Check if there's a compaction that applies before this message
+		const compaction = compactionByFirstKeptOrdinal.get(msg.ordinal);
+		if (compaction) {
+			const compactionEntryId = generateId();
+			const compactionTimestamp = new Date(compaction.created_at).toISOString();
+
+			const compactionEntry = {
+				type: "compaction",
+				id: compactionEntryId,
+				parentId,
+				timestamp: compactionTimestamp,
+				summary: compaction.summary,
+				firstKeptEntryId: entryId, // Points to the message entry we're about to emit
+				tokensBefore: compaction.tokens_before || 0,
+				details: {
+					readFiles: compaction.read_files ? JSON.parse(compaction.read_files) : [],
+					modifiedFiles: compaction.modified_files ? JSON.parse(compaction.modified_files) : [],
+				},
+			};
+			lines.push(JSON.stringify(compactionEntry));
+			parentId = compactionEntryId;
+		}
 
 		if (msg.role === "user") {
 			// User message entry

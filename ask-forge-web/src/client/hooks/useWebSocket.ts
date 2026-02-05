@@ -144,7 +144,14 @@ export function useWebSocket({
 						]);
 					}
 
-					if (data.type === "thinking") {
+					if (data.type === "compaction") {
+						setProgress({
+							type: "compaction",
+							tokensBefore: data.tokensBefore,
+							tokensAfter: data.tokensAfter,
+							messagesSummarized: data.messagesSummarized,
+						});
+					} else if (data.type === "thinking") {
 						setProgress({ type: "thinking" });
 					} else if (data.type === "thinking_delta") {
 						streamingThinkingRef.current += data.delta;

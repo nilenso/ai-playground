@@ -1,5 +1,6 @@
 import type { Message } from "@nilenso/ask-forge";
-import type { DbMessage } from "./db.ts";
+import { createSummaryMessage } from "./compaction.ts";
+import type { DbCompaction, DbMessage } from "./db.ts";
 
 /**
  * Convert database messages back into pi-ai Message[] for session restoration.
@@ -9,8 +10,13 @@ import type { DbMessage } from "./db.ts";
  * - role "assistant" → AssistantMessage with content array (JSON-parsed from DB content column)
  * - role "tool" → ToolResultMessage with toolCallId, toolName, content, isError
  */
-export function buildSessionContext(dbMessages: DbMessage[]): Message[] {
+export function buildSessionContext(dbMessages: DbMessage[], compaction?: DbCompaction | null): Message[] {
 	const messages: Message[] = [];
+
+	// If there's a compaction, prepend the summary as a user message
+	if (compaction) {
+		messages.push(createSummaryMessage(compaction.summary));
+	}
 
 	for (const row of dbMessages) {
 		if (row.role === "user") {
@@ -21,7 +27,7 @@ export function buildSessionContext(dbMessages: DbMessage[]): Message[] {
 			});
 		} else if (row.role === "assistant") {
 			// The content column stores the full content array as JSON
-			let content;
+			let content: Array<{ type: string; text?: string; thinking?: string; [key: string]: unknown }>;
 			try {
 				content = JSON.parse(row.content ?? "[]");
 			} catch {

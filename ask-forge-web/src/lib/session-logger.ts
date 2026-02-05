@@ -1,6 +1,15 @@
 import type { Message } from "@mariozechner/pi-ai";
 import type { AskOptions, AskResult, Session } from "@nilenso/ask-forge";
-import { createMessage, getMessagesBySession, getSession, updateSessionStatus, updateSessionTitle } from "./db.ts";
+import { maybeCompact } from "./compaction.ts";
+import {
+	createCompaction,
+	createMessage,
+	getLatestCompaction,
+	getMessagesBySession,
+	getSession,
+	updateSessionStatus,
+	updateSessionTitle,
+} from "./db.ts";
 
 function persistMessage(sessionId: string, ordinal: number, msg: Message): void {
 	switch (msg.role) {
@@ -70,6 +79,49 @@ export function wrapSession(session: Session, sessionId: string): Session {
 				const title = question.length > 80 ? `${question.slice(0, 77)}...` : question;
 				updateSessionTitle(sessionId, title);
 				hasTitle = true;
+			}
+
+			// Check for compaction before asking (context might be too large)
+			// Include the new question in the token estimate since it will be added to context
+			try {
+				const currentMessages = session.getMessages();
+				const newQuestionMessage: Message = { role: "user", content: question, timestamp: Date.now() };
+				const messagesWithQuestion = [...currentMessages, newQuestionMessage];
+
+				const previousCompaction = getLatestCompaction(sessionId);
+				const compactionResult = await maybeCompact(messagesWithQuestion, previousCompaction?.summary);
+
+				if (compactionResult.wasCompacted && compactionResult.summary) {
+					// Replace session messages with compacted version
+					session.replaceMessages(compactionResult.messages);
+
+					// Persist compaction to database
+					createCompaction({
+						sessionId,
+						summary: compactionResult.summary,
+						firstKeptOrdinal: compactionResult.firstKeptOrdinal,
+						tokensBefore: compactionResult.tokensBefore,
+						tokensAfter: compactionResult.tokensAfter,
+						readFiles: compactionResult.readFiles,
+						modifiedFiles: compactionResult.modifiedFiles,
+					});
+
+					// Notify UI about compaction via progress callback
+					options?.onProgress?.({
+						type: "compaction" as never,
+						tokensBefore: compactionResult.tokensBefore,
+						tokensAfter: compactionResult.tokensAfter,
+						messagesSummarized: messagesWithQuestion.length - compactionResult.messages.length,
+					} as never);
+
+					console.log(`[compaction] Session ${sessionId} compacted`);
+				}
+			} catch (compactionError) {
+				// Compaction failed - mark session as error and terminate
+				console.error("[compaction] Error during compaction:", compactionError);
+				updateSessionStatus(sessionId, "error");
+				const errorMessage = compactionError instanceof Error ? compactionError.message : "Unknown compaction error";
+				throw new Error(`Compaction failed: ${errorMessage}. Session terminated due to context overflow risk.`);
 			}
 
 			try {
