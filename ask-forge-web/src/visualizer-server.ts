@@ -125,7 +125,13 @@ app.get("/api/session/:id", (c) => {
 		const asks: Array<{
 			timestamp: number;
 			question: string;
-			toolCalls: Array<{ type: string; id: string; name: string; arguments: Record<string, unknown> }>;
+			toolCalls: Array<{
+				type: string;
+				id: string;
+				name: string;
+				arguments: Record<string, unknown>;
+				result?: string;
+			}>;
 			response: string;
 			usage?: {
 				input: number;
@@ -139,6 +145,8 @@ app.get("/api/session/:id", (c) => {
 		}> = [];
 
 		let currentAsk: (typeof asks)[0] | null = null;
+		// Track which tool calls need results (by index in currentAsk.toolCalls)
+		let pendingToolCalls: Array<{ name: string; index: number }> = [];
 
 		for (const msg of messages) {
 			if (msg.role === "user") {
@@ -152,6 +160,7 @@ app.get("/api/session/:id", (c) => {
 					toolCalls: [],
 					response: "",
 				};
+				pendingToolCalls = [];
 			} else if (msg.role === "assistant" && currentAsk) {
 				// Parse content JSON array to extract tool calls and text
 				if (msg.content) {
@@ -160,12 +169,15 @@ app.get("/api/session/:id", (c) => {
 						if (Array.isArray(contentParts)) {
 							for (const part of contentParts) {
 								if (part.type === "toolCall") {
+									const index = currentAsk.toolCalls.length;
 									currentAsk.toolCalls.push({
 										type: part.type,
 										id: part.id || "",
 										name: part.name || "",
 										arguments: part.arguments || {},
 									});
+									// Queue this tool call to receive a result
+									pendingToolCalls.push({ name: part.name || "", index });
 								} else if (part.type === "text" && part.text) {
 									currentAsk.response += (currentAsk.response ? "\n" : "") + part.text;
 								}
@@ -179,7 +191,6 @@ app.get("/api/session/:id", (c) => {
 						currentAsk.response += (currentAsk.response ? "\n" : "") + msg.content;
 					}
 				}
-
 				// Attach usage stats if available
 				const usage = usageByMessageId.get(msg.id);
 				if (usage) {
@@ -197,6 +208,16 @@ app.get("/api/session/:id", (c) => {
 				const feedback = feedbackByMessageId.get(msg.id);
 				if (feedback) {
 					currentAsk.feedback = feedback;
+				}
+			} else if (msg.role === "tool" && currentAsk) {
+				// Match tool result to the first pending tool call with matching name
+				const toolName = msg.tool_name || "";
+				const pendingIndex = pendingToolCalls.findIndex((p) => p.name === toolName);
+				if (pendingIndex !== -1) {
+					const { index } = pendingToolCalls[pendingIndex];
+					currentAsk.toolCalls[index].result = msg.content || msg.tool_result || "";
+					// Remove from pending
+					pendingToolCalls.splice(pendingIndex, 1);
 				}
 			}
 		}

@@ -433,29 +433,77 @@
 
 		/* Tool calls */
 		.viz-tool-calls {
-			display: flex; flex-direction: column; gap: 8px; margin-left: 20px;
+			display: flex; flex-direction: column; gap: 4px; margin-left: 20px;
 		}
-		.viz-tool-header {
-			display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-			background: var(--bg-tertiary); border-radius: 6px; cursor: pointer;
-			user-select: none; font-size: 13px; color: var(--text-muted);
-		}
-		.viz-tool-toggle {
-			font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);
-		}
-		.viz-tool-count { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
 		.viz-tool-list {
-			display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
+			display: flex; flex-direction: column; gap: 4px;
 		}
 		.viz-tool-item {
-			padding: 8px 12px; background: var(--bg-tertiary); border-radius: 6px;
-			font-family: var(--font-mono); font-size: 12px;
+			background: var(--bg-secondary); border-radius: 8px;
+			border: 1px solid var(--border-subtle);
+			overflow: hidden;
 		}
-		.viz-tool-name { font-weight: 600; font-size: 13px; color: var(--accent-purple); }
-		.viz-tool-args {
-			display: block; margin-top: 6px; font-size: 12px; color: var(--text-muted);
-			white-space: pre-wrap; word-break: break-word;
+		.viz-tool-item-header {
+			display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+			background: none; border: none; width: 100%;
+			font-family: var(--font-mono); font-size: 13px; color: var(--text-primary);
+			text-align: left; cursor: default;
 		}
+		.viz-tool-item-header.has-result {
+			cursor: pointer;
+		}
+		.viz-tool-item-header.has-result:hover {
+			background: var(--bg-tertiary);
+		}
+		.viz-tool-toggle {
+			font-size: 10px; color: var(--text-muted);
+			width: 12px; text-align: center; flex-shrink: 0;
+		}
+		.viz-tool-name {
+			font-weight: 600; color: var(--accent-purple);
+			flex-shrink: 0;
+		}
+		.viz-tool-args-inline {
+			color: var(--text-secondary); font-size: 12px;
+			white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+		}
+		.viz-tool-details {
+			padding: 0 12px 12px 30px;
+			display: flex; flex-direction: column; gap: 6px;
+		}
+		.viz-tool-section-label {
+			font-size: 11px; font-weight: 600; text-transform: uppercase;
+			letter-spacing: 0.05em; color: var(--text-muted);
+			padding-top: 4px;
+		}
+		.viz-tool-code {
+			margin: 0; padding: 12px 14px; border-radius: 6px;
+			background: var(--bg-tertiary); font-family: var(--font-mono);
+			font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+			word-break: break-word; overflow-x: auto; max-height: 400px;
+			overflow-y: auto;
+		}
+		.viz-tool-result {
+			background: #1e1e2e; color: #cdd6f4;
+		}
+
+		/* Highlight.js theme overrides for tool results */
+		.viz-tool-result.hljs {
+			background: #1e1e2e;
+		}
+		.viz-tool-result .hljs-string { color: #a6e3a1; }
+		.viz-tool-result .hljs-number { color: #fab387; }
+		.viz-tool-result .hljs-literal { color: #f38ba8; }
+		.viz-tool-result .hljs-keyword { color: #cba6f7; }
+		.viz-tool-result .hljs-attr { color: #89b4fa; }
+		.viz-tool-result .hljs-punctuation { color: #6c7086; }
+		.viz-tool-result .hljs-comment { color: #6c7086; font-style: italic; }
+		.viz-tool-result .hljs-meta { color: #f9e2af; }
+		.viz-tool-result .hljs-built_in { color: #94e2d5; }
+		.viz-tool-result .hljs-title { color: #89b4fa; }
+		.viz-tool-result .hljs-type { color: #f9e2af; }
+		.viz-tool-result .hljs-params { color: #cdd6f4; }
+		.viz-tool-result .hljs-variable { color: #f5c2e7; }
 		.viz-metrics {
 			font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
 			font-weight: 400; margin-left: auto;

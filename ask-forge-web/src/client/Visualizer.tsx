@@ -1,3 +1,4 @@
+import hljs from "highlight.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createMarkedWithFileLinks } from "./file-linker.ts";
 
@@ -6,6 +7,7 @@ interface ToolCallRecord {
 	id: string;
 	name: string;
 	arguments: Record<string, unknown>;
+	result?: string;
 }
 
 interface AskEntry {
@@ -60,6 +62,45 @@ const STATUS_LABELS: Record<string, string> = {
 	error: "\u2717 Error",
 };
 
+// Format tool arguments for inline display
+function formatToolArgs(args: Record<string, unknown>): string {
+	const entries = Object.entries(args);
+	if (entries.length === 0) return "";
+	return entries
+		.map(([key, value]) => {
+			const strValue = typeof value === "string" ? `"${value}"` : JSON.stringify(value);
+			// Truncate long values
+			const displayValue = strValue.length > 50 ? `${strValue.slice(0, 47)}...` : strValue;
+			return `${key}: ${displayValue}`;
+		})
+		.join(", ");
+}
+
+// Try to detect and highlight tool results appropriately
+function highlightToolResult(result: string): string {
+	const trimmed = result.trim();
+
+	// Try JSON first
+	if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+		try {
+			JSON.parse(trimmed);
+			return hljs.highlight(trimmed, { language: "json" }).value;
+		} catch {
+			// Not valid JSON, continue
+		}
+	}
+
+	// For other content, use auto-detection or plain text
+	// hljs.highlightAuto can be slow on large content, so limit it
+	if (trimmed.length < 10000) {
+		const detected = hljs.highlightAuto(trimmed, ["bash", "json", "xml", "markdown", "plaintext"]);
+		return detected.value;
+	}
+
+	// For very large content, just escape and return
+	return trimmed.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export function Visualizer() {
 	const [sessions, setSessions] = useState<SessionSummary[]>([]);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -67,7 +108,7 @@ export function Visualizer() {
 	const [loadingFiles, setLoadingFiles] = useState(true);
 	const [loadingSession, setLoadingSession] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [expandedToolCalls, setExpandedToolCalls] = useState<Set<number>>(new Set());
+	const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
 
 	// Sidebar controls
 	const [searchQuery, setSearchQuery] = useState("");
@@ -196,13 +237,13 @@ export function Visualizer() {
 		return `${ms}ms`;
 	};
 
-	const toggleToolCalls = (index: number) => {
+	const toggleToolCalls = (key: string) => {
 		setExpandedToolCalls((prev) => {
 			const next = new Set(prev);
-			if (next.has(index)) {
-				next.delete(index);
+			if (next.has(key)) {
+				next.delete(key);
 			} else {
-				next.add(index);
+				next.add(key);
 			}
 			return next;
 		});
@@ -323,25 +364,43 @@ export function Visualizer() {
 									<div className="viz-msg-content">{ask.question}</div>
 								</div>
 
-								{/* Tool Calls - Collapsible */}
+								{/* Tool Calls - Each individually collapsible */}
 								{ask.toolCalls.length > 0 && (
 									<div className="viz-tool-calls">
-										<button type="button" className="viz-tool-header" onClick={() => toggleToolCalls(index)}>
-											<span className="viz-tool-toggle">{expandedToolCalls.has(index) ? "\u25BC" : "\u25B6"}</span>
-											<span className="viz-tool-count">
-												{ask.toolCalls.length} tool call{ask.toolCalls.length !== 1 ? "s" : ""}
-											</span>
-										</button>
-										{expandedToolCalls.has(index) && (
-											<div className="viz-tool-list">
-												{ask.toolCalls.map((tc, tcIndex) => (
-													<div key={`${index}-${tcIndex}`} className="viz-tool-item">
-														<span className="viz-tool-name">{tc.name}</span>
-														<code className="viz-tool-args">{JSON.stringify(tc.arguments, null, 2)}</code>
+										<div className="viz-tool-list">
+											{ask.toolCalls.map((tc, tcIndex) => {
+												const toolKey = `${index}-${tcIndex}`;
+												const isExpanded = expandedToolCalls.has(toolKey);
+												const hasResult = tc.result !== undefined;
+												return (
+													<div key={toolKey} className="viz-tool-item">
+														<button
+															type="button"
+															className={`viz-tool-item-header ${hasResult ? "has-result" : ""}`}
+															onClick={() => hasResult && toggleToolCalls(toolKey)}
+															disabled={!hasResult}
+														>
+															<span className="viz-tool-toggle">
+																{hasResult ? (isExpanded ? "\u25BC" : "\u25B6") : "\u2022"}
+															</span>
+															<span className="viz-tool-name">{tc.name}</span>
+															<span className="viz-tool-args-inline">{formatToolArgs(tc.arguments)}</span>
+														</button>
+														{isExpanded && hasResult && (
+															<div className="viz-tool-details">
+																<div className="viz-tool-section-label">Response</div>
+																<pre
+																	className="viz-tool-code viz-tool-result hljs"
+																	dangerouslySetInnerHTML={{
+																		__html: highlightToolResult(tc.result),
+																	}}
+																/>
+															</div>
+														)}
 													</div>
-												))}
-											</div>
-										)}
+												);
+											})}
+										</div>
 									</div>
 								)}
 
