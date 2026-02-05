@@ -87,3 +87,7 @@ The dump script exports compactions as pi-compatible `CompactionEntry`:
 ## Error Handling
 
 If compaction fails (e.g., API error), the session is marked as `error` and terminated. This prevents context overflow on the subsequent ask.
+
+## Known Limitations
+
+**Token estimation**: Uses a simple `chars/4` heuristic. Could be improved by using actual token usage from assistant responses (like pi does) for more accurate compaction timing.
