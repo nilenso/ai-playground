@@ -460,7 +460,7 @@
 			width: 12px; text-align: center; flex-shrink: 0;
 		}
 		.viz-tool-name {
-			font-weight: 600; color: var(--accent-purple);
+			font-weight: 600; color: var(--accent-pink);
 			flex-shrink: 0;
 		}
 		.viz-tool-args-inline {
@@ -513,6 +513,113 @@
 		}
 		.viz-action { display: inline-flex; padding: 4px 6px; color: var(--text-muted); }
 		.viz-action-active { display: inline-flex; padding: 4px 6px; color: var(--accent-pink); }
+		.viz-action-btn {
+			display: inline-flex; padding: 4px 6px; color: var(--text-muted);
+			background: none; border: none; cursor: pointer; border-radius: 4px;
+		}
+		.viz-action-btn:hover { background: var(--bg-tertiary); }
+		.viz-action-btn.has-annotation { color: var(--accent-pink); }
+
+		/* Annotation Box */
+		.viz-annotation-box {
+			margin-top: 16px;
+			background: var(--bg-primary);
+			border: 1px solid var(--border-subtle);
+			border-radius: 12px;
+			overflow: hidden;
+		}
+		.viz-annotation-header {
+			display: flex; align-items: center; justify-content: space-between;
+			padding: 12px 16px;
+			background: var(--bg-secondary);
+			border-bottom: 1px solid var(--border-subtle);
+		}
+		.viz-annotation-title {
+			font-weight: 600; font-size: 14px; color: var(--text-primary);
+		}
+		.viz-annotation-close {
+			background: none; border: none; cursor: pointer;
+			font-size: 20px; color: var(--text-muted); line-height: 1;
+			padding: 0 4px;
+		}
+		.viz-annotation-close:hover { color: var(--text-primary); }
+		.viz-annotation-content {
+			padding: 16px;
+			display: flex; flex-direction: column; gap: 16px;
+		}
+		.viz-annotation-question {
+			display: flex; flex-direction: column; gap: 8px;
+		}
+		.viz-annotation-question-text {
+			font-size: 14px; color: var(--text-primary); font-weight: 500;
+		}
+		.viz-annotation-buttons {
+			display: flex; gap: 8px;
+		}
+		.viz-yes-no-btn {
+			padding: 6px 16px;
+			font-size: 13px; font-weight: 500;
+			border: 1px solid var(--border-subtle);
+			border-radius: 8px;
+			background: var(--bg-primary);
+			color: var(--text-secondary);
+			cursor: pointer;
+			transition: all 0.15s ease;
+		}
+		.viz-yes-no-btn:hover {
+			border-color: var(--accent-pink);
+			color: var(--accent-pink);
+		}
+		.viz-yes-no-btn.selected {
+			background: var(--accent-pink);
+			border-color: var(--accent-pink);
+			color: white;
+		}
+		.viz-annotation-feedback {
+			display: flex; flex-direction: column; gap: 8px;
+		}
+		.viz-annotation-feedback-label {
+			font-size: 14px; color: var(--text-primary); font-weight: 500;
+		}
+		.viz-annotation-textarea {
+			width: 100%;
+			min-height: 80px;
+			padding: 12px;
+			font-family: var(--font-sans);
+			font-size: 14px;
+			border: 1px solid var(--border-subtle);
+			border-radius: 8px;
+			background: var(--bg-primary);
+			color: var(--text-primary);
+			resize: vertical;
+		}
+		.viz-annotation-textarea:focus {
+			outline: none;
+			border-color: var(--accent-pink);
+		}
+		.viz-annotation-textarea::placeholder {
+			color: var(--text-muted);
+		}
+		.viz-annotation-footer {
+			display: flex; justify-content: flex-end; padding-top: 4px;
+		}
+		.viz-annotation-save-btn {
+			padding: 8px 20px;
+			font-size: 14px; font-weight: 500;
+			background: var(--accent-pink);
+			color: white;
+			border: none;
+			border-radius: 8px;
+			cursor: pointer;
+			transition: background 0.15s ease;
+		}
+		.viz-annotation-save-btn:hover {
+			background: var(--accent-pink-hover);
+		}
+		.viz-annotation-save-btn:disabled {
+			opacity: 0.7;
+			cursor: not-allowed;
+		}
 	</style>
 </head>
 <body>

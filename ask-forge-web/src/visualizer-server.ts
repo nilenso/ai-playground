@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import type { DbMessage } from "./lib/db.ts";
-import { getDb } from "./lib/db.ts";
+import { getAnnotationsBySession, getDb, upsertAnnotation } from "./lib/db.ts";
 
 const app = new Hono();
 
@@ -121,6 +121,9 @@ app.get("/api/session/:id", (c) => {
 
 		const feedbackByMessageId = new Map(feedbackRows.map((f) => [f.message_id, f.feedback]));
 
+		// Get annotations for this session
+		const annotationsByAskIndex = getAnnotationsBySession(id);
+
 		// Reconstruct asks[] by pairing user messages with subsequent assistant messages
 		const asks: Array<{
 			timestamp: number;
@@ -142,6 +145,12 @@ app.get("/api/session/:id", (c) => {
 			};
 			inferenceTimeMs?: number;
 			feedback?: string;
+			annotation?: {
+				isRelevant: boolean | null;
+				isEvidenceSupported: boolean | null;
+				isClear: boolean | null;
+				feedbackText: string | null;
+			};
 		}> = [];
 
 		let currentAsk: (typeof asks)[0] | null = null;
@@ -227,6 +236,21 @@ app.get("/api/session/:id", (c) => {
 			asks.push(currentAsk);
 		}
 
+		// Attach annotations to asks (normalize SQLite 1/0 to boolean)
+		const toBool = (v: number | boolean | null): boolean | null =>
+			v === null ? null : v === 1 || v === true;
+		for (let i = 0; i < asks.length; i++) {
+			const annotation = annotationsByAskIndex.get(i);
+			if (annotation) {
+				asks[i].annotation = {
+					isRelevant: toBool(annotation.is_relevant),
+					isEvidenceSupported: toBool(annotation.is_evidence_supported),
+					isClear: toBool(annotation.is_clear),
+					feedbackText: annotation.feedback_text,
+				};
+			}
+		}
+
 		const sessionLog = {
 			sessionId: session.id,
 			repo: { url: session.git_url, commitish: session.default_commit },
@@ -242,6 +266,52 @@ app.get("/api/session/:id", (c) => {
 			{
 				success: false,
 				error: err instanceof Error ? err.message : "Failed to load session",
+			},
+			500,
+		);
+	}
+});
+
+// API to upsert an annotation for a specific response
+app.put("/api/session/:id/annotation/:askIndex", async (c) => {
+	const sessionId = c.req.param("id");
+	const askIndex = Number.parseInt(c.req.param("askIndex"), 10);
+
+	if (Number.isNaN(askIndex) || askIndex < 0) {
+		return c.json({ success: false, error: "Invalid askIndex" }, 400);
+	}
+
+	try {
+		const body = await c.req.json();
+		const { isRelevant, isEvidenceSupported, isClear, feedbackText } = body;
+
+		const annotation = upsertAnnotation({
+			sessionId,
+			askIndex,
+			isRelevant: isRelevant ?? null,
+			isEvidenceSupported: isEvidenceSupported ?? null,
+			isClear: isClear ?? null,
+			feedbackText: feedbackText ?? null,
+		});
+
+		// Normalize SQLite 1/0 to boolean
+		const toBool = (v: number | boolean | null): boolean | null =>
+			v === null ? null : v === 1 || v === true;
+
+		return c.json({
+			success: true,
+			annotation: {
+				isRelevant: toBool(annotation.is_relevant),
+				isEvidenceSupported: toBool(annotation.is_evidence_supported),
+				isClear: toBool(annotation.is_clear),
+				feedbackText: annotation.feedback_text,
+			},
+		});
+	} catch (err) {
+		return c.json(
+			{
+				success: false,
+				error: err instanceof Error ? err.message : "Failed to save annotation",
 			},
 			500,
 		);

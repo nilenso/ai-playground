@@ -10,6 +10,13 @@ interface ToolCallRecord {
 	result?: string;
 }
 
+interface Annotation {
+	isRelevant: boolean | null;
+	isEvidenceSupported: boolean | null;
+	isClear: boolean | null;
+	feedbackText: string | null;
+}
+
 interface AskEntry {
 	timestamp: number;
 	question: string;
@@ -25,6 +32,7 @@ interface AskEntry {
 	};
 	inferenceTimeMs?: number;
 	feedback?: "like" | "dislike";
+	annotation?: Annotation;
 }
 
 interface SessionLog {
@@ -101,6 +109,13 @@ function highlightToolResult(result: string): string {
 	return trimmed.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Annotation questions
+const ANNOTATION_QUESTIONS = {
+	isRelevant: "Is the response relevant to the question?",
+	isEvidenceSupported: "Are the claims supported by evidence?",
+	isClear: "Is the response clear and readable?",
+};
+
 export function Visualizer() {
 	const [sessions, setSessions] = useState<SessionSummary[]>([]);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -113,6 +128,12 @@ export function Visualizer() {
 	// Sidebar controls
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<Set<string>>(() => new Set(["active", "inactive", "error"]));
+
+	// Annotation state
+	const [openAnnotationIndex, setOpenAnnotationIndex] = useState<number | null>(null);
+	const [annotationDrafts, setAnnotationDrafts] = useState<Map<number, Annotation>>(new Map());
+	const [savingAnnotation, setSavingAnnotation] = useState<number | null>(null);
+	const [savedAnnotation, setSavedAnnotation] = useState<number | null>(null);
 
 	// Create a marked instance that links file paths to the forge
 	const markedWithLinks = useMemo(
@@ -247,6 +268,72 @@ export function Visualizer() {
 			}
 			return next;
 		});
+	};
+
+	// Get annotation for an ask (from draft or session data)
+	const getAnnotation = (askIndex: number): Annotation => {
+		const draft = annotationDrafts.get(askIndex);
+		if (draft) return draft;
+		const saved = session?.asks[askIndex]?.annotation;
+		return saved ?? { isRelevant: null, isEvidenceSupported: null, isClear: null, feedbackText: null };
+	};
+
+	// Check if an ask has any annotation data
+	const hasAnnotation = (askIndex: number): boolean => {
+		const ann = getAnnotation(askIndex);
+		return ann.isRelevant !== null || ann.isEvidenceSupported !== null || ann.isClear !== null || !!ann.feedbackText;
+	};
+
+	// Update annotation draft
+	const updateAnnotationDraft = (askIndex: number, updates: Partial<Annotation>) => {
+		setAnnotationDrafts((prev) => {
+			const next = new Map(prev);
+			const current = getAnnotation(askIndex);
+			next.set(askIndex, { ...current, ...updates });
+			return next;
+		});
+	};
+
+	// Save annotation to server
+	const saveAnnotation = async (askIndex: number) => {
+		if (!selectedId) return;
+		const annotation = getAnnotation(askIndex);
+		setSavingAnnotation(askIndex);
+		setSavedAnnotation(null);
+		try {
+			const res = await fetch(`/api/session/${encodeURIComponent(selectedId)}/annotation/${askIndex}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(annotation),
+			});
+			const data = await res.json();
+			if (data.success) {
+				// Update session with saved annotation
+				setSession((prev) => {
+					if (!prev) return prev;
+					const asks = [...prev.asks];
+					asks[askIndex] = { ...asks[askIndex], annotation: data.annotation };
+					return { ...prev, asks };
+				});
+				// Clear draft
+				setAnnotationDrafts((prev) => {
+					const next = new Map(prev);
+					next.delete(askIndex);
+					return next;
+				});
+				setSavedAnnotation(askIndex);
+				setTimeout(() => setSavedAnnotation(null), 2000);
+			}
+		} catch (err) {
+			console.error("Failed to save annotation:", err);
+		} finally {
+			setSavingAnnotation(null);
+		}
+	};
+
+	// Toggle annotation panel
+	const toggleAnnotation = (askIndex: number) => {
+		setOpenAnnotationIndex((prev) => (prev === askIndex ? null : askIndex));
 	};
 
 	return (
@@ -429,29 +516,11 @@ export function Visualizer() {
 										/>
 									)}
 									<div className="viz-msg-actions">
-										<span className={ask.feedback === "like" ? "viz-action-active" : "viz-action"} title="Thumbs up">
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												strokeWidth={1.5}
-												stroke="currentColor"
-												width={16}
-												height={16}
-												role="img"
-												aria-label="Thumbs up"
-											>
-												<title>Thumbs up</title>
-												<path
-													strokeLinecap="round"
-													strokeLinejoin="round"
-													d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H3.75"
-												/>
-											</svg>
-										</span>
-										<span
-											className={ask.feedback === "dislike" ? "viz-action-active" : "viz-action"}
-											title="Thumbs down"
+										<button
+											type="button"
+											className={`viz-action-btn ${hasAnnotation(index) ? "has-annotation" : ""}`}
+											onClick={() => toggleAnnotation(index)}
+											title="Add annotation"
 										>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
@@ -462,17 +531,122 @@ export function Visualizer() {
 												width={16}
 												height={16}
 												role="img"
-												aria-label="Thumbs down"
+												aria-label="Annotate"
 											>
-												<title>Thumbs down</title>
+												<title>Annotate</title>
 												<path
 													strokeLinecap="round"
 													strokeLinejoin="round"
-													d="M17.367 13.75c-.806 0-1.533.446-2.031 1.08a9.041 9.041 0 0 1-2.861 2.4c-.723.384-1.35.956-1.653 1.715a4.498 4.498 0 0 0-.322 1.672v.633a.75.75 0 0 1-.75.75 2.25 2.25 0 0 1-2.25-2.25c0-1.152.26-2.243.723-3.218.266-.558-.107-1.282-.725-1.282m0 0H4.372c-1.026 0-1.945-.694-2.054-1.715A12.134 12.134 0 0 1 2.25 12c0-2.848.992-5.464 2.649-7.521C5.287 3.997 5.886 3.75 6.504 3.75h4.016c.483 0 .964.078 1.423.23l3.114 1.04a4.501 4.501 0 0 0 1.423.23h2.27"
+													d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
 												/>
 											</svg>
-										</span>
+										</button>
 									</div>
+
+									{/* Annotation Box */}
+									{openAnnotationIndex === index && (
+										<div className="viz-annotation-box">
+											<div className="viz-annotation-header">
+												<span className="viz-annotation-title">📝 Annotation</span>
+												<button
+													type="button"
+													className="viz-annotation-close"
+													onClick={() => setOpenAnnotationIndex(null)}
+												>
+													×
+												</button>
+											</div>
+											<div className="viz-annotation-content">
+												{/* Question 1: Relevant */}
+												<div className="viz-annotation-question">
+													<span className="viz-annotation-question-text">{ANNOTATION_QUESTIONS.isRelevant}</span>
+													<div className="viz-annotation-buttons">
+														<button
+															type="button"
+															className={`viz-yes-no-btn ${getAnnotation(index).isRelevant === true ? "selected" : ""}`}
+															onClick={() => updateAnnotationDraft(index, { isRelevant: true })}
+														>
+															Yes
+														</button>
+														<button
+															type="button"
+															className={`viz-yes-no-btn ${getAnnotation(index).isRelevant === false ? "selected" : ""}`}
+															onClick={() => updateAnnotationDraft(index, { isRelevant: false })}
+														>
+															No
+														</button>
+													</div>
+												</div>
+
+												{/* Question 2: Evidence */}
+												<div className="viz-annotation-question">
+													<span className="viz-annotation-question-text">
+														{ANNOTATION_QUESTIONS.isEvidenceSupported}
+													</span>
+													<div className="viz-annotation-buttons">
+														<button
+															type="button"
+															className={`viz-yes-no-btn ${getAnnotation(index).isEvidenceSupported === true ? "selected" : ""}`}
+															onClick={() => updateAnnotationDraft(index, { isEvidenceSupported: true })}
+														>
+															Yes
+														</button>
+														<button
+															type="button"
+															className={`viz-yes-no-btn ${getAnnotation(index).isEvidenceSupported === false ? "selected" : ""}`}
+															onClick={() => updateAnnotationDraft(index, { isEvidenceSupported: false })}
+														>
+															No
+														</button>
+													</div>
+												</div>
+
+												{/* Question 3: Clear */}
+												<div className="viz-annotation-question">
+													<span className="viz-annotation-question-text">{ANNOTATION_QUESTIONS.isClear}</span>
+													<div className="viz-annotation-buttons">
+														<button
+															type="button"
+															className={`viz-yes-no-btn ${getAnnotation(index).isClear === true ? "selected" : ""}`}
+															onClick={() => updateAnnotationDraft(index, { isClear: true })}
+														>
+															Yes
+														</button>
+														<button
+															type="button"
+															className={`viz-yes-no-btn ${getAnnotation(index).isClear === false ? "selected" : ""}`}
+															onClick={() => updateAnnotationDraft(index, { isClear: false })}
+														>
+															No
+														</button>
+													</div>
+												</div>
+
+												{/* Feedback text */}
+												<div className="viz-annotation-feedback">
+													<label className="viz-annotation-feedback-label">Additional feedback</label>
+													<textarea
+														className="viz-annotation-textarea"
+														placeholder="Add your notes here..."
+														value={getAnnotation(index).feedbackText || ""}
+														onChange={(e) => updateAnnotationDraft(index, { feedbackText: e.target.value })}
+													/>
+												</div>
+
+												{/* Save button */}
+												<div className="viz-annotation-footer">
+													<button
+														type="button"
+														className="viz-annotation-save-btn"
+														onClick={() => saveAnnotation(index)}
+														disabled={savingAnnotation === index}
+													>
+														{savingAnnotation === index ? "Saving..." : savedAnnotation === index ? "Saved ✓" : "Save"}
+													</button>
+												</div>
+											</div>
+										</div>
+									)}
 								</div>
 							</div>
 						))}

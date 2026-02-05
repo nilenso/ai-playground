@@ -627,3 +627,71 @@ export function getNonCompactedMessages(sessionId: string): DbMessage[] {
 		.query<DbMessage, [string]>("SELECT * FROM messages WHERE session_id = ? AND compacted = 0 ORDER BY ordinal")
 		.all(sessionId);
 }
+
+// ─── Response annotation types and functions ─────────────────────────────────
+
+export interface DbResponseAnnotation {
+	id: number;
+	session_id: string;
+	ask_index: number;
+	is_relevant: boolean | null;
+	is_evidence_supported: boolean | null;
+	is_clear: boolean | null;
+	feedback_text: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+/**
+ * Get all annotations for a session, keyed by ask_index
+ */
+export function getAnnotationsBySession(sessionId: string): Map<number, DbResponseAnnotation> {
+	const db = getDb();
+	const rows = db
+		.query<DbResponseAnnotation, [string]>("SELECT * FROM response_annotations WHERE session_id = ?")
+		.all(sessionId);
+	return new Map(rows.map((r) => [r.ask_index, r]));
+}
+
+/**
+ * Upsert an annotation for a specific response in a session
+ */
+export function upsertAnnotation(params: {
+	sessionId: string;
+	askIndex: number;
+	isRelevant?: boolean | null;
+	isEvidenceSupported?: boolean | null;
+	isClear?: boolean | null;
+	feedbackText?: string | null;
+}): DbResponseAnnotation {
+	const db = getDb();
+	const now = new Date().toISOString();
+
+	db.run(
+		`INSERT INTO response_annotations (session_id, ask_index, is_relevant, is_evidence_supported, is_clear, feedback_text, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(session_id, ask_index) DO UPDATE SET
+		   is_relevant = excluded.is_relevant,
+		   is_evidence_supported = excluded.is_evidence_supported,
+		   is_clear = excluded.is_clear,
+		   feedback_text = excluded.feedback_text,
+		   updated_at = excluded.updated_at`,
+		[
+			params.sessionId,
+			params.askIndex,
+			params.isRelevant ?? null,
+			params.isEvidenceSupported ?? null,
+			params.isClear ?? null,
+			params.feedbackText ?? null,
+			now,
+			now,
+		],
+	);
+
+	const row = db
+		.query<DbResponseAnnotation, [string, number]>(
+			"SELECT * FROM response_annotations WHERE session_id = ? AND ask_index = ?",
+		)
+		.get(params.sessionId, params.askIndex);
+	return row as DbResponseAnnotation;
+}
