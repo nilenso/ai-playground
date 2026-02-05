@@ -1,0 +1,43 @@
+{
+	"session": {
+		"id": "902e256b-20ad-44b9-8d8b-7a65d6e355a2",
+		"user_id": 1,
+		"repository_id": 1,
+		"checkout_id": 1,
+		"title": null,
+		"status": "inactive",
+		"created_at": "2026-02-03T02:20:51.705Z",
+		"ended_at": "2026-02-03T02:37:11.832Z"
+	},
+	"user": {
+		"id": 1,
+		"username": "neenaoffline",
+		"display_name": "Ravi Chandra Padmala",
+		"email": null,
+		"avatar_url": "https://avatars.githubusercontent.com/u/303535?v=4",
+		"created_at": "2026-02-03T02:05:28.265Z",
+		"updated_at": "2026-02-03T02:05:28.290Z"
+	},
+	"repository": {
+		"id": 1,
+		"user_input_url": "https://github.com/neenaoffline/litem8",
+		"git_url": "https://github.com/neenaoffline/litem8.git",
+		"default_commit": "bc2ffafe5b0a5a02287b81009bdeb586020a5ec6",
+		"summary": null,
+		"repository_name": "litem8",
+		"username_or_organization": "neenaoffline",
+		"forge_domain": "github.com",
+		"created_at": "2026-02-03T02:12:41.891Z",
+		"summary_last_computed_at": null,
+		"summary_last_computed_for": null
+	},
+	"checkout": {
+		"id": 1,
+		"repository_id": 1,
+		"commit_id": "bc2ffafe5b0a5a02287b81009bdeb586020a5ec6",
+		"short_id": "bc2ffaf",
+		"created_at": "2026-02-03T02:12:41.896Z"
+	},
+	"messages": [],
+	"share_links": []
+}

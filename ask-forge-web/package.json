@@ -7,9 +7,9 @@
 		"build": "bun build src/client/index.tsx --outdir public --minify",
 		"dev:visualizer": "bun run build:visualizer && bun run --hot src/visualizer-server.ts",
 		"build:visualizer": "bun build src/client/visualizer-index.tsx --outfile public/visualizer.js --minify",
-		"format": "biome format --write .",
-		"lint": "biome lint .",
-		"check": "biome check --write ."
+		"format": "bunx biome format --write .",
+		"lint": "bunx biome lint .",
+		"check": "bunx biome check --write ."
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.11",
