@@ -1,22 +1,29 @@
 #!/usr/bin/env bun
 /**
- * Dump all sessions from the ask-forge-web database into individual JSON files.
+ * Dump all sessions from the ask-forge-web database into pi-compatible JSONL files.
  *
  * Usage:
  *   bun scripts/dump-sessions.ts <output-dir>
  *   bun scripts/dump-sessions.ts sessions-feb3
  *
- * Each session is written as <session-id>.json containing the session metadata,
- * user, repository, checkout, messages (ordered by ordinal), usage stats,
- * feedback, and share links.
+ * Each session is written as {timestamp}_{session-id}.jsonl in pi session format:
+ * - Line 1: SessionHeader (type: "session", version, id, timestamp, cwd)
+ * - Subsequent lines: SessionEntry with id, parentId, timestamp, and type-specific fields
+ *
+ * Pi session format uses a tree structure where each entry has an id and parentId,
+ * forming a linked list (or tree for branched sessions).
  */
 
 import { Database } from "bun:sqlite";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 
 const DB_PATH = process.env.DB_PATH || "./data/ask-forge.db";
 const outputDir = process.argv[2];
+
+// Current pi session format version
+const SESSION_VERSION = 3;
 
 if (!outputDir) {
 	console.error("Usage: bun scripts/dump-sessions.ts <output-dir>");
@@ -36,44 +43,139 @@ if (sessions.length === 0) {
 
 console.log(`Found ${sessions.length} session(s). Dumping to ${outputDir}/...`);
 
+/** Generate a short ID (8 hex chars) for entry IDs */
+function generateId(): string {
+	return randomUUID().slice(0, 8);
+}
+
 for (const session of sessions as any[]) {
-	const user = db.query("SELECT * FROM users WHERE id = ?").get(session.user_id);
-
-	const repository = db.query("SELECT * FROM repositories WHERE id = ?").get(session.repository_id);
-
-	const checkout = session.checkout_id
-		? db.query("SELECT * FROM checkouts WHERE id = ?").get(session.checkout_id)
-		: null;
-
 	const messages = db.query("SELECT * FROM messages WHERE session_id = ? ORDER BY ordinal ASC").all(session.id);
+	const repository = db.query("SELECT * FROM repositories WHERE id = ?").get(session.repository_id) as any;
 
-	// Attach feedback and usage stats to each message
-	const messagesWithDetails = (messages as any[]).map((msg) => {
-		const feedback = db.query("SELECT feedback FROM message_feedback WHERE message_id = ?").get(msg.id);
-		const usage = db.query("SELECT * FROM usage_stats WHERE message_id = ?").get(msg.id);
+	const lines: string[] = [];
+	const sessionTimestamp = new Date(session.created_at).toISOString();
 
-		return {
-			...msg,
-			feedback: feedback ? (feedback as any).feedback : null,
-			usage_stats: usage || null,
-		};
-	});
+	// Construct cwd from repository info
+	const cwd = repository ? `/checkouts/${repository.username_or_organization}/${repository.repository_name}` : "/";
 
-	const shareLinks = db.query("SELECT * FROM share_links WHERE session_id = ?").all(session.id);
-
-	const dump = {
-		session,
-		user,
-		repository,
-		checkout,
-		messages: messagesWithDetails,
-		share_links: shareLinks,
+	// Session header (first line)
+	const header = {
+		type: "session",
+		version: SESSION_VERSION,
+		id: session.id,
+		timestamp: sessionTimestamp,
+		cwd,
 	};
+	lines.push(JSON.stringify(header));
 
-	const filename = `${session.id}.json`;
+	// Track parent ID for tree structure (linear chain in this case)
+	let parentId: string | null = null;
+
+	// Convert each message to pi format SessionEntry
+	for (const msg of messages as any[]) {
+		const entryId = generateId();
+		const msgTimestamp = new Date(msg.created_at).toISOString();
+
+		if (msg.role === "user") {
+			// User message entry
+			const entry = {
+				type: "message",
+				id: entryId,
+				parentId,
+				timestamp: msgTimestamp,
+				message: {
+					role: "user",
+					content: [{ type: "text", text: msg.content }],
+					timestamp: new Date(msg.created_at).getTime(),
+				},
+			};
+			lines.push(JSON.stringify(entry));
+			parentId = entryId;
+		} else if (msg.role === "assistant") {
+			// Assistant message - content is already JSON array of content blocks
+			let content: any[];
+			try {
+				content = JSON.parse(msg.content);
+			} catch {
+				content = [{ type: "text", text: msg.content }];
+			}
+
+			// Get usage stats if available
+			const usage = db.query("SELECT * FROM usage_stats WHERE message_id = ?").get(msg.id) as any;
+
+			// Determine stopReason based on whether there are tool calls
+			const hasToolCalls = content.some((block: any) => block.type === "toolCall");
+			const stopReason = hasToolCalls ? "toolUse" : "stop";
+
+			const entry = {
+				type: "message",
+				id: entryId,
+				parentId,
+				timestamp: msgTimestamp,
+				message: {
+					role: "assistant",
+					content,
+					api: "anthropic-messages" as const,
+					provider: "anthropic",
+					model: "claude-sonnet-4-20250514", // Default, we don't store this in DB
+					usage: usage
+						? {
+								input: usage.input_tokens || 0,
+								output: usage.output_tokens || 0,
+								cacheRead: usage.cache_read_tokens || 0,
+								cacheWrite: usage.cache_write_tokens || 0,
+								totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
+								cost: {
+									input: usage.input_cost || 0,
+									output: usage.output_cost || 0,
+									cacheRead: usage.cache_read_cost || 0,
+									cacheWrite: usage.cache_write_cost || 0,
+									total: usage.total_cost || 0,
+								},
+							}
+						: {
+								input: 0,
+								output: 0,
+								cacheRead: 0,
+								cacheWrite: 0,
+								totalTokens: 0,
+								cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+							},
+					stopReason,
+					timestamp: new Date(msg.created_at).getTime(),
+				},
+			};
+			lines.push(JSON.stringify(entry));
+			parentId = entryId;
+		} else if (msg.role === "tool") {
+			// Tool result message entry
+			const entry = {
+				type: "message",
+				id: entryId,
+				parentId,
+				timestamp: msgTimestamp,
+				message: {
+					role: "toolResult",
+					toolCallId: msg.tool_arguments, // tool_arguments stores the tool call ID
+					toolName: msg.tool_name,
+					content: [{ type: "text", text: msg.tool_result || msg.content }],
+					isError: false,
+					timestamp: new Date(msg.created_at).getTime(),
+				},
+			};
+			lines.push(JSON.stringify(entry));
+			parentId = entryId;
+		}
+	}
+
+	// Generate filename in pi format: {timestamp}_{session-id}.jsonl
+	// Convert timestamp to filename-safe format: 2025-12-25T08-26-00-961Z
+	const filenameTimestamp = sessionTimestamp.replace(/:/g, "-").replace(/\./g, "-");
+	const filename = `${filenameTimestamp}_${session.id}.jsonl`;
 	const filepath = join(outputDir, filename);
-	writeFileSync(filepath, JSON.stringify(dump, null, 2));
-	console.log(`  ${filename} (${messagesWithDetails.length} messages)`);
+
+	writeFileSync(filepath, lines.join("\n") + "\n");
+	console.log(`  ${filename} (${messages.length} messages)`);
 }
 
 db.close();
