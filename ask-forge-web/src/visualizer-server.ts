@@ -272,6 +272,146 @@ app.get("/api/session/:id", (c) => {
 	}
 });
 
+// API to export session as pi-agent JSONL format
+app.get("/api/session/:id/export", (c) => {
+	const id = c.req.param("id");
+
+	try {
+		const db = getDb();
+
+		// Get session + repository info
+		const session = db
+			.query<
+				{
+					id: string;
+					created_at: string;
+					git_url: string;
+				},
+				[string]
+			>(
+				`SELECT s.id, s.created_at, r.git_url
+				 FROM sessions s
+				 JOIN repositories r ON s.repository_id = r.id
+				 WHERE s.id = ?`,
+			)
+			.get(id);
+
+		if (!session) {
+			return c.json({ success: false, error: "Session not found" }, 404);
+		}
+
+		// Get messages ordered by ordinal
+		const messages = db
+			.query<DbMessage, [string]>("SELECT * FROM messages WHERE session_id = ? ORDER BY ordinal")
+			.all(id);
+
+		// Build JSONL lines in pi-agent format
+		const lines: string[] = [];
+
+		// Session header
+		lines.push(
+			JSON.stringify({
+				type: "session",
+				version: 3,
+				id: session.id,
+				timestamp: new Date(session.created_at).toISOString(),
+				cwd: session.git_url,
+			}),
+		);
+
+		// Generate short IDs for messages
+		const generateId = () => Math.random().toString(16).slice(2, 10);
+		let parentId: string | null = null;
+
+		for (const msg of messages) {
+			const msgId = generateId();
+
+			if (msg.role === "user") {
+				lines.push(
+					JSON.stringify({
+						type: "message",
+						id: msgId,
+						parentId,
+						timestamp: new Date(msg.created_at).toISOString(),
+						message: {
+							role: "user",
+							content: [{ type: "text", text: msg.content || "" }],
+							timestamp: new Date(msg.created_at).getTime(),
+						},
+					}),
+				);
+				parentId = msgId;
+			} else if (msg.role === "assistant") {
+				// Parse content JSON to get tool calls and text
+				let content: Array<{ type: string; text?: string; id?: string; name?: string; arguments?: unknown }> = [];
+				if (msg.content) {
+					try {
+						const parsed = JSON.parse(msg.content);
+						if (Array.isArray(parsed)) {
+							content = parsed;
+						} else {
+							content = [{ type: "text", text: msg.content }];
+						}
+					} catch {
+						content = [{ type: "text", text: msg.content }];
+					}
+				}
+
+				lines.push(
+					JSON.stringify({
+						type: "message",
+						id: msgId,
+						parentId,
+						timestamp: new Date(msg.created_at).toISOString(),
+						message: {
+							role: "assistant",
+							content,
+							timestamp: new Date(msg.created_at).getTime(),
+						},
+					}),
+				);
+				parentId = msgId;
+			} else if (msg.role === "tool") {
+				lines.push(
+					JSON.stringify({
+						type: "message",
+						id: msgId,
+						parentId,
+						timestamp: new Date(msg.created_at).toISOString(),
+						message: {
+							role: "toolResult",
+							toolCallId: msg.tool_arguments || "",
+							toolName: msg.tool_name || "",
+							content: [{ type: "text", text: msg.content || msg.tool_result || "" }],
+							isError: false,
+							timestamp: new Date(msg.created_at).getTime(),
+						},
+					}),
+				);
+				parentId = msgId;
+			}
+		}
+
+		// Return as JSONL file download
+		const filename = `session-${session.id}.jsonl`;
+		const body = lines.join("\n") + "\n";
+		return new Response(body, {
+			headers: {
+				"Content-Type": "application/x-ndjson",
+				"Content-Disposition": `attachment; filename="${filename}"`,
+			},
+		});
+	} catch (err) {
+		return c.json(
+			{
+				success: false,
+				error: err instanceof Error ? err.message : "Failed to export session",
+			},
+			500,
+		);
+	}
+});
+
 // API to upsert an annotation for a specific response
 app.put("/api/session/:id/annotation/:askIndex", async (c) => {
 	const sessionId = c.req.param("id");

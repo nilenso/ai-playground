@@ -322,7 +322,10 @@ export function Visualizer() {
 					return next;
 				});
 				setSavedAnnotation(askIndex);
-				setTimeout(() => setSavedAnnotation(null), 2000);
+				setTimeout(() => {
+					setSavedAnnotation(null);
+					setOpenAnnotationIndex(null);
+				}, 800);
 			}
 		} catch (err) {
 			console.error("Failed to save annotation:", err);
@@ -424,15 +427,14 @@ export function Visualizer() {
 							<code className="viz-commit-badge">{session.repo.commitish.slice(0, 8)}</code>
 							<span className="viz-session-meta">{formatTime(session.startedAt)}</span>
 							<span className="viz-session-meta">Duration: {formatDuration(session.startedAt, session.endedAt)}</span>
-							<span
-								className="viz-end-badge"
-								style={{
-									backgroundColor: STATUS_COLORS[session.endReason]?.bg,
-									color: STATUS_COLORS[session.endReason]?.fg,
-								}}
+							<span className="viz-session-meta">Session: {session.sessionId}</span>
+							<a
+								href={`/api/session/${encodeURIComponent(session.sessionId)}/export`}
+								className="viz-export-btn"
+								download
 							>
-								{STATUS_LABELS[session.endReason] ?? session.endReason}
-							</span>
+								Export JSON
+							</a>
 						</div>
 					)}
 
