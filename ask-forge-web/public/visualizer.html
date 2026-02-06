@@ -126,6 +126,34 @@
 			text-decoration: underline;
 		}
 
+		.markdown-content table {
+			width: 100%;
+			border-collapse: collapse;
+			margin: 16px 0;
+			font-size: 14px;
+		}
+
+		.markdown-content th,
+		.markdown-content td {
+			padding: 10px 14px;
+			text-align: left;
+			border: 1px solid var(--border-subtle);
+		}
+
+		.markdown-content th {
+			background: var(--bg-tertiary);
+			font-weight: 600;
+			color: var(--text-primary);
+		}
+
+		.markdown-content tr:nth-child(even) td {
+			background: var(--bg-secondary);
+		}
+
+		.markdown-content tbody tr:hover td {
+			background: rgba(236, 72, 153, 0.04);
+		}
+
 		/* Scrollbar Styling */
 		::-webkit-scrollbar {
 			width: 8px;
