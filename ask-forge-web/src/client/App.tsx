@@ -56,6 +56,7 @@ export function App() {
 	const messagesContainerRef = useRef<HTMLDivElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const shouldAutoScrollRef = useRef(true);
+	const isProgrammaticScrollRef = useRef(false);
 	const phaseRef = useRef(phase);
 	phaseRef.current = phase;
 
@@ -341,6 +342,7 @@ export function App() {
 	}, []);
 
 	const handleMessagesScroll = useCallback(() => {
+		if (isProgrammaticScrollRef.current) return;
 		const container = messagesContainerRef.current;
 		if (!container) return;
 		const { scrollTop, scrollHeight, clientHeight } = container;
@@ -443,8 +445,12 @@ export function App() {
 
 	// Auto-scroll to bottom when messages change
 	useEffect(() => {
-		if (shouldAutoScrollRef.current) {
-			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+		if (shouldAutoScrollRef.current && messagesEndRef.current) {
+			isProgrammaticScrollRef.current = true;
+			messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+			setTimeout(() => {
+				isProgrammaticScrollRef.current = false;
+			}, 100);
 		}
 	}, [messages]);
 
