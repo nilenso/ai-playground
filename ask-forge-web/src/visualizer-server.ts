@@ -237,8 +237,7 @@ app.get("/api/session/:id", (c) => {
 		}
 
 		// Attach annotations to asks (normalize SQLite 1/0 to boolean)
-		const toBool = (v: number | boolean | null): boolean | null =>
-			v === null ? null : v === 1 || v === true;
+		const toBool = (v: number | boolean | null): boolean | null => (v === null ? null : v === 1 || v === true);
 		for (let i = 0; i < asks.length; i++) {
 			const annotation = annotationsByAskIndex.get(i);
 			if (annotation) {
@@ -435,8 +434,7 @@ app.put("/api/session/:id/annotation/:askIndex", async (c) => {
 		});
 
 		// Normalize SQLite 1/0 to boolean
-		const toBool = (v: number | boolean | null): boolean | null =>
-			v === null ? null : v === 1 || v === true;
+		const toBool = (v: number | boolean | null): boolean | null => (v === null ? null : v === 1 || v === true);
 
 		return c.json({
 			success: true,
