@@ -71,11 +71,12 @@ app.get("/api/session/:id", (c) => {
 					ended_at: string | null;
 					git_url: string;
 					default_commit: string;
+					system_prompt: string | null;
 				},
 				[string]
 			>(
 				`SELECT s.id, s.title, s.status, s.created_at, s.ended_at,
-				        r.git_url, r.default_commit
+				        s.system_prompt, r.git_url, r.default_commit
 				 FROM sessions s
 				 JOIN repositories r ON s.repository_id = r.id
 				 WHERE s.id = ?`,
@@ -256,6 +257,7 @@ app.get("/api/session/:id", (c) => {
 			startedAt: new Date(session.created_at).getTime(),
 			endedAt: session.ended_at ? new Date(session.ended_at).getTime() : Date.now(),
 			endReason: session.status,
+			systemPrompt: session.system_prompt ?? null,
 			asks,
 		};
 

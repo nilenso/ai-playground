@@ -474,6 +474,36 @@
 		}
 		.viz-msg-content { line-height: 1.7; color: var(--text-primary); }
 
+		/* System prompt collapsible */
+		.viz-system-prompt {
+			margin-left: 20px; margin-bottom: 4px;
+			background: var(--bg-secondary); border-radius: 8px;
+			border: 1px solid var(--border-subtle);
+			overflow: hidden;
+		}
+		.viz-system-prompt-summary {
+			display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+			font-size: 13px; font-weight: 600; color: var(--text-secondary);
+			cursor: pointer; user-select: none; list-style: none;
+		}
+		.viz-system-prompt-summary::-webkit-details-marker { display: none; }
+		.viz-system-prompt-summary::before {
+			content: "▶"; font-size: 10px; color: var(--text-muted);
+			transition: transform 0.15s ease;
+		}
+		.viz-system-prompt[open] > .viz-system-prompt-summary::before {
+			transform: rotate(90deg);
+		}
+		.viz-system-prompt-summary:hover { background: var(--bg-tertiary); }
+		.viz-system-prompt-icon { color: var(--accent-pink); }
+		.viz-system-prompt-content {
+			padding: 12px 16px; margin: 0 12px 12px 12px;
+			font-family: var(--font-mono); font-size: 12px; line-height: 1.6;
+			color: var(--text-secondary); background: var(--bg-tertiary);
+			border-radius: 6px; white-space: pre-wrap; word-break: break-word;
+			max-height: 400px; overflow-y: auto;
+		}
+
 		/* Tool calls */
 		.viz-tool-calls {
 			display: flex; flex-direction: column; gap: 4px; margin-left: 20px;

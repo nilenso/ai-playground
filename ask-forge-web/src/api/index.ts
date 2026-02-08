@@ -1,5 +1,13 @@
 import { connect, type Session } from "@nilenso/ask-forge";
 import { Hono } from "hono";
+
+// The SYSTEM_PROMPT is not re-exported from @nilenso/ask-forge's package index,
+// so we read it from the config module at the resolved path.
+// biome-ignore lint/suspicious/noExplicitAny: dynamic import of internal module
+const askForgeConfig: any = await import(
+	import.meta.resolve("@nilenso/ask-forge").replace("/index.js", "/config.js")
+);
+const SYSTEM_PROMPT: string = askForgeConfig.SYSTEM_PROMPT;
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
 import {
 	createSession as createDbSession,
@@ -159,6 +167,7 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 			userId: payload.sub,
 			repositoryId: repository.id,
 			checkoutId: checkout.id,
+			systemPrompt: SYSTEM_PROMPT,
 		});
 
 		const session = wrapSession(rawSession, rawSession.id);

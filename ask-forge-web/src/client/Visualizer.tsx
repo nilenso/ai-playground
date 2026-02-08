@@ -42,6 +42,7 @@ interface SessionLog {
 	endedAt: number;
 	endReason: "active" | "inactive" | "error";
 	error?: string;
+	systemPrompt?: string | null;
 	asks: AskEntry[];
 }
 
@@ -464,6 +465,17 @@ export function Visualizer() {
 									</div>
 									<div className="viz-msg-content">{ask.question}</div>
 								</div>
+
+								{/* System Prompt - collapsible, shown only on first ask */}
+								{index === 0 && session?.systemPrompt && (
+									<details className="viz-system-prompt">
+										<summary className="viz-system-prompt-summary">
+											<span className="viz-system-prompt-icon">⚙</span>
+											System Prompt
+										</summary>
+										<pre className="viz-system-prompt-content">{session.systemPrompt}</pre>
+									</details>
+								)}
 
 								{/* Tool Calls - Each individually collapsible */}
 								{ask.toolCalls.length > 0 && (

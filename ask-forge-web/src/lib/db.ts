@@ -204,6 +204,7 @@ export interface DbSession {
 	status: string;
 	created_at: string;
 	ended_at: string | null;
+	system_prompt: string | null;
 }
 
 export interface DbMessage {
@@ -247,13 +248,22 @@ export function createSession(params: {
 	repositoryId: number;
 	checkoutId?: number | null;
 	title?: string | null;
+	systemPrompt?: string | null;
 }): DbSession {
 	const db = getDb();
 	const now = new Date().toISOString();
 	db.run(
-		`INSERT INTO sessions (id, user_id, repository_id, checkout_id, title, status, created_at)
-		 VALUES (?, ?, ?, ?, ?, 'active', ?)`,
-		[params.id, params.userId, params.repositoryId, params.checkoutId ?? null, params.title ?? null, now],
+		`INSERT INTO sessions (id, user_id, repository_id, checkout_id, title, status, created_at, system_prompt)
+		 VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
+		[
+			params.id,
+			params.userId,
+			params.repositoryId,
+			params.checkoutId ?? null,
+			params.title ?? null,
+			now,
+			params.systemPrompt ?? null,
+		],
 	);
 
 	return {
@@ -265,6 +275,7 @@ export function createSession(params: {
 		status: "active",
 		created_at: now,
 		ended_at: null,
+		system_prompt: params.systemPrompt ?? null,
 	};
 }
 
