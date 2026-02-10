@@ -3,10 +3,26 @@ import { serveStatic } from "hono/bun";
 import auth from "./api/auth.ts";
 import api from "./api/index.ts";
 import { validateAuthConfig } from "./lib/auth-config.ts";
+import { checkSandboxHealth, getSandboxConfig, logSandboxStatus } from "./lib/sandbox.ts";
 import { websocketHandler } from "./websocket.ts";
 
 // Validate auth config on startup
 validateAuthConfig();
+
+// Log sandbox status
+logSandboxStatus();
+
+// Check sandbox health if enabled
+const sandboxConfig = getSandboxConfig();
+if (sandboxConfig.enabled) {
+	checkSandboxHealth().then((healthy) => {
+		if (healthy) {
+			console.log("✅ Sandbox health check: OK");
+		} else {
+			console.warn("⚠️  Sandbox health check: FAILED - sandbox may not be running");
+		}
+	});
+}
 
 // Disable all SSH keys for git operations - only HTTPS or explicitly provided keys should work
 // TODO: Add support for explicitly passing SSH keys per-request

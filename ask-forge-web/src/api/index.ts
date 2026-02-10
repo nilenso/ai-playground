@@ -9,6 +9,7 @@ const askForgeConfig: any = await import(
 );
 const SYSTEM_PROMPT: string = askForgeConfig.SYSTEM_PROMPT;
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
+import { checkSandboxHealth, connectWithSandbox, getSandboxConfig } from "../lib/sandbox.ts";
 import {
 	createSession as createDbSession,
 	createMessage,
@@ -82,8 +83,17 @@ setInterval(cleanupSessions, 5 * 60 * 1000);
 
 const api = new Hono();
 
-api.get("/health", (c) => {
-	return c.json({ status: "ok" });
+api.get("/status", async (c) => {
+	const sandboxConfig = getSandboxConfig();
+	const sandbox = sandboxConfig.enabled
+		? {
+				enabled: true,
+				url: sandboxConfig.url,
+				healthy: await checkSandboxHealth(),
+			}
+		: { enabled: false };
+
+	return c.json({ status: "ok", sandbox });
 });
 
 /**
@@ -144,7 +154,11 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 	}
 
 	try {
-		const rawSession = await connect(normalized, { commitish: commit });
+		// Use sandbox if configured, otherwise local execution
+		const sandboxConfig = getSandboxConfig();
+		const rawSession = sandboxConfig.enabled
+			? await connectWithSandbox(normalized, { commitish: commit })
+			: await connect(normalized, { commitish: commit });
 
 		// Check for cached summary
 		const existingRepo = getRepositoryByGitUrl(normalized);
@@ -330,8 +344,12 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 			commitish = checkoutRow?.commit_id;
 		}
 
-		// Reconnect to the repository at the same commit
-		const session = wrapSession(await connect(repoRow.git_url, { commitish }), sessionId);
+		// Reconnect to the repository at the same commit (use sandbox if configured)
+		const sandboxConfig = getSandboxConfig();
+		const rawSession = sandboxConfig.enabled
+			? await connectWithSandbox(repoRow.git_url, { commitish })
+			: await connect(repoRow.git_url, { commitish });
+		const session = wrapSession(rawSession, sessionId);
 
 		// Load messages from DB and restore them, considering compaction
 		const compaction = getLatestCompaction(sessionId);

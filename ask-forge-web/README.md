@@ -69,6 +69,76 @@ services:
 
 The app will only start after migrations complete successfully.
 
+## Sandbox Mode (Isolated Tool Execution)
+
+By default, tool execution (file reading, code search, etc.) runs locally on the host machine. For security isolation when analyzing untrusted repositories, you can enable sandbox mode to run tools inside an isolated container.
+
+### Configuration
+
+Set these environment variables to enable sandbox mode:
+
+```bash
+# Required: URL of the sandbox worker container
+SANDBOX_URL=http://localhost:8080
+
+# Optional: Shared secret for authenticating with the sandbox (recommended in production)
+SANDBOX_SECRET=your-secret-here
+
+# Optional: Request timeout in milliseconds (default: 120000 = 2 minutes)
+SANDBOX_TIMEOUT_MS=120000
+```
+
+### Running the Sandbox Container
+
+The sandbox container is provided by the `ask-forge` library. To start it:
+
+```bash
+# In the ask-forge repository
+just sandbox-up
+
+# Or with docker-compose
+docker-compose up sandbox
+```
+
+### Startup Logs
+
+When the server starts, it logs the sandbox status:
+
+```
+🔒 Sandbox mode: ENABLED (http://localhost:8080)
+✅ Sandbox health check: OK
+```
+
+Or when disabled:
+
+```
+🔓 Sandbox mode: DISABLED (local execution)
+```
+
+### Status Endpoint
+
+Check sandbox status via the status endpoint:
+
+```bash
+curl http://localhost:3000/api/status
+```
+
+Response when sandbox enabled:
+```json
+{
+  "status": "ok",
+  "sandbox": { "enabled": true, "url": "http://localhost:8080", "healthy": true }
+}
+```
+
+Response when sandbox disabled:
+```json
+{
+  "status": "ok",
+  "sandbox": { "enabled": false }
+}
+```
+
 ## Session Visualizer
 
 A separate tool for visualizing `.jsonl` session files (e.g., from pi coding agent sessions).
