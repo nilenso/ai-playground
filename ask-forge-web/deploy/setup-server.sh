@@ -3,11 +3,48 @@ set -e
 
 echo "=== Setting up ask-forge-web server ==="
 
+# =============================================================================
+# Install gVisor (runsc) — required for sandbox container isolation
+# =============================================================================
+
+if ! command -v runsc &> /dev/null; then
+    echo "Installing gVisor (runsc)..."
+
+    # Install from gVisor apt repo (Debian/Ubuntu)
+    sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+    curl -fsSL https://gvisor.dev/archive.key | sudo gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | sudo tee /etc/apt/sources.list.d/gvisor.list > /dev/null
+    sudo apt-get update && sudo apt-get install -y runsc
+
+    # Register runsc as a Docker runtime
+    sudo runsc install
+    sudo systemctl reload docker
+
+    echo "gVisor installed and registered as Docker runtime"
+else
+    echo "gVisor (runsc) already installed"
+fi
+
+# Verify runsc is available to Docker
+if ! docker info 2>/dev/null | grep -q runsc; then
+    echo "ERROR: runsc runtime not registered with Docker."
+    echo "Run: sudo runsc install && sudo systemctl reload docker"
+    exit 1
+fi
+
+echo "runsc runtime verified ✓"
+
+# =============================================================================
 # Create directories
+# =============================================================================
+
 echo "Creating directories..."
 mkdir -p ~/gateway ~/ask-forge-web/data/sessions
 
+# =============================================================================
 # Setup gateway (Caddy for SSL termination)
+# =============================================================================
+
 echo "Setting up gateway..."
 cd ~/gateway
 
@@ -48,32 +85,12 @@ EOF
 echo "Starting gateway..."
 docker compose up -d
 
+# =============================================================================
 # Setup ask-forge-web
+# =============================================================================
+
 echo "Setting up ask-forge-web..."
 cd ~/ask-forge-web
-
-cat > docker-compose.yml << 'EOF'
-services:
-  web:
-    image: ghcr.io/nilenso/ask-forge-web:latest
-    container_name: ask-forge-web
-    environment:
-      - PORT=3000
-      - VISUALIZER_PORT=3001
-      - DATABASE_PATH=/app/data/ask-forge.db
-      - SESSION_DIR=/app/data/sessions
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-    volumes:
-      - ./data:/app/data
-    networks:
-      - default
-      - web
-    restart: unless-stopped
-
-networks:
-  web:
-    external: true
-EOF
 
 cat > .env.example << 'EOF'
 OPENROUTER_API_KEY=your-openrouter-api-key
@@ -97,5 +114,6 @@ echo "=== Setup complete ==="
 echo ""
 echo "To verify:"
 echo "  docker ps"
+echo "  docker run --runtime=runsc --rm hello-world  # verify gVisor"
 echo "  curl -I https://ask.nilenso.ai"
 echo "  curl -I https://ask-forge-visualizer.nilenso.ai"

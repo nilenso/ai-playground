@@ -2,7 +2,7 @@
 
 ## Core Features
 
-- [ ] Sandboxing
+- [x] Sandboxing (bwrap + seccomp + gVisor)
 - [ ] Session management
 - [ ] Evaluation and Feedback
 - [ ] Packaging ask-forge as a library

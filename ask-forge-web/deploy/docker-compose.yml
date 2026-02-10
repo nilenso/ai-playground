@@ -1,4 +1,36 @@
 services:
+  # Sandbox worker: isolated git clone + tool execution
+  # Security: bwrap (filesystem/PID) + seccomp (network blocking) + gVisor (syscall)
+  sandbox:
+    build:
+      context: ../../ask-forge/sandbox
+      dockerfile: Containerfile
+    runtime: runsc  # gVisor required - handles bwrap namespace creation
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN  # For bwrap namespace creation inside gVisor
+    security_opt:
+      - no-new-privileges
+    tmpfs:
+      - /tmp:rw,size=64m
+    networks:
+      - sandbox
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    environment:
+      - PORT=8080
+      - SANDBOX_SECRET=${SANDBOX_SECRET}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:8080/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   web:
     image: ghcr.io/nilenso/ask-forge-web:latest
     container_name: ask-forge-web
@@ -8,13 +40,21 @@ services:
       - DATABASE_PATH=/app/data/ask-forge.db
       - SESSION_DIR=/app/data/sessions
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - SANDBOX_URL=http://sandbox:8080
+      - SANDBOX_SECRET=${SANDBOX_SECRET}
     volumes:
       - ./data:/app/data
     networks:
-      - default
+      - sandbox
       - web
+    depends_on:
+      sandbox:
+        condition: service_healthy
     restart: unless-stopped
 
 networks:
+  sandbox:
+    # Git clone needs outbound access. Tool execution is network-blocked via seccomp.
+    # Security layers: bwrap (filesystem/PID), seccomp (network), gVisor (syscall).
   web:
     external: true
