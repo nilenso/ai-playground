@@ -1,17 +1,14 @@
 services:
+  # Sandbox worker: isolated git clone + tool execution
+  # Security: bwrap (filesystem/PID) + seccomp (network blocking) + gVisor (syscall)
   sandbox:
     build:
       context: ../../ask-forge/sandbox
       dockerfile: Containerfile
-    runtime: runsc
+    runtime: runsc  # gVisor for kernel-level syscall sandboxing
+    privileged: true  # Required for bwrap namespace creation
     tmpfs:
       - /tmp:rw,size=64m
-    cap_drop:
-      - ALL
-    cap_add:
-      - SYS_ADMIN   # Required for bwrap namespace creation inside gVisor
-    security_opt:
-      - no-new-privileges
     networks:
       - sandbox
     deploy:
@@ -52,8 +49,7 @@ services:
 
 networks:
   sandbox:
-    # Sandbox needs outbound access for git clone.
-    # Isolation is enforced by: runsc (gVisor), cap_drop ALL + cap_add
-    # SYS_ADMIN (for bwrap), no-new-privileges, and non-root user.
+    # Git clone needs outbound access. Tool execution is network-blocked via seccomp.
+    # Security layers: bwrap (filesystem/PID), seccomp (network), gVisor (syscall).
   web:
     external: true

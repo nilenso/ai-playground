@@ -31,11 +31,22 @@ bash setup-server.sh
 ```
 
 This will:
-- Install **gVisor (runsc)** and register it as a Docker runtime — required for sandbox container isolation
+- Install **gVisor (runsc)** and register it as a Docker runtime
 - Set up Caddy as a reverse proxy with automatic TLS
 - Create the app directory structure
 
-> **Note:** gVisor is mandatory. The sandbox container runs with `runtime: runsc` to provide kernel-level syscall interception. Without it, `docker compose up` will fail.
+### Sandbox Security Layers
+
+The sandbox provides defense-in-depth isolation:
+
+| Layer | Mechanism | Protection |
+|-------|-----------|------------|
+| 1 | bwrap | Filesystem and PID namespace isolation |
+| 2 | seccomp | Blocks network socket creation for tools |
+| 3 | gVisor | Kernel-level syscall sandboxing |
+| 4 | Path validation | Prevents directory traversal |
+
+> **Note:** gVisor is required for production. The sandbox container runs with `runtime: runsc`.
 
 ## 3. Deploy App
 
