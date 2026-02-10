@@ -5,8 +5,13 @@ services:
     build:
       context: ../../ask-forge/sandbox
       dockerfile: Containerfile
-    runtime: runsc  # gVisor for kernel-level syscall sandboxing
-    privileged: true  # Required for bwrap namespace creation
+    runtime: runsc  # gVisor required - handles bwrap namespace creation
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN  # For bwrap namespace creation inside gVisor
+    security_opt:
+      - no-new-privileges
     tmpfs:
       - /tmp:rw,size=64m
     networks:
