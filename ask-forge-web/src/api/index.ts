@@ -1,4 +1,4 @@
-import { connect, type Session } from "@nilenso/ask-forge";
+import { AskForgeClient, type Session } from "@nilenso/ask-forge";
 import { Hono } from "hono";
 
 // The SYSTEM_PROMPT is not re-exported from @nilenso/ask-forge's package index,
@@ -8,6 +8,24 @@ const askForgeConfig: any = await import(
 	import.meta.resolve("@nilenso/ask-forge").replace("/index.js", "/config.js")
 );
 const SYSTEM_PROMPT: string = askForgeConfig.SYSTEM_PROMPT;
+
+// Initialize ask-forge client with sandbox configuration if available
+const sandboxUrl = process.env.SANDBOX_URL;
+const sandboxSecret = process.env.SANDBOX_SECRET;
+
+const askForgeClient = new AskForgeClient(
+	sandboxUrl
+		? {
+				sandbox: {
+					baseUrl: sandboxUrl,
+					secret: sandboxSecret,
+					timeoutMs: 120000, // 2 minutes for git clone operations
+				},
+			}
+		: undefined,
+);
+
+console.log(`[ask-forge] Sandbox mode: ${sandboxUrl ? "enabled" : "disabled"}`);
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
 import {
 	createSession as createDbSession,
@@ -144,7 +162,7 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 	}
 
 	try {
-		const rawSession = await connect(normalized, { commitish: commit });
+		const rawSession = await askForgeClient.connect(normalized, { commitish: commit });
 
 		// Check for cached summary
 		const existingRepo = getRepositoryByGitUrl(normalized);
@@ -331,7 +349,7 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 		}
 
 		// Reconnect to the repository at the same commit
-		const session = wrapSession(await connect(repoRow.git_url, { commitish }), sessionId);
+		const session = wrapSession(await askForgeClient.connect(repoRow.git_url, { commitish }), sessionId);
 
 		// Load messages from DB and restore them, considering compaction
 		const compaction = getLatestCompaction(sessionId);
