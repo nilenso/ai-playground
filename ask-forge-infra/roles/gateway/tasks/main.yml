@@ -29,7 +29,7 @@
 
       volumes:
         caddy_data:
-  notify: Restart gateway
+  register: gateway_compose
 
 - name: Copy Caddyfile
   copy:
@@ -42,9 +42,15 @@
       ask-forge-visualizer.nilenso.ai {
           reverse_proxy ask-forge-web:3001
       }
-  notify: Restart gateway
+  register: gateway_caddyfile
 
 - name: Start gateway
-  community.docker.docker_compose_v2:
-    project_src: ~/gateway
-    state: present
+  shell: |
+    cd ~/gateway
+    docker compose up -d
+  when: gateway_compose.changed or gateway_caddyfile.changed
+
+- name: Ensure gateway is running
+  shell: |
+    cd ~/gateway
+    docker compose up -d

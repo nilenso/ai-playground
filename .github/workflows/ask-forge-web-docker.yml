@@ -68,10 +68,6 @@ jobs:
         run: |
           pip install ansible
 
-      - name: Install Ansible collections
-        run: |
-          ansible-galaxy collection install -r requirements.yml
-
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
