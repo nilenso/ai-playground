@@ -449,7 +449,8 @@ export function App() {
 		if (autoConnectUrl && auth.authenticated && connection.status === "disconnected") {
 			autoConnectUrlRef.current = null; // Clear to prevent re-triggering
 
-			// Connect directly using the URL from ref (not from state)
+			// Show the URL in the input field while connecting
+			setUrl(autoConnectUrl);
 			setConnection((prev) => ({ ...prev, status: "connecting", error: null }));
 
 			fetch("/api/connect", {
