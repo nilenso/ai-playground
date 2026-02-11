@@ -9,6 +9,26 @@
  * Returns the base repo URL or null if not a recognized forge.
  */
 
+// Reserved paths that aren't repositories (shared across forges)
+const GITHUB_RESERVED = [
+	"settings", "organizations", "marketplace", "explore", "topics", "trending",
+	"collections", "events", "sponsors", "features", "security", "pulls", "issues",
+	"notifications", "login", "logout", "new", "pricing", "enterprise", "about",
+	"team", "join", "customer-stories", "readme", "apps", "codespaces", "search",
+];
+
+const BITBUCKET_RESERVED = [
+	"account", "dashboard", "repo", "plugins", "support", "whats-new",
+];
+
+const CODEBERG_RESERVED = [
+	"explore", "repo", "user", "admin", "org", "notifications",
+];
+
+const GITLAB_RESERVED = [
+	"explore", "dashboard", "admin", "groups", "projects", "users", "help",
+];
+
 // Known forge domains and their repo extraction patterns
 const FORGE_EXTRACTORS: Array<{
 	domain: string;
@@ -21,9 +41,7 @@ const FORGE_EXTRACTORS: Array<{
 			// /user/repo/... -> [user, repo]
 			const match = pathname.match(/^\/([^/]+)\/([^/]+)/);
 			if (match && match[1] && match[2]) {
-				// Skip special GitHub paths that aren't repos
-				const reserved = ["settings", "organizations", "marketplace", "explore", "topics", "trending", "collections", "events", "sponsors", "features", "security", "pulls", "issues", "notifications"];
-				if (reserved.includes(match[1].toLowerCase())) return null;
+				if (GITHUB_RESERVED.includes(match[1].toLowerCase())) return null;
 				return [match[1], match[2]];
 			}
 			return null;
@@ -37,6 +55,7 @@ const FORGE_EXTRACTORS: Array<{
 			const repoPath = pathname.split("/-/")[0];
 			const parts = repoPath?.split("/").filter(Boolean);
 			if (parts && parts.length >= 2) {
+				if (GITLAB_RESERVED.includes(parts[0]!.toLowerCase())) return null;
 				// Last part is repo, everything before is group/subgroup
 				const repo = parts.pop()!;
 				const group = parts.join("/");
@@ -50,6 +69,7 @@ const FORGE_EXTRACTORS: Array<{
 		extract: (pathname) => {
 			const match = pathname.match(/^\/([^/]+)\/([^/]+)/);
 			if (match && match[1] && match[2]) {
+				if (BITBUCKET_RESERVED.includes(match[1].toLowerCase())) return null;
 				return [match[1], match[2]];
 			}
 			return null;
@@ -60,6 +80,7 @@ const FORGE_EXTRACTORS: Array<{
 		extract: (pathname) => {
 			const match = pathname.match(/^\/([^/]+)\/([^/]+)/);
 			if (match && match[1] && match[2]) {
+				if (CODEBERG_RESERVED.includes(match[1].toLowerCase())) return null;
 				return [match[1], match[2]];
 			}
 			return null;
@@ -107,19 +128,4 @@ export function extractRepoFromUrl(url: string): ExtractResult {
 	}
 
 	return { repoUrl: null, error: "Not a recognized code forge URL" };
-}
-
-/**
- * Check if a URL is from a known forge domain.
- */
-export function isForgeUrl(url: string): boolean {
-	try {
-		const parsed = new URL(url);
-		const hostname = parsed.hostname.toLowerCase();
-		return FORGE_EXTRACTORS.some(
-			({ domain }) => hostname === domain || hostname.endsWith(`.${domain}`)
-		);
-	} catch {
-		return false;
-	}
 }
