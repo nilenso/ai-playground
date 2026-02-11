@@ -1,0 +1,50 @@
+---
+- name: Create gateway directory
+  file:
+    path: ~/gateway
+    state: directory
+    mode: "0755"
+
+- name: Copy gateway docker-compose.yml
+  copy:
+    dest: ~/gateway/docker-compose.yml
+    content: |
+      services:
+        caddy:
+          image: caddy:2-alpine
+          container_name: gateway
+          ports:
+            - "80:80"
+            - "443:443"
+          volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+          networks:
+            - web
+          restart: unless-stopped
+
+      networks:
+        web:
+          name: web
+
+      volumes:
+        caddy_data:
+  notify: Restart gateway
+
+- name: Copy Caddyfile
+  copy:
+    dest: ~/gateway/Caddyfile
+    content: |
+      ask.nilenso.ai {
+          reverse_proxy ask-forge-web:3000
+      }
+
+      ask-forge-visualizer.nilenso.ai {
+          reverse_proxy ask-forge-web:3001
+      }
+  notify: Restart gateway
+
+- name: Start gateway
+  community.docker.docker_compose_v2:
+    project_src: ~/gateway
+    state: present

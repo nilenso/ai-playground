@@ -1,0 +1,53 @@
+---
+# Deployment playbook for CI/CD
+# Pulls latest images and restarts the application
+#
+# Usage:
+#   ansible-playbook playbooks/deploy.yml
+#
+# From GitHub Actions:
+#   ansible-playbook playbooks/deploy.yml --private-key /path/to/key
+
+- name: Deploy ask-forge-web
+  hosts: ask-forge
+  gather_facts: false
+
+  tasks:
+    - name: Pull latest images
+      community.docker.docker_compose_v2:
+        project_src: ~/ask-forge-web
+        pull: always
+        state: present
+      register: compose_pull
+
+    - name: Stop and remove old containers
+      community.docker.docker_compose_v2:
+        project_src: ~/ask-forge-web
+        state: absent
+        remove_orphans: true
+      when: compose_pull.changed
+
+    - name: Start application
+      community.docker.docker_compose_v2:
+        project_src: ~/ask-forge-web
+        state: present
+
+    - name: Prune old Docker images
+      community.docker.docker_prune:
+        images: true
+        images_filters:
+          dangling: false
+
+    - name: Wait for app to be healthy
+      uri:
+        url: http://localhost:3000/health
+        status_code: 200
+      register: health_check
+      retries: 30
+      delay: 2
+      until: health_check.status == 200
+      ignore_errors: true
+
+    - name: Display deployment result
+      debug:
+        msg: "{{ 'Deployment successful! App is healthy.' if health_check.status == 200 else 'Warning: App may not be healthy yet.' }}"

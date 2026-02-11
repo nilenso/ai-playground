@@ -1,0 +1,54 @@
+---
+# Initial server setup playbook
+# Run once to configure a new server with all dependencies
+#
+# Usage:
+#   ansible-playbook playbooks/setup.yml
+#   ansible-playbook playbooks/setup.yml -l ask-forge
+
+- name: Setup ask-forge-web server
+  hosts: ask-forge
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install Docker (if not present)
+      apt:
+        name:
+          - docker.io
+          - docker-compose-plugin
+        state: present
+
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+  roles:
+    - role: gvisor
+      tags: [gvisor]
+    - role: gateway
+      tags: [gateway]
+    - role: app
+      tags: [app]
+
+  post_tasks:
+    - name: Display completion message
+      debug:
+        msg: |
+          ✓ Server setup complete!
+          
+          Next steps:
+          1. Edit ~/ask-forge-web/.env with your API keys
+          2. Run the deploy playbook to start the app
+          
+          Verification commands:
+            docker ps
+            docker run --runtime=runsc --rm hello-world
+            curl -I https://ask.nilenso.ai
