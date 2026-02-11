@@ -1,0 +1,42 @@
+---
+- name: Create app directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - ~/ask-forge-web
+    - ~/ask-forge-web/data
+    - ~/ask-forge-web/data/sessions
+
+- name: Copy docker-compose.yml
+  copy:
+    src: docker-compose.yml
+    dest: ~/ask-forge-web/docker-compose.yml
+  notify: Restart app
+
+- name: Copy .env.example
+  copy:
+    dest: ~/ask-forge-web/.env.example
+    content: |
+      OPENROUTER_API_KEY=your-openrouter-api-key
+      SANDBOX_SECRET=generate-a-random-secret
+
+- name: Check if .env exists
+  stat:
+    path: ~/ask-forge-web/.env
+  register: env_file
+
+- name: Create .env from example if missing
+  copy:
+    src: ~/ask-forge-web/.env.example
+    dest: ~/ask-forge-web/.env
+    remote_src: true
+  when: not env_file.stat.exists
+
+- name: Display warning if .env was created
+  debug:
+    msg: |
+      WARNING: .env file was created from example.
+      Please edit ~/ask-forge-web/.env and set your API keys before starting the app.
+  when: not env_file.stat.exists
