@@ -7,6 +7,7 @@ interface AskPhaseProps {
 	setInputValue: (value: string) => void;
 	isAsking: boolean;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
+	handleSend: (question?: string) => void;
 	handleDisconnect: () => void;
 	askTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
 	sidebarProps: React.ComponentProps<typeof Sidebar>;
@@ -24,13 +25,13 @@ export function AskPhase({
 	setInputValue,
 	isAsking,
 	handleKeyDown,
+	handleSend,
 	handleDisconnect,
 	askTextareaRef,
 	sidebarProps,
 }: AskPhaseProps) {
 	const handleExampleClick = (question: string) => {
-		setInputValue(question);
-		askTextareaRef.current?.focus();
+		handleSend(question);
 	};
 
 	return (
