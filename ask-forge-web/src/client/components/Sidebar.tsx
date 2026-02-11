@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { AuthState, SessionSummary } from "../types.ts";
+
+const BOOKMARKLET_CODE = "javascript:location='https://ask.nilenso.ai/go?url='+encodeURIComponent(location.href)";
 
 interface SidebarProps {
 	auth: AuthState;
@@ -38,6 +40,14 @@ export function Sidebar({
 	const [itemMenuOpen, setItemMenuOpen] = useState<string | null>(null);
 	const profileRef = useRef<HTMLDivElement>(null);
 	const itemMenuRef = useRef<HTMLDivElement>(null);
+	const bookmarkletRef = useRef<HTMLAnchorElement>(null);
+
+	// Set bookmarklet href directly on DOM to bypass React's javascript: URL blocking
+	useEffect(() => {
+		if (bookmarkletRef.current) {
+			bookmarkletRef.current.setAttribute("href", BOOKMARKLET_CODE);
+		}
+	}, [sidebarCollapsed]);
 
 	// Close profile menu and item menu on outside click
 	useEffect(() => {
@@ -184,7 +194,8 @@ export function Sidebar({
 			{!sidebarCollapsed && (
 				<div className="sidebar-bookmarklet">
 					<a
-						href="javascript:location='https://ask.nilenso.ai/go?url='+encodeURIComponent(location.href)"
+						ref={bookmarkletRef}
+						href="#"
 						title="AskForge!"
 						className="bookmarklet-link"
 						onClick={(e) => e.preventDefault()}
