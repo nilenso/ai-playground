@@ -5,7 +5,7 @@
     "": {
       "name": "ask-forge-web",
       "dependencies": {
-        "@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.7",
+        "@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.8",
         "highlight.js": "^11.11.1",
         "hono": "^4.7.10",
         "marked": "^17.0.1",
@@ -124,7 +124,7 @@
 
     "@mistralai/mistralai": ["@mistralai/mistralai@1.10.0", "", { "dependencies": { "zod": "^3.20.0", "zod-to-json-schema": "^3.24.1" } }, "sha512-tdIgWs4Le8vpvPiUEWne6tK0qbVc+jMenujnvTqOjogrJUsCSQhus0tHTU1avDDh5//Rq2dFgP9mWRAdIEoBqg=="],
 
-    "@nilenso/ask-forge": ["@jsr/nilenso__ask-forge@0.0.7", "https://npm.jsr.io/~/11/@jsr/nilenso__ask-forge/0.0.7.tgz", { "dependencies": { "@mariozechner/pi-ai": "^0.51.5", "@sinclair/typebox": "^0.34.48" } }, "sha512-M7//mrWQa9fVzU2mwzRvdElk4cRu/lWpRKR2gBjPYqpIw9rqpTFq9gP+xy9jxMkSgGwet3xG9g29TYkK+GKaeQ=="],
+    "@nilenso/ask-forge": ["@jsr/nilenso__ask-forge@0.0.8", "https://npm.jsr.io/~/11/@jsr/nilenso__ask-forge/0.0.8.tgz", { "dependencies": { "@mariozechner/pi-ai": "^0.51.5", "@sinclair/typebox": "^0.34.48" } }, "sha512-5al0qroe8MYMzJ0I3pBMWqQLpplGs4n5Xx4A4ujSkizMhFVjj1aXmHIKJFtpg4pXzgujbKRB9ZnZHRDOnESuPw=="],
 
     "@pkgjs/parseargs": ["@pkgjs/parseargs@0.11.0", "", {}, "sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg=="],
 
