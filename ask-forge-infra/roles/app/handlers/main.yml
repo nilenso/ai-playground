@@ -1,5 +1,0 @@
----
-- name: Restart app
-  shell: |
-    cd ~/ask-forge-web
-    docker compose restart

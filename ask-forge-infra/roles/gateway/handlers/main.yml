@@ -1,5 +1,0 @@
----
-- name: Restart gateway
-  shell: |
-    cd ~/gateway
-    docker compose restart
