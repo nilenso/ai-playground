@@ -220,10 +220,10 @@ export function App() {
 		restoringFromUrlRef.current = false;
 	}, [connection.sessionId]);
 
-	const handleSend = useCallback(() => {
-		if (!inputValue.trim() || !connection.sessionId || isAsking) return;
+	const handleSend = useCallback((questionOverride?: string) => {
+		const question = (questionOverride || inputValue).trim();
+		if (!question || !connection.sessionId || isAsking) return;
 
-		const question = inputValue.trim();
 		const requestId = generateRequestId();
 
 		setInputValue("");
@@ -599,6 +599,7 @@ export function App() {
 				setInputValue={setInputValue}
 				isAsking={isAsking}
 				handleKeyDown={handleKeyDown}
+				handleSend={handleSend}
 				handleDisconnect={handleDisconnect}
 				askTextareaRef={askTextareaRef}
 				sidebarProps={sidebarProps}
