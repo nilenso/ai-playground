@@ -153,5 +153,6 @@ export function wrapSession(session: Session, sessionId: string): Session {
 		},
 	};
 
-	return wrapped;
+	// Cast to Session - we implement the same public interface
+	return wrapped as unknown as Session;
 }

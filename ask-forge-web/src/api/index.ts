@@ -1,15 +1,7 @@
-import { connect, type Session } from "@nilenso/ask-forge";
+import { AskForgeClient, type Session } from "@nilenso/ask-forge";
 import { Hono } from "hono";
 
-// The SYSTEM_PROMPT is not re-exported from @nilenso/ask-forge's package index,
-// so we read it from the config module at the resolved path.
-// biome-ignore lint/suspicious/noExplicitAny: dynamic import of internal module
-const askForgeConfig: any = await import(
-	import.meta.resolve("@nilenso/ask-forge").replace("/index.js", "/config.js")
-);
-const SYSTEM_PROMPT: string = askForgeConfig.SYSTEM_PROMPT;
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
-import { checkSandboxHealth, connectWithSandbox, getSandboxConfig } from "../lib/sandbox.ts";
 import {
 	createSession as createDbSession,
 	createMessage,
@@ -29,6 +21,7 @@ import {
 	updateSessionTitle,
 } from "../lib/db.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
+import { checkSandboxHealth, getSandboxConfig } from "../lib/sandbox.ts";
 import { buildSessionContext } from "../lib/session-context.ts";
 import { wrapSession } from "../lib/session-logger.ts";
 import { getActiveRequest } from "../websocket.ts";
@@ -42,6 +35,20 @@ const GIT_ENV: Record<string, string> = {
 	SSH_ASKPASS: "",
 	PATH: process.env.PATH || "",
 };
+
+// Create ask-forge client (uses sensible defaults, optionally with sandbox)
+const sandboxConfig = getSandboxConfig();
+const forgeClient = new AskForgeClient(
+	sandboxConfig.enabled
+		? {
+				sandbox: {
+					baseUrl: sandboxConfig.url,
+					secret: sandboxConfig.secret,
+					timeoutMs: sandboxConfig.timeoutMs,
+				},
+			}
+		: {},
+);
 
 // In-memory session store (exported for WebSocket handler)
 export const sessions = new Map<string, Session>();
@@ -154,11 +161,8 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 	}
 
 	try {
-		// Use sandbox if configured, otherwise local execution
-		const sandboxConfig = getSandboxConfig();
-		const rawSession = sandboxConfig.enabled
-			? await connectWithSandbox(normalized, { commitish: commit })
-			: await connect(normalized, { commitish: commit });
+		// Connect to the repository (client handles sandbox vs local automatically)
+		const rawSession = await forgeClient.connect(normalized, { commitish: commit });
 
 		// Check for cached summary
 		const existingRepo = getRepositoryByGitUrl(normalized);
@@ -183,7 +187,7 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 			userId: payload.sub,
 			repositoryId: repository.id,
 			checkoutId: checkout.id,
-			systemPrompt: SYSTEM_PROMPT,
+			systemPrompt: forgeClient.config.systemPrompt,
 		});
 
 		const session = wrapSession(rawSession, rawSession.id);
@@ -344,11 +348,8 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 			commitish = checkoutRow?.commit_id;
 		}
 
-		// Reconnect to the repository at the same commit (use sandbox if configured)
-		const sandboxConfig = getSandboxConfig();
-		const rawSession = sandboxConfig.enabled
-			? await connectWithSandbox(repoRow.git_url, { commitish })
-			: await connect(repoRow.git_url, { commitish });
+		// Reconnect to the repository at the same commit
+		const rawSession = await forgeClient.connect(repoRow.git_url, { commitish });
 		const session = wrapSession(rawSession, sessionId);
 
 		// Load messages from DB and restore them, considering compaction
