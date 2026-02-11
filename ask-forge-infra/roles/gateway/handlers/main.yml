@@ -1,5 +1,5 @@
 ---
 - name: Restart gateway
-  community.docker.docker_compose_v2:
-    project_src: ~/gateway
-    state: restarted
+  shell: |
+    cd ~/gateway
+    docker compose restart

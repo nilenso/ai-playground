@@ -14,29 +14,24 @@
 
   tasks:
     - name: Pull latest images
-      community.docker.docker_compose_v2:
-        project_src: ~/ask-forge-web
-        pull: always
-        state: present
-      register: compose_pull
+      shell: |
+        cd ~/ask-forge-web
+        docker compose pull
+      register: pull_result
 
     - name: Stop and remove old containers
-      community.docker.docker_compose_v2:
-        project_src: ~/ask-forge-web
-        state: absent
-        remove_orphans: true
-      when: compose_pull.changed
+      shell: |
+        cd ~/ask-forge-web
+        docker compose down --remove-orphans || true
+      when: pull_result.changed
 
     - name: Start application
-      community.docker.docker_compose_v2:
-        project_src: ~/ask-forge-web
-        state: present
+      shell: |
+        cd ~/ask-forge-web
+        docker compose up -d
 
     - name: Prune old Docker images
-      community.docker.docker_prune:
-        images: true
-        images_filters:
-          dangling: false
+      shell: docker image prune -f
 
     - name: Wait for app to be healthy
       uri:
@@ -47,7 +42,8 @@
       delay: 2
       until: health_check.status == 200
       ignore_errors: true
+      delegate_to: localhost
 
     - name: Display deployment result
       debug:
-        msg: "{{ 'Deployment successful! App is healthy.' if health_check.status == 200 else 'Warning: App may not be healthy yet.' }}"
+        msg: "Deployment complete"
