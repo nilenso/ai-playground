@@ -28,8 +28,9 @@ app.route("/api/auth", auth);
 // API routes
 app.route("/api", api);
 
-// Bookmarklet endpoint - extracts repo URL from Referer header and redirects
-// Usage: Create a bookmark with URL: https://your-askforge.com/go
+// Bookmarklet endpoint - extracts repo URL and redirects
+// Usage: Create a bookmarklet with:
+//   javascript:location='https://ask.nilenso.ai/go?url='+encodeURIComponent(location.href)
 // When clicked from a GitHub/GitLab/etc page, it redirects with the repo pre-filled
 // Requires user to be logged in
 app.get("/go", async (c) => {
@@ -49,18 +50,17 @@ app.get("/go", async (c) => {
 		return c.redirect("/?error=not-logged-in");
 	}
 
-	const referer = c.req.header("Referer");
+	// Get URL from query param (bookmarklet) or Referer header (direct link)
+	const sourceUrl = c.req.query("url") || c.req.header("Referer");
 
-	if (!referer) {
-		// No referer - redirect to home with an error hint
+	if (!sourceUrl) {
 		return c.redirect("/?error=no-referer");
 	}
 
-	const { repoUrl, error } = extractRepoFromUrl(referer);
+	const { repoUrl, error } = extractRepoFromUrl(sourceUrl);
 
 	if (!repoUrl) {
-		// Not a recognized forge URL - redirect to home
-		console.log(`[/go] Failed to extract repo from referer: ${referer} - ${error}`);
+		console.log(`[/go] Failed to extract repo from: ${sourceUrl} - ${error}`);
 		return c.redirect("/?error=not-a-repo");
 	}
 
