@@ -8,7 +8,6 @@ interface ConnectPhaseProps {
 	setUrl: (url: string) => void;
 	buildTime: string | null;
 	bookmarkletError: string | null;
-	autoConnecting: boolean;
 	handleConnect: () => void;
 	handleLogin: () => void;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
@@ -23,7 +22,6 @@ export function ConnectPhase({
 	setUrl,
 	buildTime,
 	bookmarkletError,
-	autoConnecting,
 	handleConnect,
 	handleLogin,
 	handleKeyDown,
@@ -89,15 +87,15 @@ export function ConnectPhase({
 							onKeyDown={handleKeyDown}
 							placeholder="Enter repository URL..."
 							className="main-input"
-							disabled={connection.status === "connecting" || autoConnecting}
+							disabled={connection.status === "connecting"}
 						/>
 						<button
 							type="button"
 							className="connect-button"
 							onClick={handleConnect}
-							disabled={connection.status === "connecting" || autoConnecting || !url.trim()}
+							disabled={connection.status === "connecting" || !url.trim()}
 						>
-							{connection.status === "connecting" || autoConnecting ? <span className="spinner" /> : "Connect"}
+							{connection.status === "connecting" ? <span className="spinner" /> : "Connect"}
 						</button>
 					</div>
 

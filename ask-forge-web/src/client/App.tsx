@@ -398,10 +398,10 @@ export function App() {
 		}
 	}, [connection.sessionId, initialSessionId]);
 
-	// Track if we should auto-connect (from /go bookmarklet redirect)
-	const [autoConnect, setAutoConnect] = useState(false);
 	// Bookmarklet error message
 	const [bookmarkletError, setBookmarkletError] = useState<string | null>(null);
+	// URL to auto-connect to (from /go bookmarklet) - use ref to avoid stale closure issues
+	const autoConnectUrlRef = useRef<string | null>(null);
 
 	// Load URL from query param or localStorage on mount
 	useEffect(() => {
@@ -432,7 +432,8 @@ export function App() {
 		if (repoParam) {
 			setUrl(repoParam);
 			if (autoParam === "1") {
-				setAutoConnect(true);
+				// Store in ref to avoid stale closure issues with handleConnect
+				autoConnectUrlRef.current = repoParam;
 			}
 			// Clean up the URL
 			window.history.replaceState({}, "", window.location.pathname);
@@ -444,11 +445,52 @@ export function App() {
 
 	// Auto-connect when redirected from /go bookmarklet
 	useEffect(() => {
-		if (autoConnect && auth.authenticated && url && connection.status === "disconnected") {
-			setAutoConnect(false);
-			handleConnect();
+		const autoConnectUrl = autoConnectUrlRef.current;
+		if (autoConnectUrl && auth.authenticated && connection.status === "disconnected") {
+			autoConnectUrlRef.current = null; // Clear to prevent re-triggering
+
+			// Connect directly using the URL from ref (not from state)
+			setConnection((prev) => ({ ...prev, status: "connecting", error: null }));
+
+			fetch("/api/connect", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ url: autoConnectUrl }),
+			})
+				.then((res) => res.json())
+				.then((data) => {
+					if (!data.success) {
+						setConnection((prev) => ({
+							...prev,
+							status: "error",
+							error: data.error || "Failed to connect",
+						}));
+						return;
+					}
+
+					const repoName = extractRepoName(autoConnectUrl);
+					setConnection({
+						status: "connected",
+						sessionId: data.sessionId,
+						commitish: data.commitish,
+						error: null,
+						repoName,
+					});
+
+					localStorage.setItem("askforge_repo_url", autoConnectUrl);
+					setPhase("ask");
+					setMessages([]);
+					session.fetchSessionHistory();
+				})
+				.catch((err) => {
+					setConnection((prev) => ({
+						...prev,
+						status: "error",
+						error: err instanceof Error ? err.message : "Network error",
+					}));
+				});
 		}
-	}, [autoConnect, auth.authenticated, url, connection.status, handleConnect]);
+	}, [auth.authenticated, connection.status, session.fetchSessionHistory]);
 
 	// Fetch build info on mount
 	useEffect(() => {
@@ -539,7 +581,6 @@ export function App() {
 				setUrl={setUrl}
 				buildTime={buildTime}
 				bookmarkletError={bookmarkletError}
-				autoConnecting={autoConnect && auth.authenticated}
 				handleConnect={handleConnect}
 				handleLogin={handleLogin}
 				handleKeyDown={handleKeyDown}
