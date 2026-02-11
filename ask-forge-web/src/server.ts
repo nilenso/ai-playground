@@ -1,8 +1,11 @@
 import { Hono } from "hono";
+import { getCookie } from "hono/cookie";
+import { verify } from "hono/jwt";
 import { serveStatic } from "hono/bun";
 import auth from "./api/auth.ts";
 import api from "./api/index.ts";
-import { validateAuthConfig } from "./lib/auth-config.ts";
+import { AUTH_CONFIG, validateAuthConfig } from "./lib/auth-config.ts";
+import { extractRepoFromUrl } from "./lib/extract-repo-from-url.ts";
 import { websocketHandler } from "./websocket.ts";
 
 // Validate auth config on startup
@@ -24,6 +27,47 @@ app.route("/api/auth", auth);
 
 // API routes
 app.route("/api", api);
+
+// Bookmarklet endpoint - extracts repo URL from Referer header and redirects
+// Usage: Create a bookmark with URL: https://your-askforge.com/go
+// When clicked from a GitHub/GitLab/etc page, it redirects with the repo pre-filled
+// Requires user to be logged in
+app.get("/go", async (c) => {
+	// Check authentication via cookie
+	const token = getCookie(c, "auth_token");
+	if (!token) {
+		return c.redirect("/?error=not-logged-in");
+	}
+
+	try {
+		const payload = await verify(token, AUTH_CONFIG.jwt.secret, "HS256");
+		const now = Math.floor(Date.now() / 1000);
+		if (typeof payload.exp === "number" && payload.exp < now) {
+			return c.redirect("/?error=not-logged-in");
+		}
+	} catch {
+		return c.redirect("/?error=not-logged-in");
+	}
+
+	const referer = c.req.header("Referer");
+
+	if (!referer) {
+		// No referer - redirect to home with an error hint
+		return c.redirect("/?error=no-referer");
+	}
+
+	const { repoUrl, error } = extractRepoFromUrl(referer);
+
+	if (!repoUrl) {
+		// Not a recognized forge URL - redirect to home
+		console.log(`[/go] Failed to extract repo from referer: ${referer} - ${error}`);
+		return c.redirect("/?error=not-a-repo");
+	}
+
+	// Redirect with repo URL and auto-connect flag
+	const redirectUrl = `/?repo=${encodeURIComponent(repoUrl)}&auto=1`;
+	return c.redirect(redirectUrl);
+});
 
 // SPA routes - serve index.html for client-side routing
 // These must come before the static file middleware

@@ -7,6 +7,8 @@ interface ConnectPhaseProps {
 	url: string;
 	setUrl: (url: string) => void;
 	buildTime: string | null;
+	bookmarkletError: string | null;
+	autoConnecting: boolean;
 	handleConnect: () => void;
 	handleLogin: () => void;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
@@ -20,6 +22,8 @@ export function ConnectPhase({
 	url,
 	setUrl,
 	buildTime,
+	bookmarkletError,
+	autoConnecting,
 	handleConnect,
 	handleLogin,
 	handleKeyDown,
@@ -85,19 +89,20 @@ export function ConnectPhase({
 							onKeyDown={handleKeyDown}
 							placeholder="Enter repository URL..."
 							className="main-input"
-							disabled={connection.status === "connecting"}
+							disabled={connection.status === "connecting" || autoConnecting}
 						/>
 						<button
 							type="button"
 							className="connect-button"
 							onClick={handleConnect}
-							disabled={connection.status === "connecting" || !url.trim()}
+							disabled={connection.status === "connecting" || autoConnecting || !url.trim()}
 						>
-							{connection.status === "connecting" ? <span className="spinner" /> : "Connect"}
+							{connection.status === "connecting" || autoConnecting ? <span className="spinner" /> : "Connect"}
 						</button>
 					</div>
 
 					{connection.error && <div className="error-message">{connection.error}</div>}
+					{bookmarkletError && <div className="error-message">{bookmarkletError}</div>}
 
 					<p className="hint">Paste a GitHub, GitLab, or Bitbucket URL</p>
 				</div>

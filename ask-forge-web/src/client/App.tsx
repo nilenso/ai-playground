@@ -398,6 +398,11 @@ export function App() {
 		}
 	}, [connection.sessionId, initialSessionId]);
 
+	// Track if we should auto-connect (from /go bookmarklet redirect)
+	const [autoConnect, setAutoConnect] = useState(false);
+	// Bookmarklet error message
+	const [bookmarkletError, setBookmarkletError] = useState<string | null>(null);
+
 	// Load URL from query param or localStorage on mount
 	useEffect(() => {
 		// Skip if we're restoring from a session permalink
@@ -405,8 +410,30 @@ export function App() {
 
 		const params = new URLSearchParams(window.location.search);
 		const repoParam = params.get("repo");
+		const autoParam = params.get("auto");
+		const errorParam = params.get("error");
+
+		// Handle bookmarklet errors
+		if (errorParam) {
+			if (errorParam === "not-logged-in") {
+				setBookmarkletError("Please sign in first, then try the bookmarklet again.");
+			} else if (errorParam === "no-referer") {
+				setBookmarkletError("Could not detect which page you came from. Try clicking the bookmarklet directly from a repository page.");
+			} else if (errorParam === "not-a-repo") {
+				setBookmarkletError("The page you came from doesn't appear to be a code repository.");
+			}
+			// Clear error after a delay
+			setTimeout(() => setBookmarkletError(null), 5000);
+			// Clean up URL
+			window.history.replaceState({}, "", window.location.pathname);
+			return;
+		}
+
 		if (repoParam) {
 			setUrl(repoParam);
+			if (autoParam === "1") {
+				setAutoConnect(true);
+			}
 			// Clean up the URL
 			window.history.replaceState({}, "", window.location.pathname);
 		} else {
@@ -414,6 +441,14 @@ export function App() {
 			if (savedUrl) setUrl(savedUrl);
 		}
 	}, [initialSessionId]);
+
+	// Auto-connect when redirected from /go bookmarklet
+	useEffect(() => {
+		if (autoConnect && auth.authenticated && url && connection.status === "disconnected") {
+			setAutoConnect(false);
+			handleConnect();
+		}
+	}, [autoConnect, auth.authenticated, url, connection.status, handleConnect]);
 
 	// Fetch build info on mount
 	useEffect(() => {
@@ -503,6 +538,8 @@ export function App() {
 				url={url}
 				setUrl={setUrl}
 				buildTime={buildTime}
+				bookmarkletError={bookmarkletError}
+				autoConnecting={autoConnect && auth.authenticated}
 				handleConnect={handleConnect}
 				handleLogin={handleLogin}
 				handleKeyDown={handleKeyDown}
