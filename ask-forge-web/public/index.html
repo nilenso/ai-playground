@@ -1442,6 +1442,43 @@
 			outline: none;
 		}
 
+		.sidebar-bookmarklet {
+			flex-shrink: 0;
+			padding: 8px 12px;
+			border-top: 1px solid var(--border-subtle);
+		}
+
+		.bookmarklet-link {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 8px 10px;
+			background: linear-gradient(135deg, rgba(236, 72, 153, 0.1), rgba(168, 85, 247, 0.1));
+			border: 1px dashed var(--accent-pink);
+			border-radius: 8px;
+			color: var(--text-secondary);
+			font-size: 12px;
+			text-decoration: none;
+			cursor: grab;
+			transition: all 0.15s;
+		}
+
+		.bookmarklet-link:hover {
+			background: linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(168, 85, 247, 0.15));
+			color: var(--text-primary);
+		}
+
+		.bookmarklet-link:active {
+			cursor: grabbing;
+		}
+
+		.bookmarklet-link svg {
+			width: 14px;
+			height: 14px;
+			stroke: var(--accent-pink);
+			flex-shrink: 0;
+		}
+
 		.sidebar-footer {
 			flex-shrink: 0;
 			padding: 8px 12px;
