@@ -56,6 +56,7 @@ export function App() {
 	const messagesContainerRef = useRef<HTMLDivElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const shouldAutoScrollRef = useRef(true);
+	const [isAutoScrolling, setIsAutoScrolling] = useState(true);
 	const isProgrammaticScrollRef = useRef(false);
 	const phaseRef = useRef(phase);
 	phaseRef.current = phase;
@@ -347,7 +348,9 @@ export function App() {
 		if (!container) return;
 		const { scrollTop, scrollHeight, clientHeight } = container;
 		const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-		shouldAutoScrollRef.current = distanceFromBottom < 100;
+		const shouldAutoScroll = distanceFromBottom < 100;
+		shouldAutoScrollRef.current = shouldAutoScroll;
+		setIsAutoScrolling(shouldAutoScroll);
 	}, []);
 
 	// --- Effects ---
@@ -615,6 +618,7 @@ export function App() {
 			inputValue={inputValue}
 			setInputValue={setInputValue}
 			isAsking={isAsking}
+			isAutoScrolling={isAutoScrolling}
 			progress={progress}
 			votes={votes}
 			copiedId={copiedId}

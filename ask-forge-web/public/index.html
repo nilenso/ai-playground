@@ -432,6 +432,14 @@
 			flex-direction: column;
 		}
 
+		.messages-wrapper {
+			flex: 1;
+			overflow: hidden;
+			display: flex;
+			flex-direction: column;
+			position: relative;
+		}
+
 		.messages {
 			flex: 1;
 			overflow-y: auto;
@@ -439,6 +447,43 @@
 			display: flex;
 			flex-direction: column;
 			gap: 24px;
+		}
+
+		.streaming-glow {
+			position: absolute;
+			bottom: 0;
+			left: 0;
+			right: 0;
+			height: 60px;
+			pointer-events: none;
+			background: linear-gradient(
+				to top,
+				rgba(236, 72, 153, 0.15) 0%,
+				rgba(236, 72, 153, 0.05) 50%,
+				transparent 100%
+			);
+			animation: glow-pulse 2s ease-in-out infinite;
+		}
+
+		.streaming-glow-emphatic {
+			height: 80px;
+			background: linear-gradient(
+				to top,
+				rgba(236, 72, 153, 0.3) 0%,
+				rgba(168, 85, 247, 0.15) 40%,
+				transparent 100%
+			);
+			animation: glow-pulse-emphatic 1.5s ease-in-out infinite;
+		}
+
+		@keyframes glow-pulse {
+			0%, 100% { opacity: 0.6; }
+			50% { opacity: 1; }
+		}
+
+		@keyframes glow-pulse-emphatic {
+			0%, 100% { opacity: 0.7; }
+			50% { opacity: 1; }
 		}
 
 		.message {
