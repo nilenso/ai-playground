@@ -34,7 +34,18 @@ export function MessageList({
 	handleMessagesScroll,
 }: MessageListProps) {
 	const isStreaming = messages.some((m) => m.isStreaming);
-	const showStreamingGlow = isAsking || isStreaming;
+
+	// Determine glow state:
+	// - "emphatic" = actively streaming + auto-scrolling (most visible)
+	// - "active" = actively streaming but user scrolled up (visible)
+	// - "subtle" = waiting/thinking but not streaming yet (barely visible)
+	// - null = idle, no glow
+	let glowState: "emphatic" | "active" | "subtle" | null = null;
+	if (isStreaming) {
+		glowState = isAutoScrolling ? "emphatic" : "active";
+	} else if (isAsking) {
+		glowState = "subtle";
+	}
 
 	return (
 		<div className="messages-wrapper">
@@ -248,8 +259,8 @@ export function MessageList({
 			)}
 				<div ref={messagesEndRef} />
 			</div>
-			{showStreamingGlow && (
-				<div className={`streaming-glow ${isAutoScrolling ? "streaming-glow-emphatic" : ""}`} />
+			{glowState && (
+				<div className={`streaming-glow streaming-glow-${glowState}`} />
 			)}
 		</div>
 	);
