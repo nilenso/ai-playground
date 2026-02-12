@@ -211,7 +211,7 @@ export function useWebSocket({
 							setMessages((prev) =>
 								prev.map((msg) =>
 									msg.id === streamingMessageIdRef.current
-										? { ...msg, contentBlocks: blocksToUse, isStreaming: !isResumingRef.current }
+										? { ...msg, contentBlocks: blocksToUse, isStreaming: false }
 										: msg,
 								),
 							);
