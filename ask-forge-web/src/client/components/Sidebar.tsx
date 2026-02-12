@@ -204,7 +204,9 @@ export function Sidebar({
 						</svg>
 						AskForge!
 					</a>
-					<span className="bookmarklet-hint">↑ Drag to bookmarks bar</span>
+					<span className="bookmarklet-hint">
+						↑ Drag to bookmarks bar, then click it on any GitHub page to ask questions about that repo
+					</span>
 				</div>
 			)}
 			<div className="sidebar-footer" ref={profileRef}>
