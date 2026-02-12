@@ -58,6 +58,8 @@ export function App() {
 	const shouldAutoScrollRef = useRef(true);
 	const [isAutoScrolling, setIsAutoScrolling] = useState(true);
 	const lastScrollTopRef = useRef(0);
+	const lastAutoScrollTimeRef = useRef(0);
+	const autoScrollThrottleMs = 150;
 	const isProgrammaticScrollRef = useRef(false);
 	const phaseRef = useRef(phase);
 	phaseRef.current = phase;
@@ -538,19 +540,42 @@ export function App() {
 		wasAskingRef.current = isAsking;
 	}, [isAsking, phase, session.fetchSessionHistory]);
 
-	// Auto-scroll to bottom when messages change
+	// Auto-scroll to bottom when messages change (throttled)
 	useEffect(() => {
 		if (!shouldAutoScrollRef.current) return;
+
+		const now = Date.now();
+		const timeSinceLastScroll = now - lastAutoScrollTimeRef.current;
+
+		// Throttle scrolling to avoid too-frequent jumps during streaming
+		if (timeSinceLastScroll < autoScrollThrottleMs) {
+			// Schedule a scroll at the end of the throttle window
+			const timeoutId = setTimeout(() => {
+				if (!shouldAutoScrollRef.current) return;
+				const container = messagesContainerRef.current;
+				if (!container) return;
+
+				isProgrammaticScrollRef.current = true;
+				container.scrollTop = container.scrollHeight;
+				lastScrollTopRef.current = container.scrollTop;
+				lastAutoScrollTimeRef.current = Date.now();
+
+				requestAnimationFrame(() => {
+					isProgrammaticScrollRef.current = false;
+				});
+			}, autoScrollThrottleMs - timeSinceLastScroll);
+
+			return () => clearTimeout(timeoutId);
+		}
 
 		const container = messagesContainerRef.current;
 		if (!container) return;
 
-		// Use instant scroll to avoid fighting with user input
 		isProgrammaticScrollRef.current = true;
 		container.scrollTop = container.scrollHeight;
 		lastScrollTopRef.current = container.scrollTop;
+		lastAutoScrollTimeRef.current = now;
 
-		// Reset the programmatic flag after a frame
 		requestAnimationFrame(() => {
 			isProgrammaticScrollRef.current = false;
 		});
