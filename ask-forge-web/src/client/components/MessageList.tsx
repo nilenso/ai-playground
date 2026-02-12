@@ -5,6 +5,7 @@ import { formatToolCall } from "../utils.ts";
 interface MessageListProps {
 	messages: Message[];
 	isAsking: boolean;
+	isAutoScrolling: boolean;
 	progress: ProgressState;
 	votes: Record<string, "like" | "dislike">;
 	copiedId: string | null;
@@ -20,6 +21,7 @@ interface MessageListProps {
 export function MessageList({
 	messages,
 	isAsking,
+	isAutoScrolling,
 	progress,
 	votes,
 	copiedId,
@@ -31,8 +33,12 @@ export function MessageList({
 	messagesEndRef,
 	handleMessagesScroll,
 }: MessageListProps) {
+	const isStreaming = messages.some((m) => m.isStreaming);
+	const showStreamingGlow = isAsking || isStreaming;
+
 	return (
-		<div className="messages" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
+		<div className="messages-wrapper">
+			<div className="messages" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
 			{messages.map((msg) => (
 				<div key={msg.id} className={`message message-${msg.role}${msg.isStreaming ? " streaming" : ""}`}>
 					<div className="message-role">
@@ -240,7 +246,11 @@ export function MessageList({
 					</div>
 				</div>
 			)}
-			<div ref={messagesEndRef} />
+				<div ref={messagesEndRef} />
+			</div>
+			{showStreamingGlow && (
+				<div className={`streaming-glow ${isAutoScrolling ? "streaming-glow-emphatic" : ""}`} />
+			)}
 		</div>
 	);
 }

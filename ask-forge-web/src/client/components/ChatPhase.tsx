@@ -10,6 +10,7 @@ interface ChatPhaseProps {
 	inputValue: string;
 	setInputValue: (value: string) => void;
 	isAsking: boolean;
+	isAutoScrolling: boolean;
 	progress: ProgressState;
 	votes: Record<string, "like" | "dislike">;
 	copiedId: string | null;
@@ -34,6 +35,7 @@ export function ChatPhase({
 	inputValue,
 	setInputValue,
 	isAsking,
+	isAutoScrolling,
 	progress,
 	votes,
 	copiedId,
@@ -98,6 +100,7 @@ export function ChatPhase({
 					<MessageList
 						messages={messages}
 						isAsking={isAsking}
+						isAutoScrolling={isAutoScrolling}
 						progress={progress}
 						votes={votes}
 						copiedId={copiedId}
