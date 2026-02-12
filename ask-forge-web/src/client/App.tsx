@@ -57,8 +57,7 @@ export function App() {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const shouldAutoScrollRef = useRef(true);
 	const [isAutoScrolling, setIsAutoScrolling] = useState(true);
-	const userScrolledRef = useRef(false);
-	const userScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const lastScrollTopRef = useRef(0);
 	const isProgrammaticScrollRef = useRef(false);
 	const phaseRef = useRef(phase);
 	phaseRef.current = phase;
@@ -348,22 +347,24 @@ export function App() {
 		if (isProgrammaticScrollRef.current) return;
 		const container = messagesContainerRef.current;
 		if (!container) return;
+
 		const { scrollTop, scrollHeight, clientHeight } = container;
 		const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-		const shouldAutoScroll = distanceFromBottom < 50;
+		const isAtBottom = distanceFromBottom < 50;
 
-		// Mark that user scrolled manually
-		userScrolledRef.current = true;
-		if (userScrollTimeoutRef.current) {
-			clearTimeout(userScrollTimeoutRef.current);
+		// Detect scroll direction
+		const scrolledUp = scrollTop < lastScrollTopRef.current;
+		lastScrollTopRef.current = scrollTop;
+
+		// If user scrolled up, immediately disable auto-scroll
+		// Only re-enable when they scroll back to the bottom
+		if (scrolledUp && !isAtBottom) {
+			shouldAutoScrollRef.current = false;
+			setIsAutoScrolling(false);
+		} else if (isAtBottom) {
+			shouldAutoScrollRef.current = true;
+			setIsAutoScrolling(true);
 		}
-		// Clear the user-scrolled flag after a brief delay
-		userScrollTimeoutRef.current = setTimeout(() => {
-			userScrolledRef.current = false;
-		}, 150);
-
-		shouldAutoScrollRef.current = shouldAutoScroll;
-		setIsAutoScrolling(shouldAutoScroll);
 	}, []);
 
 	// --- Effects ---
@@ -539,15 +540,15 @@ export function App() {
 
 	// Auto-scroll to bottom when messages change
 	useEffect(() => {
-		// Don't auto-scroll if user is actively scrolling or has scrolled away from bottom
-		if (userScrolledRef.current || !shouldAutoScrollRef.current) return;
+		if (!shouldAutoScrollRef.current) return;
 
 		const container = messagesContainerRef.current;
 		if (!container) return;
 
-		// Use instant scroll (not smooth) to avoid fighting with user input
+		// Use instant scroll to avoid fighting with user input
 		isProgrammaticScrollRef.current = true;
 		container.scrollTop = container.scrollHeight;
+		lastScrollTopRef.current = container.scrollTop;
 
 		// Reset the programmatic flag after a frame
 		requestAnimationFrame(() => {
