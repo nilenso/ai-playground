@@ -19,6 +19,13 @@ interface ChatPhaseProps {
 	handleVote: (msgId: string, vote: "like" | "dislike") => void;
 	handleSend: () => void;
 	handleResend: (question: string) => void;
+	handleCancel: () => void;
+	editingMessageId: string | null;
+	editValue: string;
+	setEditValue: (value: string) => void;
+	handleStartEdit: (messageId: string, currentContent: string) => void;
+	handleSaveEdit: (messageId: string) => void;
+	handleCancelEdit: () => void;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
 	handleShareSession: (sessionId: string) => void;
 	messagesContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -44,6 +51,13 @@ export function ChatPhase({
 	handleVote,
 	handleSend,
 	handleResend,
+	handleCancel,
+	editingMessageId,
+	editValue,
+	setEditValue,
+	handleStartEdit,
+	handleSaveEdit,
+	handleCancelEdit,
 	handleKeyDown,
 	handleShareSession,
 	messagesContainerRef,
@@ -107,6 +121,12 @@ export function ChatPhase({
 						markedWithLinks={markedWithLinks}
 						handleCopyMessage={handleCopyMessage}
 						handleResend={handleResend}
+						editingMessageId={editingMessageId}
+						editValue={editValue}
+						setEditValue={setEditValue}
+						handleStartEdit={handleStartEdit}
+						handleSaveEdit={handleSaveEdit}
+						handleCancelEdit={handleCancelEdit}
 						handleVote={handleVote}
 						messagesContainerRef={messagesContainerRef}
 						messagesEndRef={messagesEndRef}
@@ -128,11 +148,27 @@ export function ChatPhase({
 						/>
 						<button
 							type="button"
-							className="send-button"
-							onClick={handleSend}
-							disabled={isAsking || !inputValue.trim()}
+							className={isAsking ? "stop-button" : "send-button"}
+							onClick={isAsking ? handleCancel : handleSend}
+							disabled={!isAsking && !inputValue.trim()}
 						>
-							{isAsking ? <span className="spinner small" /> : "Send"}
+							{isAsking ? (
+								<>
+									<svg
+										viewBox="0 0 24 24"
+										width="16"
+										height="16"
+										fill="currentColor"
+										stroke="none"
+										aria-hidden="true"
+									>
+										<rect x="6" y="6" width="12" height="12" rx="1" />
+									</svg>
+									Stop
+								</>
+							) : (
+								"Send"
+							)}
 						</button>
 					</div>
 				</footer>

@@ -17,6 +17,9 @@ type WSMessage =
 // Track in-flight requests for cancellation
 const activeRequests = new Map<string, AbortController>();
 
+// Track requestId -> sessionId mapping for cancellation
+const requestToSession = new Map<string, string>();
+
 // Buffer for streaming output per session - allows resuming after page refresh
 interface StreamBuffer {
 	requestId: string;
@@ -79,6 +82,18 @@ export const websocketHandler = {
 				if (controller) {
 					controller.abort();
 					activeRequests.delete(data.requestId);
+
+					// Mark the stream buffer as completed to allow new requests
+					const sessionId = requestToSession.get(data.requestId);
+					if (sessionId) {
+						const buffer = streamBuffers.get(sessionId);
+						if (buffer) {
+							buffer.completed = true;
+							buffer.completedAt = Date.now();
+						}
+						requestToSession.delete(data.requestId);
+					}
+
 					ws.send(JSON.stringify({ type: "cancelled", requestId: data.requestId }));
 				}
 				return;
@@ -313,6 +328,9 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 	const abortController = new AbortController();
 	activeRequests.set(requestId, abortController);
 
+	// Track requestId -> sessionId mapping
+	requestToSession.set(requestId, sessionId);
+
 	// Initialize stream buffer for this session
 	streamBuffers.set(sessionId, {
 		requestId,
@@ -371,5 +389,6 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 		}
 	} finally {
 		activeRequests.delete(requestId);
+		requestToSession.delete(requestId);
 	}
 }

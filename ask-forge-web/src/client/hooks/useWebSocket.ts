@@ -346,9 +346,16 @@ export function useWebSocket({
 					}
 				} else if (message.type === "cancelled") {
 					stopReleaseLoop();
+					flushTextBuffer();
 
 					if (streamingMessageIdRef.current) {
-						setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
+						setMessages((prev) =>
+							prev.map((msg) =>
+								msg.id === streamingMessageIdRef.current
+									? { ...msg, isStreaming: false }
+									: msg
+							),
+						);
 					}
 
 					streamingMessageIdRef.current = null;
@@ -416,7 +423,7 @@ export function useWebSocket({
 
 		ws.onmessage = handleWsMessage;
 
-		ws.onerror = () => {};
+		ws.onerror = () => { };
 
 		ws.onclose = () => {
 			wsRef.current = null;
