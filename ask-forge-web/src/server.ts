@@ -1,7 +1,7 @@
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { getCookie } from "hono/cookie";
 import { verify } from "hono/jwt";
-import { serveStatic } from "hono/bun";
 import auth from "./api/auth.ts";
 import api from "./api/index.ts";
 import { AUTH_CONFIG, validateAuthConfig } from "./lib/auth-config.ts";

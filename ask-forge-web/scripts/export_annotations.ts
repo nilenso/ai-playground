@@ -4,7 +4,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import { join, dirname } from "path";
+import { dirname, join } from "path";
 
 const SCRIPT_DIR = dirname(import.meta.path);
 const DB_PATH = Bun.argv[2] ?? join(SCRIPT_DIR, "..", "data", "ask-forge.db");
@@ -48,7 +48,16 @@ const rows = db
 
 db.close();
 
-const header = ["session_id", "repository", "commit_id", "question", "is_answer_relevant", "is_evidence_supported", "is_clear_and_readable", "misc_feedback"];
+const header = [
+	"session_id",
+	"repository",
+	"commit_id",
+	"question",
+	"is_answer_relevant",
+	"is_evidence_supported",
+	"is_clear_and_readable",
+	"misc_feedback",
+];
 const lines = [toCsvRow(header), ...rows.map((row) => toCsvRow(header.map((col) => row[col])))];
 
 await Bun.write(OUTPUT_PATH, lines.join("\n") + "\n");
