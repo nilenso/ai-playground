@@ -71,20 +71,18 @@ The app will only start after migrations complete successfully.
 
 ## Session Visualizer
 
-A separate tool for visualizing `.jsonl` session files (e.g., from pi coding agent sessions).
+A tool for visualizing ask-forge sessions stored in the SQLite database.
 
 ```bash
-# Run visualizer (default: looks for .jsonl files in current directory)
 bun run dev:visualizer
-
-# Specify a directory containing session files
-SESSION_DIR=/path/to/sessions bun run dev:visualizer
 ```
 
 The visualizer runs on port 3001 and provides:
-- Dropdown to select between multiple `.jsonl` files
-- Session metadata display (ID, timestamp, working directory)
-- Formatted conversation view with user messages, assistant responses, thinking blocks, and tool calls/results
+- Sidebar with searchable session list and status filtering (active/inactive/error)
+- Session metadata display (repo, commit, timestamp, duration)
+- Formatted conversation view with user messages, assistant responses, and tool calls/results
+- Annotations for rating response quality (relevance, evidence, clarity)
+- Export to JSONL format
 
 ## Scripts
 
