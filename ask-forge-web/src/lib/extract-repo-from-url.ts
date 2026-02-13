@@ -11,23 +11,40 @@
 
 // Reserved paths that aren't repositories (shared across forges)
 const GITHUB_RESERVED = [
-	"settings", "organizations", "marketplace", "explore", "topics", "trending",
-	"collections", "events", "sponsors", "features", "security", "pulls", "issues",
-	"notifications", "login", "logout", "new", "pricing", "enterprise", "about",
-	"team", "join", "customer-stories", "readme", "apps", "codespaces", "search",
+	"settings",
+	"organizations",
+	"marketplace",
+	"explore",
+	"topics",
+	"trending",
+	"collections",
+	"events",
+	"sponsors",
+	"features",
+	"security",
+	"pulls",
+	"issues",
+	"notifications",
+	"login",
+	"logout",
+	"new",
+	"pricing",
+	"enterprise",
+	"about",
+	"team",
+	"join",
+	"customer-stories",
+	"readme",
+	"apps",
+	"codespaces",
+	"search",
 ];
 
-const BITBUCKET_RESERVED = [
-	"account", "dashboard", "repo", "plugins", "support", "whats-new",
-];
+const BITBUCKET_RESERVED = ["account", "dashboard", "repo", "plugins", "support", "whats-new"];
 
-const CODEBERG_RESERVED = [
-	"explore", "repo", "user", "admin", "org", "notifications",
-];
+const CODEBERG_RESERVED = ["explore", "repo", "user", "admin", "org", "notifications"];
 
-const GITLAB_RESERVED = [
-	"explore", "dashboard", "admin", "groups", "projects", "users", "help",
-];
+const GITLAB_RESERVED = ["explore", "dashboard", "admin", "groups", "projects", "users", "help"];
 
 // Known forge domains and their repo extraction patterns
 const FORGE_EXTRACTORS: Array<{

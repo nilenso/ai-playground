@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthState, SessionSummary } from "../types.ts";
 
 const BOOKMARKLET_CODE = "javascript:location='https://ask.nilenso.ai/go?url='+encodeURIComponent(location.href)";
@@ -193,12 +193,7 @@ export function Sidebar({
 			)}
 			{!sidebarCollapsed && (
 				<div className="sidebar-bookmarklet">
-					<a
-						ref={bookmarkletRef}
-						href="#"
-						className="bookmarklet-link"
-						onClick={(e) => e.preventDefault()}
-					>
+					<a ref={bookmarkletRef} href="#" className="bookmarklet-link" onClick={(e) => e.preventDefault()}>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
 							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
 						</svg>

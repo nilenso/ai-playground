@@ -4,9 +4,7 @@ import { Hono } from "hono";
 // The SYSTEM_PROMPT is not re-exported from @nilenso/ask-forge's package index,
 // so we read it from the config module at the resolved path.
 // biome-ignore lint/suspicious/noExplicitAny: dynamic import of internal module
-const askForgeConfig: any = await import(
-	import.meta.resolve("@nilenso/ask-forge").replace("/index.js", "/config.js")
-);
+const askForgeConfig: any = await import(import.meta.resolve("@nilenso/ask-forge").replace("/index.js", "/config.js"));
 const SYSTEM_PROMPT: string = askForgeConfig.SYSTEM_PROMPT;
 
 // Initialize ask-forge client with sandbox configuration if available
@@ -26,6 +24,7 @@ const askForgeClient = new AskForgeClient(
 );
 
 console.log(`[ask-forge] Sandbox mode: ${sandboxUrl ? "enabled" : "disabled"}`);
+
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
 import {
 	createSession as createDbSession,

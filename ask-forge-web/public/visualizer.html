@@ -693,6 +693,109 @@
 			opacity: 0.7;
 			cursor: not-allowed;
 		}
+
+		/* Right Sidebar */
+		.viz-right-sidebar {
+			width: 320px;
+			flex-shrink: 0;
+			border-left: 1px solid var(--border-subtle);
+			display: flex;
+			flex-direction: column;
+			background: var(--bg-secondary);
+			overflow-y: auto;
+		}
+
+		.viz-annotation-panel {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+		}
+
+		.viz-annotation-panel .viz-annotation-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 16px;
+			background: var(--bg-secondary);
+			border-bottom: 1px solid var(--border-subtle);
+		}
+
+		.viz-annotation-panel .viz-annotation-title {
+			font-weight: 600;
+			font-size: 14px;
+			color: var(--text-primary);
+		}
+
+		.viz-annotation-ask-indicator {
+			font-size: 12px;
+			color: var(--text-muted);
+			font-weight: 500;
+		}
+
+		.viz-annotation-panel .viz-annotation-content {
+			padding: 16px;
+			display: flex;
+			flex-direction: column;
+			gap: 16px;
+			flex: 1;
+			overflow-y: auto;
+		}
+
+		.viz-annotation-question-preview {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			padding: 12px;
+			background: var(--bg-tertiary);
+			border-radius: 8px;
+			border: 1px solid var(--border-subtle);
+		}
+
+		.viz-annotation-preview-label {
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			color: var(--text-muted);
+		}
+
+		.viz-annotation-preview-text {
+			font-size: 13px;
+			color: var(--text-primary);
+			line-height: 1.5;
+		}
+
+		.viz-annotation-empty {
+			padding: 40px 20px;
+			text-align: center;
+			color: var(--text-muted);
+			font-style: italic;
+			font-size: 14px;
+		}
+
+		.viz-annotation-indicator {
+			display: inline-flex;
+			padding: 4px 6px;
+		}
+
+		/* Selected ask styling */
+		.viz-ask-container {
+			cursor: pointer;
+			border-radius: 12px;
+			padding: 4px;
+			margin: -4px;
+			border: 2px solid transparent;
+			transition: border-color 0.15s ease, background 0.15s ease;
+		}
+
+		.viz-ask-container:hover {
+			background: rgba(236, 72, 153, 0.02);
+		}
+
+		.viz-ask-container.selected {
+			border-color: var(--accent-pink);
+			background: rgba(236, 72, 153, 0.04);
+		}
 	</style>
 </head>
 <body>

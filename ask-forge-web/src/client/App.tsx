@@ -224,50 +224,53 @@ export function App() {
 		restoringFromUrlRef.current = false;
 	}, [connection.sessionId]);
 
-	const handleSend = useCallback((questionOverride?: string) => {
-		const question = (questionOverride || inputValue).trim();
-		if (!question || !connection.sessionId || isAsking) return;
+	const handleSend = useCallback(
+		(questionOverride?: string) => {
+			const question = (questionOverride || inputValue).trim();
+			if (!question || !connection.sessionId || isAsking) return;
 
-		const requestId = generateRequestId();
+			const requestId = generateRequestId();
 
-		setInputValue("");
-		setIsAsking(true);
-		setProgress({ type: "thinking" });
+			setInputValue("");
+			setIsAsking(true);
+			setProgress({ type: "thinking" });
 
-		if (phase === "ask") {
-			setPhase("chat");
-		}
+			if (phase === "ask") {
+				setPhase("chat");
+			}
 
-		const userMessage: Message = {
-			id: `user-${Date.now()}`,
-			role: "user",
-			contentBlocks: [{ type: "text", content: question }],
-		};
-		setMessages((prev) => [...prev, userMessage]);
+			const userMessage: Message = {
+				id: `user-${Date.now()}`,
+				role: "user",
+				contentBlocks: [{ type: "text", content: question }],
+			};
+			setMessages((prev) => [...prev, userMessage]);
 
-		currentRequestIdRef.current = requestId;
-		pendingMessageRef.current = { requestId, sessionId: connection.sessionId, question };
-		requestToSessionRef.current.set(requestId, connection.sessionId);
-		sessionRequestRef.current.set(connection.sessionId, requestId);
+			currentRequestIdRef.current = requestId;
+			pendingMessageRef.current = { requestId, sessionId: connection.sessionId, question };
+			requestToSessionRef.current.set(requestId, connection.sessionId);
+			sessionRequestRef.current.set(connection.sessionId, requestId);
 
-		connectWebSocket();
+			connectWebSocket();
 
-		if (wsRef.current?.readyState === WebSocket.OPEN) {
-			wsRef.current.send(JSON.stringify({ type: "ask", ...pendingMessageRef.current }));
-		}
-	}, [
-		inputValue,
-		connection.sessionId,
-		isAsking,
-		phase,
-		generateRequestId,
-		connectWebSocket,
-		wsRef,
-		currentRequestIdRef,
-		pendingMessageRef,
-		requestToSessionRef,
-		sessionRequestRef,
-	]);
+			if (wsRef.current?.readyState === WebSocket.OPEN) {
+				wsRef.current.send(JSON.stringify({ type: "ask", ...pendingMessageRef.current }));
+			}
+		},
+		[
+			inputValue,
+			connection.sessionId,
+			isAsking,
+			phase,
+			generateRequestId,
+			connectWebSocket,
+			wsRef,
+			currentRequestIdRef,
+			pendingMessageRef,
+			requestToSessionRef,
+			sessionRequestRef,
+		],
+	);
 
 	const handleResend = useCallback(
 		(question: string) => {
@@ -437,7 +440,9 @@ export function App() {
 			if (errorParam === "not-logged-in") {
 				setBookmarkletError("Please sign in first, then try the bookmarklet again.");
 			} else if (errorParam === "no-referer") {
-				setBookmarkletError("Could not detect which page you came from. Try clicking the bookmarklet directly from a repository page.");
+				setBookmarkletError(
+					"Could not detect which page you came from. Try clicking the bookmarklet directly from a repository page.",
+				);
 			} else if (errorParam === "not-a-repo") {
 				setBookmarkletError("The page you came from doesn't appear to be a code repository.");
 			}
