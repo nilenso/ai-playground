@@ -1,10 +1,8 @@
 import type { Message } from "@mariozechner/pi-ai";
 import type { AskOptions, AskResult, Session } from "@nilenso/ask-forge";
-import { maybeCompact } from "./compaction.ts";
 import {
 	createCompaction,
 	createMessage,
-	getLatestCompaction,
 	getMessagesBySession,
 	getSession,
 	updateSessionStatus,
@@ -60,7 +58,10 @@ export function wrapSession(session: Session, sessionId: string): Session {
 		const messages: Message[] = session.getMessages();
 		// Persist only new messages (from ordinal onward)
 		for (let i = ordinal; i < messages.length; i++) {
-			persistMessage(sessionId, i, messages[i]);
+			const msg = messages[i];
+			if (msg) {
+				persistMessage(sessionId, i, msg);
+			}
 		}
 		ordinal = messages.length;
 	};
@@ -81,51 +82,32 @@ export function wrapSession(session: Session, sessionId: string): Session {
 				hasTitle = true;
 			}
 
-			// Check for compaction before asking (context might be too large)
-			// Include the new question in the token estimate since it will be added to context
-			try {
-				const currentMessages = session.getMessages();
-				const newQuestionMessage: Message = { role: "user", content: question, timestamp: Date.now() };
-				const messagesWithQuestion = [...currentMessages, newQuestionMessage];
+			// Wrap onProgress to intercept compaction events from the library
+			const wrappedOnProgress: AskOptions["onProgress"] = options?.onProgress
+				? (event) => {
+						// Intercept compaction event to persist to database
+						if (event.type === "compaction") {
+							createCompaction({
+								sessionId,
+								summary: event.summary,
+								firstKeptOrdinal: event.firstKeptOrdinal,
+								tokensBefore: event.tokensBefore,
+								tokensAfter: event.tokensAfter,
+								readFiles: event.readFiles,
+								modifiedFiles: event.modifiedFiles,
+							});
+							console.log(
+								`[compaction] Session ${sessionId} compacted: ${event.tokensBefore} -> ${event.tokensAfter} tokens`,
+							);
+						}
 
-				const previousCompaction = getLatestCompaction(sessionId);
-				const compactionResult = await maybeCompact(messagesWithQuestion, previousCompaction?.summary);
-
-				if (compactionResult.wasCompacted && compactionResult.summary) {
-					// Replace session messages with compacted version
-					session.replaceMessages(compactionResult.messages);
-
-					// Persist compaction to database
-					createCompaction({
-						sessionId,
-						summary: compactionResult.summary,
-						firstKeptOrdinal: compactionResult.firstKeptOrdinal,
-						tokensBefore: compactionResult.tokensBefore,
-						tokensAfter: compactionResult.tokensAfter,
-						readFiles: compactionResult.readFiles,
-						modifiedFiles: compactionResult.modifiedFiles,
-					});
-
-					// Notify UI about compaction via progress callback
-					options?.onProgress?.({
-						type: "compaction" as never,
-						tokensBefore: compactionResult.tokensBefore,
-						tokensAfter: compactionResult.tokensAfter,
-						messagesSummarized: messagesWithQuestion.length - compactionResult.messages.length,
-					} as never);
-
-					console.log(`[compaction] Session ${sessionId} compacted`);
-				}
-			} catch (compactionError) {
-				// Compaction failed - mark session as error and terminate
-				console.error("[compaction] Error during compaction:", compactionError);
-				updateSessionStatus(sessionId, "error");
-				const errorMessage = compactionError instanceof Error ? compactionError.message : "Unknown compaction error";
-				throw new Error(`Compaction failed: ${errorMessage}. Session terminated due to context overflow risk.`);
-			}
+						// Forward all events to the original callback
+						options.onProgress?.(event);
+					}
+				: undefined;
 
 			try {
-				const result = await session.ask(question, options);
+				const result = await session.ask(question, { ...options, onProgress: wrappedOnProgress });
 
 				if (result.response.startsWith("[ERROR:")) {
 					updateSessionStatus(sessionId, "error");

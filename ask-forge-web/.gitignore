@@ -45,3 +45,6 @@ public/visualizer.js
 AGENTS.local.md
 
 *.jsonl
+
+# VS code 
+*.code-workspace

@@ -22,7 +22,7 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
-		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.8",
+		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.10",
 		"highlight.js": "^11.11.1",
 		"hono": "^4.7.10",
 		"marked": "^17.0.1",
