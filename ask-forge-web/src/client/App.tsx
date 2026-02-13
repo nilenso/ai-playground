@@ -49,6 +49,8 @@ export function App() {
 	const [votes, setVotes] = useState<Record<string, "like" | "dislike">>({});
 	const [copiedId, setCopiedId] = useState<string | null>(null);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+	const [editValue, setEditValue] = useState("");
 
 	const urlInputRef = useRef<HTMLInputElement>(null);
 	const askTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -227,7 +229,7 @@ export function App() {
 	const handleSend = useCallback(
 		(questionOverride?: string) => {
 			const question = (questionOverride || inputValue).trim();
-			if (!question || !connection.sessionId || isAsking) return;
+			if (!question || !connection.sessionId || isAsking || currentRequestIdRef.current !== null) return;
 
 			const requestId = generateRequestId();
 
@@ -274,7 +276,7 @@ export function App() {
 
 	const handleResend = useCallback(
 		(question: string) => {
-			if (!connection.sessionId || isAsking) return;
+			if (!connection.sessionId || isAsking || currentRequestIdRef.current !== null) return;
 
 			const requestId = generateRequestId();
 
@@ -310,6 +312,58 @@ export function App() {
 			requestToSessionRef,
 			sessionRequestRef,
 		],
+	);
+
+	const handleCancel = useCallback(() => {
+		const requestId = currentRequestIdRef.current;
+		if (requestId && wsRef.current?.readyState === WebSocket.OPEN) {
+			wsRef.current.send(JSON.stringify({ type: "cancel", requestId }));
+		}
+
+		// Immediately clean up ALL streaming messages without waiting for server response
+		setMessages((prev) => prev.map((msg) => (msg.isStreaming ? { ...msg, isStreaming: false } : msg)));
+
+		streaming.streamingMessageIdRef.current = null;
+		streaming.streamingThinkingRef.current = "";
+		streaming.streamingBlocksRef.current = [];
+		streaming.textBufferRef.current = "";
+		streaming.stopReleaseLoop();
+
+		currentRequestIdRef.current = null;
+		pendingMessageRef.current = null;
+		setIsAsking(false);
+		setProgress({ type: "idle" });
+	}, [wsRef, currentRequestIdRef, streaming, pendingMessageRef, setMessages, setIsAsking, setProgress]);
+
+	const handleStartEdit = useCallback((messageId: string, currentContent: string) => {
+		setEditingMessageId(messageId);
+		setEditValue(currentContent);
+	}, []);
+
+	const handleCancelEdit = useCallback(() => {
+		setEditingMessageId(null);
+		setEditValue("");
+	}, []);
+
+	const handleSaveEdit = useCallback(
+		(messageId: string) => {
+			if (!editValue.trim()) return;
+
+			// Find the message index
+			const msgIndex = messages.findIndex((m) => m.id === messageId);
+			if (msgIndex === -1) return;
+
+			// Remove all messages after this one (including the message itself)
+			setMessages((prev) => prev.slice(0, msgIndex));
+
+			// Clear editing state
+			setEditingMessageId(null);
+			setEditValue("");
+
+			// Send the edited message
+			handleSend(editValue.trim());
+		},
+		[messages, editValue, handleSend],
 	);
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -678,6 +732,13 @@ export function App() {
 			handleVote={handleVote}
 			handleSend={handleSend}
 			handleResend={handleResend}
+			handleCancel={handleCancel}
+			editingMessageId={editingMessageId}
+			editValue={editValue}
+			setEditValue={setEditValue}
+			handleStartEdit={handleStartEdit}
+			handleSaveEdit={handleSaveEdit}
+			handleCancelEdit={handleCancelEdit}
 			handleKeyDown={handleKeyDown}
 			handleShareSession={handleShareSession}
 			messagesContainerRef={messagesContainerRef}

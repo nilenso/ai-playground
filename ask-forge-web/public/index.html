@@ -186,6 +186,7 @@
 			display: flex;
 			align-items: center;
 			justify-content: center;
+			gap: 6px;
 			min-width: 100px;
 		}
 
@@ -203,6 +204,32 @@
 		.send-button:disabled {
 			opacity: 0.5;
 			cursor: not-allowed;
+		}
+
+		.stop-button {
+			padding: 12px 24px;
+			background: var(--text-secondary);
+			color: #ffffff;
+			border: none;
+			border-radius: 8px;
+			font-size: 15px;
+			font-weight: 600;
+			font-family: inherit;
+			cursor: pointer;
+			transition: background 0.2s, transform 0.1s;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 6px;
+			min-width: 100px;
+		}
+
+		.stop-button:hover {
+			background: var(--text-primary);
+		}
+
+		.stop-button:active {
+			transform: scale(0.98);
 		}
 
 		/* Disconnect Link */
@@ -1809,6 +1836,71 @@
 		}
 
 		.example-question:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
+		/* Message Edit Styles */
+		.message-edit-container {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+
+		.message-edit-textarea {
+			width: 100%;
+			padding: 12px 16px;
+			background: var(--bg-primary);
+			border: 2px solid var(--accent-pink);
+			border-radius: 8px;
+			color: var(--text-primary);
+			font-size: 15px;
+			font-family: inherit;
+			line-height: 1.5;
+			resize: vertical;
+			min-height: 100px;
+			outline: none;
+		}
+
+		.message-edit-actions {
+			display: flex;
+			gap: 8px;
+			justify-content: flex-end;
+		}
+
+		.message-edit-cancel,
+		.message-edit-save {
+			padding: 8px 16px;
+			border-radius: 6px;
+			font-size: 14px;
+			font-weight: 500;
+			font-family: inherit;
+			cursor: pointer;
+			transition: all 0.2s;
+		}
+
+		.message-edit-cancel {
+			background: none;
+			border: 1px solid var(--border-subtle);
+			color: var(--text-secondary);
+		}
+
+		.message-edit-cancel:hover {
+			background: var(--bg-secondary);
+			border-color: var(--text-secondary);
+		}
+
+		.message-edit-save {
+			background: var(--accent-pink);
+			border: none;
+			color: #ffffff;
+		}
+
+		.message-edit-save:hover:not(:disabled) {
+			background: var(--accent-pink-hover);
+		}
+
+		.message-edit-save:disabled {
 			opacity: 0.5;
 			cursor: not-allowed;
 		}
