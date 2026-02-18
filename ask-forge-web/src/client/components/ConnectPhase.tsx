@@ -65,6 +65,17 @@ export function ConnectPhase({
 							Sign in with GitHub
 						</button>
 						<p className="hint">Sign in to start exploring repositories</p>
+						<p className="data-notice">
+							All conversations are used for improving ask forge and may end up in a{" "}
+							<a
+								href="https://huggingface.co/datasets/nilenso/ask-forge-eval-dataset"
+								target="_blank"
+								rel="noopener noreferrer"
+							>
+								public dataset
+							</a>
+							.
+						</p>
 					</div>
 				</div>
 			</div>
@@ -103,6 +114,17 @@ export function ConnectPhase({
 					{bookmarkletError && <div className="error-message">{bookmarkletError}</div>}
 
 					<p className="hint">Paste a GitHub, GitLab, or Bitbucket URL</p>
+					<p className="data-notice">
+						All conversations are used for improving ask forge and may end up in a{" "}
+						<a
+							href="https://huggingface.co/datasets/nilenso/ask-forge-eval-dataset"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							public dataset
+						</a>
+						.
+					</p>
 				</div>
 				{buildTime && (
 					<div className="deploy-info">
