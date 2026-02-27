@@ -780,6 +780,30 @@
 			padding: 0;
 		}
 
+		.markdown-content table {
+			width: 100%;
+			border-collapse: collapse;
+			margin: 16px 0;
+			font-size: 14px;
+		}
+
+		.markdown-content th,
+		.markdown-content td {
+			border: 1px solid var(--border-subtle);
+			padding: 8px 12px;
+			text-align: left;
+		}
+
+		.markdown-content th {
+			background: var(--bg-secondary);
+			font-weight: 600;
+			color: var(--text-primary);
+		}
+
+		.markdown-content tr:nth-child(even) {
+			background: var(--bg-secondary);
+		}
+
 		/* Syntax Highlighting - GitHub Light High Contrast */
 		.hljs {
 			color: #0e1116;
