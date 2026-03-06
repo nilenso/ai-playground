@@ -1,5 +1,5 @@
 import hljs from "highlight.js";
-import { Marked, type MarkedExtension } from "marked";
+import { Marked, type MarkedExtension, type RendererThis, type Tokens } from "marked";
 import { markedHighlight } from "marked-highlight";
 
 /**
@@ -193,8 +193,9 @@ export function createMarkedWithFileLinks(repoUrl?: string | null, commitish?: s
 	// Open all links in a new tab
 	instance.use({
 		renderer: {
-			link({ href, title, text }: { href: string; title?: string | null; text: string }) {
+			link(this: RendererThis, { href, title, tokens }: Tokens.Link) {
 				const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+				const text = this.parser.parseInline(tokens);
 				return `<a href="${escapeHtml(href)}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
 			},
 		},
