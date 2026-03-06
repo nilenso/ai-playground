@@ -190,6 +190,16 @@ function createFileLinkExtension(repoUrl: string, commitish: string): MarkedExte
 export function createMarkedWithFileLinks(repoUrl?: string | null, commitish?: string | null): Marked {
 	const instance = new Marked();
 
+	// Open all links in a new tab
+	instance.use({
+		renderer: {
+			link({ href, title, text }: { href: string; title?: string | null; text: string }) {
+				const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+				return `<a href="${escapeHtml(href)}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+			},
+		},
+	});
+
 	// Add syntax highlighting for code blocks
 	instance.use(
 		markedHighlight({
