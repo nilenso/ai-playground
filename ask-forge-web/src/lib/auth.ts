@@ -208,6 +208,16 @@ export function updateUser(
 	}
 }
 
+// Allowlist check for new signups
+
+export function isUsernameAllowed(githubUsername: string): boolean {
+	const db = getDb();
+	const row = db
+		.query<{ id: number }, [string]>("SELECT id FROM allowed_users WHERE github_username = ?")
+		.get(githubUsername);
+	return row !== null;
+}
+
 // Database operations for auth providers
 
 export function findAuthProvider(provider: AuthProvider, providerUserId: string): AuthProviderRecord | null {
