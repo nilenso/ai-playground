@@ -156,7 +156,13 @@ api.post("/validate", createAuthMiddleware(), async (c) => {
 });
 
 /**
- * Connect to a repository and create a session
+ * Connect to a repository and create a session.
+ * Streams progress via SSE so long clones don't hit proxy timeouts (Cloudflare 100s).
+ *
+ * Events:
+ *   event: progress  — { message: "Cloning repository… 45s" }
+ *   event: done      — full connect result JSON
+ *   event: error     — { success: false, error: "..." }
  */
 api.post("/connect", createAuthMiddleware(), async (c) => {
 	const payload = getUserFromContext(c);
@@ -175,69 +181,99 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 		return c.json({ success: false, error }, 400);
 	}
 
-	const connectStart = Date.now();
-	try {
-		const rawSession = await askForgeClient.connect(normalized, { commitish: commit });
+	const sseStream = new ReadableStream({
+		async start(controller) {
+			const encoder = new TextEncoder();
+			let closed = false;
+			const send = (event: string, data: unknown) => {
+				if (closed) return;
+				controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+			};
 
-		// Check for cached summary
-		const existingRepo = getRepositoryByGitUrl(normalized);
-		const summary: string | null = existingRepo?.summary || null;
+			// Heartbeat keeps Cloudflare/Caddy from timing out
+			const heartbeat = setInterval(() => {
+				send("heartbeat", { ts: Date.now() });
+			}, 15000);
 
-		// Save/update repository record
-		const repository = findOrCreateRepository({
-			userInputUrl: url,
-			gitUrl: normalized,
-			defaultCommit: rawSession.repo.commitish,
-		});
+			const connectStart = Date.now();
+			try {
+				const rawSession = await askForgeClient.connect(normalized, { commitish: commit }, (message) => {
+					send("progress", { message });
+				});
 
-		// Record this checkout
-		const checkout = recordCheckout({
-			repositoryId: repository.id,
-			commitId: rawSession.repo.commitish,
-		});
+				// Check for cached summary
+				const existingRepo = getRepositoryByGitUrl(normalized);
+				const summary: string | null = existingRepo?.summary || null;
 
-		// Create a DB session record so messages get persisted
-		createDbSession({
-			id: rawSession.id,
-			userId: payload.sub,
-			repositoryId: repository.id,
-			checkoutId: checkout.id,
-			systemPrompt: SYSTEM_PROMPT,
-		});
+				// Save/update repository record
+				const repository = findOrCreateRepository({
+					userInputUrl: url,
+					gitUrl: normalized,
+					defaultCommit: rawSession.repo.commitish,
+				});
 
-		const session = wrapSession(rawSession, rawSession.id);
+				// Record this checkout
+				const checkout = recordCheckout({
+					repositoryId: repository.id,
+					commitId: rawSession.repo.commitish,
+				});
 
-		// Store the session
-		sessions.set(session.id, session);
-		sessionTimestamps.set(session.id, Date.now());
+				// Create a DB session record so messages get persisted
+				createDbSession({
+					id: rawSession.id,
+					userId: payload.sub,
+					repositoryId: repository.id,
+					checkoutId: checkout.id,
+					systemPrompt: SYSTEM_PROMPT,
+				});
 
-		sessionLogger.info("Session connected: {sessionId} to {repoUrl} @ {commit} (user={userId}, {durationMs}ms)", {
-			sessionId: session.id,
-			repoUrl: normalized,
-			commit: session.repo.commitish,
-			userId: payload.sub,
-			durationMs: Date.now() - connectStart,
-		});
+				const session = wrapSession(rawSession, rawSession.id);
 
-		return c.json({
-			success: true,
-			sessionId: session.id,
-			normalized,
-			localPath: session.repo.localPath,
-			commitish: session.repo.commitish,
-			summary,
-			repositoryId: repository.id,
-		});
-	} catch (err) {
-		const message = err instanceof Error ? err.message : "Unknown error";
-		sessionLogger.error("Session connect failed for {repoUrl}: {error} (user={userId}, {durationMs}ms)", {
-			repoUrl: normalized,
-			error: message,
-			userId: payload.sub,
-			durationMs: Date.now() - connectStart,
-		});
-		return c.json({ success: false, error: message }, 500);
-	}
+				// Store the session
+				sessions.set(session.id, session);
+				sessionTimestamps.set(session.id, Date.now());
+
+				sessionLogger.info("Session connected: {sessionId} to {repoUrl} @ {commit} (user={userId}, {durationMs}ms)", {
+					sessionId: session.id,
+					repoUrl: normalized,
+					commit: session.repo.commitish,
+					userId: payload.sub,
+					durationMs: Date.now() - connectStart,
+				});
+
+				send("done", {
+					success: true,
+					sessionId: session.id,
+					normalized,
+					localPath: session.repo.localPath,
+					commitish: session.repo.commitish,
+					summary,
+					repositoryId: repository.id,
+				});
+			} catch (err) {
+				const message = err instanceof Error ? err.message : "Unknown error";
+				sessionLogger.error("Session connect failed for {repoUrl}: {error} (user={userId}, {durationMs}ms)", {
+					repoUrl: normalized,
+					error: message,
+					userId: payload.sub,
+					durationMs: Date.now() - connectStart,
+				});
+				send("error", { success: false, error: message });
+			} finally {
+				clearInterval(heartbeat);
+				closed = true;
+				controller.close();
+			}
+		},
+	});
+
+	return new Response(sseStream, {
+		headers: {
+			"Content-Type": "text/event-stream",
+			"Cache-Control": "no-cache",
+			Connection: "keep-alive",
+		},
+	});
 });
 
 /**

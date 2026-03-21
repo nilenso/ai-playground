@@ -87,7 +87,9 @@ export function ConnectPhase({
 			<Sidebar {...sidebarProps} />
 			<div className="app-main">
 				<div className="connect-content">
-					<h2 className="greeting">{connection.status === "connecting" ? "Connecting..." : "What can I help with?"}</h2>
+					<h2 className="greeting">
+						{connection.status === "connecting" ? connection.progressMessage || "Connecting…" : "What can I help with?"}
+					</h2>
 
 					<div className="input-container">
 						<input

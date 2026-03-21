@@ -162,6 +162,7 @@ export function useSession({
 					commitish: restoreData.commitish,
 					error: null,
 					repoName,
+					progressMessage: null,
 				});
 				setMessages(clientMessages);
 				setPhase(clientMessages.length > 0 ? "chat" : "ask");
@@ -232,7 +233,14 @@ export function useSession({
 			try {
 				await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
 				if (connectionSessionId === sessionId) {
-					setConnection({ status: "disconnected", sessionId: null, commitish: null, error: null, repoName: null });
+					setConnection({
+						status: "disconnected",
+						sessionId: null,
+						commitish: null,
+						error: null,
+						repoName: null,
+						progressMessage: null,
+					});
 					setMessages([]);
 					setPhase("connect");
 				}
