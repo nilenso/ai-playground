@@ -17,6 +17,8 @@ export interface ConnectionState {
 	commitish: string | null;
 	error: string | null;
 	repoName: string | null;
+	/** Progress message shown during clone (e.g. "Cloning repository… 45s") */
+	progressMessage: string | null;
 }
 
 export interface ProgressState {
