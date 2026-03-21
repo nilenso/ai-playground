@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import type { DbMessage } from "./lib/db.ts";
 import { getAnnotationsBySession, getDb, upsertAnnotation } from "./lib/db.ts";
+import { startupLogger } from "./lib/logger.ts";
 
 const app = new Hono();
 
@@ -395,7 +396,7 @@ app.get("/api/session/:id/export", (c) => {
 
 		// Return as JSONL file download
 		const filename = `session-${session.id}.jsonl`;
-		const body = lines.join("\n") + "\n";
+		const body = `${lines.join("\n")}\n`;
 		return new Response(body, {
 			headers: {
 				"Content-Type": "application/x-ndjson",
@@ -469,7 +470,7 @@ app.use("/*", serveStatic({ root: "./public" }));
 
 const port = process.env.PORT || 3001;
 
-console.log(`📊 Visualizer running at http://localhost:${port}`);
+startupLogger.info("Visualizer server starting on port {port}", { port });
 
 export default {
 	port,

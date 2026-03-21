@@ -2,6 +2,7 @@ import type { ServerWebSocket } from "bun";
 import { sessions, sessionTimestamps } from "./api/index.ts";
 import { forceCompact } from "./lib/compaction.ts";
 import { createCompaction, getLatestCompaction } from "./lib/db.ts";
+import { wsLogger } from "./lib/logger.ts";
 
 interface WebSocketData {
 	sessionId: string | null;
@@ -66,7 +67,9 @@ function registerConnection(ws: ServerWebSocket<WebSocketData>, sessionId: strin
 }
 
 export const websocketHandler = {
-	open(_ws: ServerWebSocket<WebSocketData>) {},
+	open(_ws: ServerWebSocket<WebSocketData>) {
+		wsLogger.debug("WebSocket connection opened");
+	},
 
 	async message(ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
 		try {
@@ -95,6 +98,10 @@ export const websocketHandler = {
 					}
 
 					ws.send(JSON.stringify({ type: "cancelled", requestId: data.requestId }));
+					wsLogger.info("Request cancelled: {requestId} (session={sessionId})", {
+						requestId: data.requestId,
+						sessionId: sessionId ?? "unknown",
+					});
 				}
 				return;
 			}
@@ -136,9 +143,18 @@ export const websocketHandler = {
 					} else {
 						ws.send(JSON.stringify({ type: "resume_caught_up", requestId: buffer.requestId }));
 					}
+
+					wsLogger.info("Session resumed: {sessionId}, buffered={eventCount} events, completed={completed}", {
+						sessionId: data.sessionId,
+						eventCount: buffer.events.length,
+						completed: buffer.completed,
+					});
 				} else {
 					// No active or buffered request for this session
 					ws.send(JSON.stringify({ type: "resume_none", sessionId: data.sessionId }));
+					wsLogger.debug("Resume requested but no buffer for session {sessionId}", {
+						sessionId: data.sessionId,
+					});
 				}
 				return;
 			}
@@ -150,10 +166,11 @@ export const websocketHandler = {
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : "Unknown error";
 			ws.send(JSON.stringify({ type: "error", error: errorMessage }));
+			wsLogger.error("WebSocket message handling error: {error}", { error: errorMessage });
 		}
 	},
 
-	close(ws: ServerWebSocket<WebSocketData>, _code: number, _reason: string) {
+	close(ws: ServerWebSocket<WebSocketData>, code: number, _reason: string) {
 		// Remove from session connections
 		if (ws.data.sessionId) {
 			const connections = sessionConnections.get(ws.data.sessionId);
@@ -163,6 +180,10 @@ export const websocketHandler = {
 					sessionConnections.delete(ws.data.sessionId);
 				}
 			}
+			wsLogger.debug("WebSocket closed for session {sessionId} (code={code})", {
+				sessionId: ws.data.sessionId,
+				code,
+			});
 		}
 	},
 };
@@ -185,8 +206,10 @@ function broadcastAndBuffer(
 		for (const conn of connections) {
 			try {
 				conn.send(message);
-			} catch {
-				// Connection might be closed, ignore
+			} catch (err) {
+				wsLogger.debug("Failed to send to WebSocket (connection closed): {error}", {
+					error: err instanceof Error ? err.message : String(err),
+				});
 			}
 		}
 	}
@@ -213,6 +236,7 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 				error: "Request already in progress",
 			}),
 		);
+		wsLogger.warn("Duplicate request rejected: {requestId}", { requestId, sessionId });
 		return;
 	}
 
@@ -226,6 +250,11 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 				error: "Another request is already in progress for this session",
 			}),
 		);
+		wsLogger.warn("Concurrent request rejected for session {sessionId} (existing={existingRequestId})", {
+			sessionId,
+			requestId,
+			existingRequestId: existingBuffer.requestId,
+		});
 		return;
 	}
 
@@ -238,6 +267,7 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 				error: "Session not found or expired",
 			}),
 		);
+		wsLogger.warn("Ask for expired/missing session {sessionId}", { sessionId, requestId });
 		return;
 	}
 
@@ -256,6 +286,7 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 
 		broadcastAndBuffer(sessionId, { type: "progress", requestId, data: { type: "thinking" } });
 
+		const compactStart = Date.now();
 		try {
 			const currentMessages = session.getMessages();
 			const previousCompaction = getLatestCompaction(sessionId);
@@ -299,6 +330,14 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 					},
 				};
 				broadcastAndBuffer(sessionId, doneEvent);
+
+				wsLogger.info("Force compact done: session={sessionId}, {tokensBefore}→{tokensAfter} tokens ({durationMs}ms)", {
+					sessionId,
+					tokensBefore: compactionResult.tokensBefore,
+					tokensAfter: compactionResult.tokensAfter,
+					messagesSummarized: currentMessages.length - compactionResult.messages.length,
+					durationMs: Date.now() - compactStart,
+				});
 			} else {
 				const doneEvent = {
 					type: "done",
@@ -310,10 +349,16 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 					},
 				};
 				broadcastAndBuffer(sessionId, doneEvent);
+				wsLogger.info("Force compact skipped (too short): session={sessionId}", { sessionId });
 			}
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : "Unknown error";
 			broadcastAndBuffer(sessionId, { type: "error", requestId, error: `Compaction failed: ${errorMessage}` });
+			wsLogger.error("Force compact failed: session={sessionId}, error={error} ({durationMs}ms)", {
+				sessionId,
+				error: errorMessage,
+				durationMs: Date.now() - compactStart,
+			});
 		} finally {
 			const buffer = streamBuffers.get(sessionId);
 			if (buffer) {
@@ -346,6 +391,13 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 	// Send initial thinking state with requestId
 	broadcastAndBuffer(sessionId, { type: "progress", requestId, data: { type: "thinking" } });
 
+	const askStart = Date.now();
+	wsLogger.info("Ask started: session={sessionId}, request={requestId}, question={questionPreview}", {
+		sessionId,
+		requestId,
+		questionPreview: question.length > 120 ? `${question.slice(0, 117)}...` : question,
+	});
+
 	try {
 		const result = await session.ask(question, {
 			onProgress: (event) => {
@@ -356,7 +408,13 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 		});
 
 		// Check if cancelled before sending result
-		if (abortController.signal.aborted) return;
+		if (abortController.signal.aborted) {
+			wsLogger.info("Ask aborted after completion: session={sessionId}, request={requestId}", {
+				sessionId,
+				requestId,
+			});
+			return;
+		}
 
 		const doneEvent = {
 			type: "done",
@@ -375,8 +433,26 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 			buffer.completed = true;
 			buffer.completedAt = Date.now();
 		}
+
+		wsLogger.info(
+			"Ask completed: session={sessionId}, request={requestId}, toolCalls={toolCallCount}, {durationMs}ms",
+			{
+				sessionId,
+				requestId,
+				toolCallCount: result.toolCalls?.length ?? 0,
+				responseLength: result.response.length,
+				durationMs: Date.now() - askStart,
+			},
+		);
 	} catch (err) {
-		if (abortController.signal.aborted) return;
+		if (abortController.signal.aborted) {
+			wsLogger.info("Ask cancelled: session={sessionId}, request={requestId} ({durationMs}ms)", {
+				sessionId,
+				requestId,
+				durationMs: Date.now() - askStart,
+			});
+			return;
+		}
 		const errorMessage = err instanceof Error ? err.message : "Unknown error";
 		const errorEvent = { type: "error", requestId, error: errorMessage };
 		broadcastAndBuffer(sessionId, errorEvent);
@@ -387,6 +463,13 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 			buffer.completed = true;
 			buffer.completedAt = Date.now();
 		}
+
+		wsLogger.error("Ask failed: session={sessionId}, request={requestId}, error={error} ({durationMs}ms)", {
+			sessionId,
+			requestId,
+			error: errorMessage,
+			durationMs: Date.now() - askStart,
+		});
 	} finally {
 		activeRequests.delete(requestId);
 		requestToSession.delete(requestId);

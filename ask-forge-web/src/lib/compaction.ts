@@ -8,6 +8,7 @@
  * 3. Replace older messages with a summary message
  */
 import type { Message } from "@mariozechner/pi-ai";
+import { compactionLogger } from "./logger.ts";
 
 /**
  * Model used for summarization - same as ask-forge's default model.
@@ -710,14 +711,15 @@ export async function maybeCompact(
 		};
 	}
 
-	console.log(`[compaction] Context tokens (${contextTokens}) exceeds threshold, compacting...`);
+	compactionLogger.info("Context tokens ({contextTokens}) exceeds threshold, compacting...", { contextTokens });
 
 	const result = await compact(messages, previousSummary, signal);
 
-	console.log(
-		`[compaction] Compacted ${result.tokensBefore} -> ${result.tokensAfter} tokens ` +
-			`(summarized ${messages.length - result.keptMessages.length} messages)`,
-	);
+	compactionLogger.info("Compacted {tokensBefore}→{tokensAfter} tokens (summarized {messagesSummarized} messages)", {
+		tokensBefore: result.tokensBefore,
+		tokensAfter: result.tokensAfter,
+		messagesSummarized: messages.length - result.keptMessages.length,
+	});
 
 	// Return summary message + kept messages
 	const compactedMessages = [createSummaryMessage(result.summary), ...result.keptMessages];
@@ -760,7 +762,7 @@ export async function forceCompact(
 		};
 	}
 
-	console.log(`[compaction] Force compacting ${messages.length} messages...`);
+	compactionLogger.info("Force compacting {messageCount} messages...", { messageCount: messages.length });
 
 	// For force compact, use a smaller keepRecentTokens to ensure we actually compact
 	const settings = { ...getCompactionSettings(), keepRecentTokens: 5000 };
@@ -815,9 +817,13 @@ export async function forceCompact(
 	const compactedMessages = [createSummaryMessage(summary), ...cutPoint.messagesToKeep];
 	const tokensAfter = estimateContextTokens(compactedMessages);
 
-	console.log(
-		`[compaction] Force compacted ${tokensBefore} -> ${tokensAfter} tokens ` +
-			`(summarized ${messages.length - cutPoint.messagesToKeep.length} messages)`,
+	compactionLogger.info(
+		"Force compacted {tokensBefore}→{tokensAfter} tokens (summarized {messagesSummarized} messages)",
+		{
+			tokensBefore,
+			tokensAfter,
+			messagesSummarized: messages.length - cutPoint.messagesToKeep.length,
+		},
 	);
 
 	return {
