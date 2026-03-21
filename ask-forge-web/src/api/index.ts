@@ -23,7 +23,10 @@ const askForgeClient = new AskForgeClient(
 		: undefined,
 );
 
-console.log(`[ask-forge] Sandbox mode: ${sandboxUrl ? "enabled" : "disabled"}`);
+sandboxLogger.info("Sandbox mode: {mode}", {
+	mode: sandboxUrl ? "enabled" : "disabled",
+	sandboxUrl: sandboxUrl ?? null,
+});
 
 import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
 import {
@@ -44,6 +47,7 @@ import {
 	updateSessionStatus,
 	updateSessionTitle,
 } from "../lib/db.ts";
+import { sandboxLogger, sessionLogger, startupLogger } from "../lib/logger.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
 import { buildSessionContext } from "../lib/session-context.ts";
 import { wrapSession } from "../lib/session-logger.ts";
@@ -72,13 +76,22 @@ function cleanupSessions() {
 		if (now - timestamp > SESSION_TTL) {
 			const session = sessions.get(id);
 			if (session) {
-				session.close().catch((err) => {
-					console.error(`[cleanup] Failed to close session ${id}:`, err);
-				});
+				try {
+					session.close();
+				} catch (err) {
+					sessionLogger.error("Failed to close expired session {sessionId}: {error}", {
+						sessionId: id,
+						error: err instanceof Error ? err.message : String(err),
+					});
+				}
 				sessions.delete(id);
 			}
 			sessionTimestamps.delete(id);
 			updateSessionStatus(id, "inactive");
+			sessionLogger.info("Cleaned up expired session {sessionId} (idle {idleMinutes}m)", {
+				sessionId: id,
+				idleMinutes: Math.round((now - timestamp) / 60_000),
+			});
 		}
 	}
 }
@@ -93,7 +106,9 @@ setInterval(cleanupSessions, 5 * 60 * 1000);
 		new Date().toISOString(),
 	]);
 	if (result.changes > 0) {
-		console.log(`Marked ${result.changes} stale active session(s) as inactive on startup`);
+		startupLogger.info("Marked {count} stale active session(s) as inactive on startup", {
+			count: result.changes,
+		});
 	}
 })();
 
@@ -160,6 +175,7 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 		return c.json({ success: false, error }, 400);
 	}
 
+	const connectStart = Date.now();
 	try {
 		const rawSession = await askForgeClient.connect(normalized, { commitish: commit });
 
@@ -195,6 +211,14 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 		sessions.set(session.id, session);
 		sessionTimestamps.set(session.id, Date.now());
 
+		sessionLogger.info("Session connected: {sessionId} to {repoUrl} @ {commit} (user={userId}, {durationMs}ms)", {
+			sessionId: session.id,
+			repoUrl: normalized,
+			commit: session.repo.commitish,
+			userId: payload.sub,
+			durationMs: Date.now() - connectStart,
+		});
+
 		return c.json({
 			success: true,
 			sessionId: session.id,
@@ -206,6 +230,12 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 		});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : "Unknown error";
+		sessionLogger.error("Session connect failed for {repoUrl}: {error} (user={userId}, {durationMs}ms)", {
+			repoUrl: normalized,
+			error: message,
+			userId: payload.sub,
+			durationMs: Date.now() - connectStart,
+		});
 		return c.json({ success: false, error: message }, 500);
 	}
 });
@@ -337,6 +367,7 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 		return c.json({ success: false, error: "Repository not found for session" }, 404);
 	}
 
+	const restoreStart = Date.now();
 	try {
 		// Look up the commit from the checkout record
 		let commitish: string | undefined;
@@ -367,6 +398,17 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 		// Check if there's an active streaming request for this session
 		const activeReq = getActiveRequest(sessionId);
 
+		sessionLogger.info(
+			"Session restored: {sessionId} with {messageCount} messages, compacted={hasCompaction} ({durationMs}ms)",
+			{
+				sessionId,
+				repoUrl: repoRow.git_url,
+				messageCount: dbMessages.length,
+				hasCompaction: !!compaction,
+				durationMs: Date.now() - restoreStart,
+			},
+		);
+
 		return c.json({
 			success: true,
 			sessionId: session.id,
@@ -380,6 +422,11 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 		});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : "Unknown error";
+		sessionLogger.error("Session restore failed for {sessionId}: {error} ({durationMs}ms)", {
+			sessionId,
+			error: message,
+			durationMs: Date.now() - restoreStart,
+		});
 		return c.json({ success: false, error: message }, 500);
 	}
 });
@@ -402,6 +449,7 @@ api.post("/disconnect", createAuthMiddleware(), async (c) => {
 		sessionTimestamps.delete(sessionId);
 	}
 	updateSessionStatus(sessionId, "inactive");
+	sessionLogger.info("Session disconnected: {sessionId}", { sessionId });
 
 	return c.json({ success: true });
 });
@@ -478,6 +526,7 @@ api.delete("/sessions/:id", createAuthMiddleware(), (c) => {
 	}
 
 	deleteSession(sessionId);
+	sessionLogger.info("Session deleted: {sessionId}", { sessionId });
 	return c.json({ success: true });
 });
 

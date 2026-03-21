@@ -10,6 +10,7 @@ import {
 	updateSessionStatus,
 	updateSessionTitle,
 } from "./db.ts";
+import { compactionLogger } from "./logger.ts";
 
 function persistMessage(sessionId: string, ordinal: number, msg: Message): void {
 	switch (msg.role) {
@@ -114,11 +115,22 @@ export function wrapSession(session: Session, sessionId: string): Session {
 						messagesSummarized: messagesWithQuestion.length - compactionResult.messages.length,
 					} as never);
 
-					console.log(`[compaction] Session ${sessionId} compacted`);
+					compactionLogger.info(
+						"Auto-compacted session {sessionId}: {tokensBefore}→{tokensAfter} tokens, summarized {messagesSummarized} messages",
+						{
+							sessionId,
+							tokensBefore: compactionResult.tokensBefore,
+							tokensAfter: compactionResult.tokensAfter,
+							messagesSummarized: messagesWithQuestion.length - compactionResult.messages.length,
+						},
+					);
 				}
 			} catch (compactionError) {
 				// Compaction failed - mark session as error and terminate
-				console.error("[compaction] Error during compaction:", compactionError);
+				compactionLogger.error("Compaction failed for session {sessionId}: {error}", {
+					sessionId,
+					error: compactionError instanceof Error ? compactionError.message : String(compactionError),
+				});
 				updateSessionStatus(sessionId, "error");
 				const errorMessage = compactionError instanceof Error ? compactionError.message : "Unknown compaction error";
 				throw new Error(`Compaction failed: ${errorMessage}. Session terminated due to context overflow risk.`);

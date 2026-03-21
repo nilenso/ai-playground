@@ -14,6 +14,7 @@ import {
 	updateUser,
 } from "../lib/auth.ts";
 import { AUTH_CONFIG, AuthProvider } from "../lib/auth-config.ts";
+import { authLogger } from "../lib/logger.ts";
 
 const auth = new Hono();
 
@@ -87,7 +88,7 @@ async function processGitHubCallback(
 		const tokenData = await tokenResponse.json();
 
 		if (tokenData.error) {
-			console.error("[Auth] Token exchange error:", tokenData.error);
+			authLogger.error("GitHub token exchange failed: {error}", { error: tokenData.error });
 			return { success: false, redirectUrl: "/?error=token_exchange_failed" };
 		}
 
@@ -102,7 +103,7 @@ async function processGitHubCallback(
 		});
 
 		if (!userResponse.ok) {
-			console.error("[Auth] Failed to fetch user info");
+			authLogger.error("Failed to fetch GitHub user info: HTTP {status}", { status: userResponse.status });
 			return { success: false, redirectUrl: "/?error=user_fetch_failed" };
 		}
 
@@ -150,9 +151,16 @@ async function processGitHubCallback(
 
 		// Generate JWT
 		const jwt = await generateJwt(user);
+		authLogger.info("User authenticated: {username} (id={userId}, provider=github, isNew={isNewUser})", {
+			username: user.username,
+			userId: user.id,
+			isNewUser: !authProvider,
+		});
 		return { success: true, user, jwt };
 	} catch (err) {
-		console.error("[Auth] OAuth callback error:", err);
+		authLogger.error("OAuth callback error: {error}", {
+			error: err instanceof Error ? err.message : String(err),
+		});
 		return { success: false, redirectUrl: "/?error=auth_failed" };
 	}
 }
@@ -193,7 +201,7 @@ auth.get("/github/callback", async (c) => {
 
 	setAuthCookie(c, result.jwt);
 	// Redirect to returnTo if provided and it's a relative path (prevent open redirect)
-	if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+	if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
 		return c.redirect(returnTo);
 	}
 	return c.redirect("/");
