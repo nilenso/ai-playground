@@ -9,6 +9,7 @@ import {
 	generateJwt,
 	getUserById,
 	getUserFromContext,
+	isUsernameAllowed,
 	setAuthCookie,
 	updateAuthProvider,
 	updateUser,
@@ -128,7 +129,12 @@ async function processGitHubCallback(
 				user = getUserById(user.id);
 			}
 		} else {
-			// New user - create user and auth provider
+			// New user — check allowlist before creating account
+			if (!isUsernameAllowed(githubUser.login)) {
+				authLogger.warn("Signup blocked for {username}: not on allowlist", { username: githubUser.login });
+				return { success: false, redirectUrl: "/?error=not_allowed" };
+			}
+
 			user = createUser({
 				username: githubUser.login,
 				displayName: githubUser.name,
