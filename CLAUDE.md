@@ -19,7 +19,7 @@ All projects use Bun. Run commands from each project's directory.
 bun install
 podman-compose up migrate  # Run database migrations (required before first run)
 bun run dev                # Dev server with hot reload (builds client + runs server)
-bun run build              # Build client bundle only
+bun run build              # Build client bundle + inject cache-busting hash into index.html
 bun run check              # Format + lint
 ```
 
