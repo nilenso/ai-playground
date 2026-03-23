@@ -564,8 +564,6 @@ export function App() {
 				);
 			} else if (errorParam === "not-a-repo") {
 				setBookmarkletError("The page you came from doesn't appear to be a code repository.");
-			} else if (errorParam === "not_allowed") {
-				setBookmarkletError("Signups are currently restricted. Your GitHub account is not on the allowlist.");
 			}
 			// Clear error after a delay
 			setTimeout(() => setBookmarkletError(null), 8000);
