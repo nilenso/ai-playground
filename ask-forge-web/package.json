@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "bun run build && bun run --hot src/server.ts",
-		"build": "bun build src/client/index.tsx --outdir public --minify",
+		"build": "bun run scripts/build-client.ts",
 		"dev:visualizer": "bun run build:visualizer && bun run --hot src/visualizer-server.ts",
 		"build:visualizer": "bun build src/client/visualizer-index.tsx --outfile public/visualizer.js --minify",
 		"format": "bunx biome format --write .",

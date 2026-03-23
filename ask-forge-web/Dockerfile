@@ -12,6 +12,7 @@ RUN bun install
 # Copy source files
 COPY src ./src
 COPY public ./public
+COPY scripts ./scripts
 COPY tsconfig.json biome.json ./
 
 # Build both clients and create build info with current timestamp
