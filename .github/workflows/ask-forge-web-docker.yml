@@ -59,7 +59,7 @@ jobs:
       - name: Deploy to server
         uses: appleboy/ssh-action@v1
         with:
-          host: ask.nilenso.ai
+          host: server.ask.nilenso.ai
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
