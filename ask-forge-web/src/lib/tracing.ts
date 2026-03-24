@@ -260,7 +260,12 @@ async function buildPhoenixProcessor(): Promise<SpanProcessor | null> {
 
 	const { OTLPTraceExporter } = await import("@opentelemetry/exporter-trace-otlp-proto");
 	const { BatchSpanProcessor } = await import("@opentelemetry/sdk-trace-base");
-	const exporter = new BatchSpanProcessor(new OTLPTraceExporter({ url: endpoint }));
+	const headers: Record<string, string> = {};
+	const adminSecret = process.env.PHOENIX_ADMIN_SECRET;
+	if (adminSecret) {
+		headers.authorization = `Bearer ${adminSecret}`;
+	}
+	const exporter = new BatchSpanProcessor(new OTLPTraceExporter({ url: endpoint, headers }));
 	return new PhoenixEnrichingProcessor(exporter);
 }
 
@@ -270,7 +275,11 @@ const phoenixProcessor = await buildPhoenixProcessor();
 
 if (phoenixProcessor) {
 	const { NodeSDK } = await import("@opentelemetry/sdk-node");
-	const sdk = new NodeSDK({ spanProcessors: [phoenixProcessor] });
+	const { resourceFromAttributes } = await import("@opentelemetry/resources");
+	const sdk = new NodeSDK({
+		resource: resourceFromAttributes({ "openinference.project.name": "ask-forge" }),
+		spanProcessors: [phoenixProcessor],
+	});
 	sdk.start();
 	console.log("[tracing] OpenTelemetry SDK started — exporting to Phoenix");
 } else {

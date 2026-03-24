@@ -28,20 +28,32 @@ const REPO_URL = "https://github.com/nilenso/ask-forge";
 
 // ─── Phoenix GraphQL helpers ──────────────────────────────────────────────────
 
+const PHOENIX_AUTH_HEADERS: Record<string, string> = { "Content-Type": "application/json" };
+if (process.env.PHOENIX_ADMIN_SECRET) {
+	PHOENIX_AUTH_HEADERS.authorization = `Bearer ${process.env.PHOENIX_ADMIN_SECRET}`;
+}
+
 async function gql(query: string, variables?: Record<string, unknown>): Promise<Record<string, unknown>> {
 	const res = await fetch(`${PHOENIX_BASE}/graphql`, {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: PHOENIX_AUTH_HEADERS,
 		body: JSON.stringify({ query, variables }),
 	});
 	return res.json() as Promise<Record<string, unknown>>;
 }
 
-async function getTraceCount(): Promise<number> {
-	const data = (await gql(`{ projects { edges { node { traceCount } } } }`)) as {
-		data: { projects: { edges: { node: { traceCount: number } }[] } };
+const PROJECT_NAME = "ask-forge";
+
+async function getProjectNode<T>(fields: string): Promise<T | undefined> {
+	const data = (await gql(`{ projects { edges { node { name ${fields} } } } }`)) as {
+		data: { projects: { edges: { node: { name: string } & T }[] } };
 	};
-	return data.data.projects.edges[0]?.node.traceCount ?? 0;
+	return data.data.projects.edges.find((e) => e.node.name === PROJECT_NAME)?.node;
+}
+
+async function getTraceCount(): Promise<number> {
+	const node = await getProjectNode<{ traceCount: number }>("traceCount");
+	return node?.traceCount ?? 0;
 }
 
 interface SpanInfo {
@@ -57,6 +69,7 @@ async function getRecentSpans(count: number): Promise<SpanInfo[]> {
 		projects {
 			edges {
 				node {
+					name
 					spans(first: ${count}, sort: { col: startTime, dir: desc }) {
 						edges {
 							node {
@@ -71,8 +84,9 @@ async function getRecentSpans(count: number): Promise<SpanInfo[]> {
 				}
 			}
 		}
-	}`)) as { data: { projects: { edges: { node: { spans: { edges: { node: SpanInfo }[] } } }[] } } };
-	return data.data.projects.edges[0]?.node.spans.edges.map((e) => e.node) ?? [];
+	}`)) as { data: { projects: { edges: { node: { name: string; spans: { edges: { node: SpanInfo }[] } } }[] } } };
+	const project = data.data.projects.edges.find((e) => e.node.name === PROJECT_NAME);
+	return project?.node.spans.edges.map((e) => e.node) ?? [];
 }
 
 // ─── Checks ───────────────────────────────────────────────────────────────────
@@ -104,6 +118,10 @@ try {
 
 if (!process.env.PHOENIX_COLLECTOR_ENDPOINT) {
 	console.error("PHOENIX_COLLECTOR_ENDPOINT not set");
+	process.exit(1);
+}
+if (!process.env.PHOENIX_ADMIN_SECRET) {
+	console.error("PHOENIX_ADMIN_SECRET not set — required for authenticated Phoenix");
 	process.exit(1);
 }
 if (!process.env.OPENROUTER_API_KEY) {
@@ -190,6 +208,7 @@ if (askSpan) {
 		projects {
 			edges {
 				node {
+					name
 					spans(first: 1, sort: { col: startTime, dir: desc }) {
 						edges { node { id } }
 					}
@@ -199,12 +218,13 @@ if (askSpan) {
 	}`)) as {
 		data: {
 			projects: {
-				edges: { node: { spans: { edges: { node: { id: string } }[] } } }[];
+				edges: { node: { name: string; spans: { edges: { node: { id: string } }[] } } }[];
 			};
 		};
 	};
 
-	const phoenixSpanId = traceData.data.projects.edges[0]?.node.spans.edges[0]?.node.id;
+	const phoenixSpanId = traceData.data.projects.edges.find((e) => e.node.name === PROJECT_NAME)?.node.spans.edges[0]
+		?.node.id;
 	if (phoenixSpanId) {
 		// Create a test annotation via GraphQL
 		const annotationResult = (await gql(
@@ -272,6 +292,7 @@ const costData = (await gql(`{
 	projects {
 		edges {
 			node {
+				name
 				spans(first: 5, sort: { col: startTime, dir: desc }) {
 					edges {
 						node {
@@ -290,6 +311,7 @@ const costData = (await gql(`{
 		projects: {
 			edges: {
 				node: {
+					name: string;
 					spans: {
 						edges: {
 							node: {
@@ -306,7 +328,8 @@ const costData = (await gql(`{
 	};
 };
 
-const costSpans = costData.data.projects.edges[0]?.node.spans.edges.map((e) => e.node) ?? [];
+const costProject = costData.data.projects.edges.find((e) => e.node.name === PROJECT_NAME);
+const costSpans = costProject?.node.spans.edges.map((e) => e.node) ?? [];
 const chatCostSpan = costSpans.find((s) => s.name === "gen_ai.chat");
 if (chatCostSpan) {
 	check(

@@ -84,6 +84,51 @@ The visualizer runs on port 3001 and provides:
 - Annotations for rating response quality (relevance, evidence, clarity)
 - Export to JSONL format
 
+## Tracing (Arize Phoenix)
+
+ask-forge emits OpenTelemetry traces for LLM calls, tool executions, and agentic loops. [Arize Phoenix](https://github.com/Arize-ai/phoenix) is the observability backend.
+
+### Setup
+
+1. Start Phoenix:
+   ```bash
+   docker-compose up phoenix -d
+   ```
+
+2. Add to your `.env`:
+   ```
+   PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
+   PHOENIX_SECRET=dev-phoenix-jwt-secret-change-in-production1
+   PHOENIX_ADMIN_SECRET=dev-phoenix-admin-secret-at-least-32chars1
+   PHOENIX_ADMIN_PASSWORD=admin
+   ```
+
+3. Open http://localhost:6006 and log in with `admin@localhost` / `admin`.
+
+Traces are routed to the `ask-forge` project automatically.
+
+### Verify tracing
+
+```bash
+bun run scripts/verify-phoenix-tracing.ts
+```
+
+This asks a question against a repo, then checks Phoenix for:
+- Root trace with question and answer
+- Tool call spans with results
+- Annotation support
+- Token counts (including cache breakdown)
+- Cost data (via model name + token counts)
+
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `PHOENIX_COLLECTOR_ENDPOINT` | OTLP endpoint (e.g. `http://localhost:6006/v1/traces`) |
+| `PHOENIX_SECRET` | JWT signing key for Phoenix auth (min 32 chars, must contain a digit) |
+| `PHOENIX_ADMIN_SECRET` | Bearer token for OTLP ingestion and API access (min 32 chars, must contain a digit and lowercase letter) |
+| `PHOENIX_ADMIN_PASSWORD` | Initial password for the `admin@localhost` account |
+
 ## Scripts
 
 - `bun run dev` — Start dev server with hot reload
@@ -91,6 +136,7 @@ The visualizer runs on port 3001 and provides:
 - `bun run dev:visualizer` — Start session visualizer (port 3001)
 - `bun run build:visualizer` — Build visualizer client bundle
 - `bun run check` — Run biome lint/format
+- `bun run scripts/verify-phoenix-tracing.ts` — Verify Phoenix tracing setup
 
 ## Deployment
 
