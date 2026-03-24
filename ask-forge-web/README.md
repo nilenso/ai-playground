@@ -90,17 +90,17 @@ ask-forge emits OpenTelemetry traces for LLM calls, tool executions, and agentic
 
 ### Setup
 
-1. Start Phoenix:
-   ```bash
-   docker-compose up phoenix -d
-   ```
-
-2. Add to your `.env`:
+1. Add to your `.env`:
    ```
    PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
    PHOENIX_SECRET=dev-phoenix-jwt-secret-change-in-production1
    PHOENIX_ADMIN_SECRET=dev-phoenix-admin-secret-at-least-32chars1
    PHOENIX_ADMIN_PASSWORD=admin
+   ```
+
+2. Start Phoenix:
+   ```bash
+   docker-compose up phoenix -d
    ```
 
 3. Open http://localhost:6006 and log in with `admin@localhost` / `admin`.
