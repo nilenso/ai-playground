@@ -21,7 +21,7 @@
 // Tracing MUST be imported before ask-forge
 import "../src/lib/tracing.ts";
 
-import { AskForgeClient } from "ask-forge";
+import { AskForgeClient } from "@nilenso/ask-forge";
 
 const PHOENIX_BASE = process.env.PHOENIX_COLLECTOR_ENDPOINT?.replace("/v1/traces", "") ?? "http://localhost:6006";
 const REPO_URL = "https://github.com/nilenso/ask-forge";

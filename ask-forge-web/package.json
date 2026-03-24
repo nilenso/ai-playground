@@ -28,7 +28,7 @@
 		"@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
 		"@opentelemetry/exporter-trace-otlp-proto": "^0.213.0",
 		"@opentelemetry/sdk-node": "^0.213.0",
-		"ask-forge": "../../ask-forge",
+		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.16",
 		"highlight.js": "^11.11.1",
 		"hono": "^4.7.10",
 		"marked": "^17.0.1",

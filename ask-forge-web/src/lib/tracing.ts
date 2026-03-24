@@ -37,14 +37,21 @@ function findEventContent(span: ReadableSpan, eventName: string): string | undef
 
 /** OpenInference attribute keys that Phoenix reads for its built-in UI fields. */
 const OI_ATTR = {
+	SPAN_KIND: "openinference.span.kind",
 	LLM_MODEL_NAME: "llm.model_name",
+	LLM_PROVIDER: "llm.provider",
 	LLM_TOKEN_COUNT_PROMPT: "llm.token_count.prompt",
 	LLM_TOKEN_COUNT_COMPLETION: "llm.token_count.completion",
 	LLM_TOKEN_COUNT_TOTAL: "llm.token_count.total",
+	LLM_TOKEN_COUNT_CACHE_READ: "llm.token_count.prompt_details.cache_read",
+	LLM_TOKEN_COUNT_CACHE_WRITE: "llm.token_count.prompt_details.cache_write",
 	INPUT_VALUE: "input.value",
 	OUTPUT_VALUE: "output.value",
 	INPUT_MIME_TYPE: "input.mime_type",
 	OUTPUT_MIME_TYPE: "output.mime_type",
+	SESSION_ID: "session.id",
+	TOOL_NAME: "tool.name",
+	METADATA: "metadata",
 } as const;
 
 /**
@@ -77,6 +84,8 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 
 	/** Buffers the final chat output per trace ID so we can inject it onto the ask span. */
 	private traceOutputs = new Map<string, string>();
+	/** Accumulates token counts from gen_ai.chat spans per trace ID for the ask span total. */
+	private traceTokens = new Map<string, { prompt: number; completion: number }>();
 
 	onStart(span: Span, parentContext: Context): void {
 		this.inner.onStart(span, parentContext);
@@ -90,25 +99,54 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 			return;
 		}
 
-		// Map model name
+		// Map model name and provider.
+		// gen_ai.request.model is "provider/vendor/model" (e.g. "openrouter/anthropic/claude-sonnet-4.6").
+		// gen_ai.provider.name is the pi-ai provider (e.g. "openrouter").
+		// Phoenix's pricing table matches bare model names (e.g. "claude-sonnet-4-6"),
+		// so we strip both the provider and vendor prefixes.
 		const model = attrs["gen_ai.request.model"];
+		const provider = attrs["gen_ai.provider.name"];
+		if (typeof provider === "string") {
+			attrs[OI_ATTR.LLM_PROVIDER] = provider;
+		}
 		if (typeof model === "string") {
-			// Strip "openrouter/" prefix so Phoenix can match its pricing table
-			attrs[OI_ATTR.LLM_MODEL_NAME] = model.replace(/^openrouter\//, "");
+			// Strip all path segments except the last (e.g. "openrouter/anthropic/claude-sonnet-4.6" → "claude-sonnet-4.6")
+			const bare = model.split("/").pop() ?? model;
+			attrs[OI_ATTR.LLM_MODEL_NAME] = bare;
 		}
 
-		// Map token counts
+		// Map token counts — include cache-read tokens in prompt count so the
+		// header total matches the actual billed/consumed tokens.
 		const inputTokens = attrs["gen_ai.usage.input_tokens"];
 		const outputTokens = attrs["gen_ai.usage.output_tokens"];
-		if (typeof inputTokens === "number") attrs[OI_ATTR.LLM_TOKEN_COUNT_PROMPT] = inputTokens;
-		if (typeof outputTokens === "number") attrs[OI_ATTR.LLM_TOKEN_COUNT_COMPLETION] = outputTokens;
-		if (typeof inputTokens === "number" && typeof outputTokens === "number") {
-			attrs[OI_ATTR.LLM_TOKEN_COUNT_TOTAL] = inputTokens + outputTokens;
+		const cacheReadTokens = attrs["gen_ai.usage.cache_read.input_tokens"];
+		const cacheCreationTokens = attrs["gen_ai.usage.cache_creation.input_tokens"];
+		const promptTokens =
+			(typeof inputTokens === "number" ? inputTokens : 0) +
+			(typeof cacheReadTokens === "number" ? cacheReadTokens : 0) +
+			(typeof cacheCreationTokens === "number" ? cacheCreationTokens : 0);
+		const completionTokens = typeof outputTokens === "number" ? outputTokens : 0;
+		if (promptTokens > 0) attrs[OI_ATTR.LLM_TOKEN_COUNT_PROMPT] = promptTokens;
+		if (completionTokens > 0) attrs[OI_ATTR.LLM_TOKEN_COUNT_COMPLETION] = completionTokens;
+		if (promptTokens > 0 || completionTokens > 0) {
+			attrs[OI_ATTR.LLM_TOKEN_COUNT_TOTAL] = promptTokens + completionTokens;
 		}
+		if (typeof cacheReadTokens === "number") attrs[OI_ATTR.LLM_TOKEN_COUNT_CACHE_READ] = cacheReadTokens;
+		if (typeof cacheCreationTokens === "number") attrs[OI_ATTR.LLM_TOKEN_COUNT_CACHE_WRITE] = cacheCreationTokens;
 
 		const traceId = span.spanContext().traceId;
 
 		if (span.name === "gen_ai.chat") {
+			attrs[OI_ATTR.SPAN_KIND] = "LLM";
+
+			// Accumulate token counts for the parent ask span
+			if (promptTokens > 0 || completionTokens > 0) {
+				const acc = this.traceTokens.get(traceId) ?? { prompt: 0, completion: 0 };
+				acc.prompt += promptTokens;
+				acc.completion += completionTokens;
+				this.traceTokens.set(traceId, acc);
+			}
+
 			const output = findEventContent(span, GENAI_EVENT.OUTPUT_MESSAGES);
 			const finishReason = attrs["gen_ai.response.finish_reason"];
 
@@ -133,9 +171,11 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 				this.traceOutputs.set(traceId, output);
 			}
 		} else if (span.name === "gen_ai.execute_tool") {
+			attrs[OI_ATTR.SPAN_KIND] = "TOOL";
 			const input = findEventContent(span, GENAI_EVENT.TOOL_CALL_ARGUMENTS);
 			const output = findEventContent(span, GENAI_EVENT.TOOL_CALL_RESULT);
 			const toolName = attrs["gen_ai.tool.name"];
+			if (typeof toolName === "string") attrs[OI_ATTR.TOOL_NAME] = toolName;
 			if (input) {
 				// Include tool name so the Info tab shows which tool was called
 				const inputObj = toolName ? { tool: toolName, arguments: JSON.parse(input) } : JSON.parse(input);
@@ -147,11 +187,36 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 				attrs[OI_ATTR.OUTPUT_MIME_TYPE] = "text/plain";
 			}
 		} else if (span.name === "ask") {
+			attrs[OI_ATTR.SPAN_KIND] = "CHAIN";
+			// Map session ID
+			const sessionId = attrs["ask_forge.session.id"];
+			if (typeof sessionId === "string") attrs[OI_ATTR.SESSION_ID] = sessionId;
+			// Set metadata with repo context
+			const repoUrl = attrs["ask_forge.repo.url"];
+			const commitish = attrs["ask_forge.repo.commitish"];
+			const iterations = attrs["ask_forge.total_iterations"];
+			const toolCalls = attrs["ask_forge.total_tool_calls"];
+			const metadata: Record<string, unknown> = {};
+			if (typeof repoUrl === "string") metadata.repo_url = repoUrl;
+			if (typeof commitish === "string") metadata.commitish = commitish;
+			if (typeof iterations === "number") metadata.total_iterations = iterations;
+			if (typeof toolCalls === "number") metadata.total_tool_calls = toolCalls;
+			if (Object.keys(metadata).length > 0) attrs[OI_ATTR.METADATA] = JSON.stringify(metadata);
 			// Set the question as input
 			const input = findEventContent(span, GENAI_EVENT.INPUT_MESSAGES);
 			if (input) {
 				attrs[OI_ATTR.INPUT_VALUE] = input;
 				attrs[OI_ATTR.INPUT_MIME_TYPE] = "text/plain";
+			}
+
+			// Override token counts with accumulated totals from child gen_ai.chat spans
+			// (the ask span's own gen_ai.usage.* only has non-cached counts)
+			const accTokens = this.traceTokens.get(traceId);
+			if (accTokens) {
+				attrs[OI_ATTR.LLM_TOKEN_COUNT_PROMPT] = accTokens.prompt;
+				attrs[OI_ATTR.LLM_TOKEN_COUNT_COMPLETION] = accTokens.completion;
+				attrs[OI_ATTR.LLM_TOKEN_COUNT_TOTAL] = accTokens.prompt + accTokens.completion;
+				this.traceTokens.delete(traceId);
 			}
 
 			// Inject the buffered final answer as output
@@ -182,6 +247,7 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 
 	async shutdown(): Promise<void> {
 		this.traceOutputs.clear();
+		this.traceTokens.clear();
 		return this.inner.shutdown();
 	}
 }
