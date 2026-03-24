@@ -25,7 +25,6 @@
 		"@logtape/hono": "^2.0.4",
 		"@logtape/logtape": "^2.0.4",
 		"@opentelemetry/api": "^1.9.0",
-		"@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
 		"@opentelemetry/exporter-trace-otlp-proto": "^0.213.0",
 		"@opentelemetry/sdk-node": "^0.213.0",
 		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.16",

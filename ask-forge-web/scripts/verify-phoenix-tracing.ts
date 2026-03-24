@@ -15,7 +15,7 @@
  *   - OPENROUTER_API_KEY set
  *
  * Usage:
- *   bun run scripts/verify-phoenix.ts
+ *   bun run scripts/verify-phoenix-tracing.ts
  */
 
 // Tracing MUST be imported before ask-forge

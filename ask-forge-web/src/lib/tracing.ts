@@ -86,12 +86,28 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 	private traceOutputs = new Map<string, string>();
 	/** Accumulates token counts from gen_ai.chat spans per trace ID for the ask span total. */
 	private traceTokens = new Map<string, { prompt: number; completion: number }>();
+	/** Tracks when each trace ID was first seen, for stale entry eviction. */
+	private traceTimestamps = new Map<string, number>();
+	private static readonly STALE_THRESHOLD_MS = 30 * 60 * 1000;
 
 	onStart(span: Span, parentContext: Context): void {
 		this.inner.onStart(span, parentContext);
 	}
 
+	/** Evict buffered entries for traces that never completed (crash, timeout, etc.). */
+	private evictStaleEntries(): void {
+		const now = Date.now();
+		for (const [id, ts] of this.traceTimestamps) {
+			if (now - ts > PhoenixEnrichingProcessor.STALE_THRESHOLD_MS) {
+				this.traceOutputs.delete(id);
+				this.traceTokens.delete(id);
+				this.traceTimestamps.delete(id);
+			}
+		}
+	}
+
 	onEnd(span: ReadableSpan): void {
+		this.evictStaleEntries();
 		const attrs = span.attributes as Record<string, unknown>;
 
 		// Drop no-op compaction spans — they add noise when no compaction occurred
@@ -145,6 +161,7 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 				acc.prompt += promptTokens;
 				acc.completion += completionTokens;
 				this.traceTokens.set(traceId, acc);
+				if (!this.traceTimestamps.has(traceId)) this.traceTimestamps.set(traceId, Date.now());
 			}
 
 			const output = findEventContent(span, GENAI_EVENT.OUTPUT_MESSAGES);
@@ -178,8 +195,12 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 			if (typeof toolName === "string") attrs[OI_ATTR.TOOL_NAME] = toolName;
 			if (input) {
 				// Include tool name so the Info tab shows which tool was called
-				const inputObj = toolName ? { tool: toolName, arguments: JSON.parse(input) } : JSON.parse(input);
-				attrs[OI_ATTR.INPUT_VALUE] = JSON.stringify(inputObj);
+				try {
+					const inputObj = toolName ? { tool: toolName, arguments: JSON.parse(input) } : JSON.parse(input);
+					attrs[OI_ATTR.INPUT_VALUE] = JSON.stringify(inputObj);
+				} catch {
+					attrs[OI_ATTR.INPUT_VALUE] = input;
+				}
 				attrs[OI_ATTR.INPUT_MIME_TYPE] = "application/json";
 			}
 			if (output) {
@@ -226,7 +247,8 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 				attrs[OI_ATTR.OUTPUT_VALUE] = outputText;
 				attrs[OI_ATTR.OUTPUT_MIME_TYPE] = "text/plain";
 
-				// Also add a gen_ai.output.messages event so Phoenix shows it in the events panel
+				// Also add a gen_ai.output.messages event so Phoenix shows it in the events panel.
+				// ReadableSpan.events is typed readonly but is a mutable array at runtime in the OTel SDK.
 				const events = span.events as { name: string; time: [number, number]; attributes?: Record<string, unknown> }[];
 				events.push({
 					name: GENAI_EVENT.OUTPUT_MESSAGES,
@@ -236,6 +258,7 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 
 				this.traceOutputs.delete(traceId);
 			}
+			this.traceTimestamps.delete(traceId);
 		}
 
 		this.inner.onEnd(span);
@@ -248,6 +271,7 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 	async shutdown(): Promise<void> {
 		this.traceOutputs.clear();
 		this.traceTokens.clear();
+		this.traceTimestamps.clear();
 		return this.inner.shutdown();
 	}
 }

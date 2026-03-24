@@ -60,7 +60,7 @@ services:
     image: arizephoenix/phoenix:version-13.18.0
     restart: unless-stopped
     ports:
-      - "6006:6006"
+      - "127.0.0.1:6006:6006"  # localhost only — access via SSH tunnel
     environment:
       PHOENIX_ENABLE_AUTH: "True"
       PHOENIX_SECRET: ${PHOENIX_SECRET}
