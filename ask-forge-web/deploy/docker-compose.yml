@@ -42,6 +42,7 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - SANDBOX_URL=http://sandbox:8080
       - SANDBOX_SECRET=${SANDBOX_SECRET}
+      - PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT:-}
     volumes:
       - ./data:/app/data
     networks:

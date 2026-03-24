@@ -6,3 +6,15 @@ services:
       - ./migrations:/migrations:ro
       - ./data:/data
     command: up --db /data/ask-forge.db --migrations /migrations
+
+  # ── Phoenix (observability) ──────────────────────────────────────────────
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    restart: unless-stopped
+    ports:
+      - "6006:6006"   # Web UI + OTLP HTTP collector
+      - "4317:4317"   # gRPC OTLP collector
+    volumes:
+      - ./phoenix-data:/data
+    environment:
+      PHOENIX_WORKING_DIR: /data
