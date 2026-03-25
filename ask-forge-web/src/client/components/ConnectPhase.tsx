@@ -10,6 +10,7 @@ interface ConnectPhaseProps {
 	bookmarkletError: string | null;
 	handleConnect: () => void;
 	handleLogin: () => void;
+	handleLogout: () => void;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
 	urlInputRef: React.RefObject<HTMLInputElement | null>;
 	sidebarProps: React.ComponentProps<typeof Sidebar>;
@@ -24,6 +25,7 @@ export function ConnectPhase({
 	bookmarkletError,
 	handleConnect,
 	handleLogin,
+	handleLogout,
 	handleKeyDown,
 	urlInputRef,
 	sidebarProps,
@@ -77,6 +79,51 @@ export function ConnectPhase({
 							</a>
 							.
 						</p>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	// Show waitlist screen if user is waitlisted
+	if (auth.status === "waitlisted") {
+		return (
+			<div className="app-container phase-connect">
+				<div className="app-main">
+					<div className="connect-content">
+						<h1 className="logo">
+							<span className="logo-ask">ask</span>
+							<span className="logo-forge">forge</span>
+						</h1>
+						<div className="waitlist-message">
+							<svg
+								width="48"
+								height="48"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="var(--accent-pink)"
+								strokeWidth="1.5"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								aria-hidden="true"
+							>
+								<circle cx="12" cy="12" r="10" />
+								<polyline points="12 6 12 12 16 14" />
+							</svg>
+							<h2>You're on the waitlist</h2>
+							<p>
+								Thanks for signing up, <strong>{auth.username}</strong>! Your account is pending approval. We'll send
+								you an email when you're approved.
+							</p>
+							<button
+								type="button"
+								className="login-button"
+								onClick={handleLogout}
+								style={{ marginTop: "1rem", background: "var(--bg-tertiary)" }}
+							>
+								Sign out
+							</button>
+						</div>
 					</div>
 				</div>
 			</div>

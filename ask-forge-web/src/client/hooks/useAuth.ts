@@ -56,6 +56,9 @@ export function useAuth({ connectionSessionId, onLogout }: UseAuthOptions) {
 					avatarUrl: data.avatarUrl || null,
 					loading: false,
 					error: null,
+					status: data.status || undefined,
+					isAdmin: data.isAdmin || false,
+					waitlistCount: data.waitlistCount || 0,
 				});
 			})
 			.catch(() => {
@@ -86,5 +89,21 @@ export function useAuth({ connectionSessionId, onLogout }: UseAuthOptions) {
 		setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false });
 	}, [connectionSessionId, onLogout]);
 
-	return { auth, handleLogin, handleLogout };
+	const refreshAuth = useCallback(() => {
+		fetch("/api/auth/status")
+			.then((res) => res.json())
+			.then((data) => {
+				if (data.authenticated) {
+					setAuth((prev) => ({
+						...prev,
+						status: data.status || prev.status,
+						isAdmin: data.isAdmin ?? prev.isAdmin,
+						waitlistCount: data.waitlistCount || 0,
+					}));
+				}
+			})
+			.catch(() => {});
+	}, []);
+
+	return { auth, handleLogin, handleLogout, refreshAuth };
 }

@@ -28,7 +28,7 @@ sandboxLogger.info("Sandbox mode: {mode}", {
 	sandboxUrl: sandboxUrl ?? null,
 });
 
-import { createAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
+import { createApprovedAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
 import {
 	createSession as createDbSession,
 	createMessage,
@@ -121,7 +121,7 @@ api.get("/health", (c) => {
 /**
  * Validate a git URL by checking if it's cloneable
  */
-api.post("/validate", createAuthMiddleware(), async (c) => {
+api.post("/validate", createApprovedAuthMiddleware(), async (c) => {
 	const body = await c.req.json<{ url: string }>();
 	const { url } = body;
 
@@ -164,7 +164,7 @@ api.post("/validate", createAuthMiddleware(), async (c) => {
  *   event: done      — full connect result JSON
  *   event: error     — { success: false, error: "..." }
  */
-api.post("/connect", createAuthMiddleware(), async (c) => {
+api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 	const payload = getUserFromContext(c);
 	if (!payload) return c.json({ success: false, error: "Unauthorized" }, 401);
 
@@ -279,7 +279,7 @@ api.post("/connect", createAuthMiddleware(), async (c) => {
 /**
  * Ask a question in an existing session (streaming progress via SSE)
  */
-api.post("/ask", createAuthMiddleware(), async (c) => {
+api.post("/ask", createApprovedAuthMiddleware(), async (c) => {
 	const body = await c.req.json<{ sessionId: string; question: string }>();
 	const { sessionId, question } = body;
 
@@ -348,7 +348,7 @@ api.post("/ask", createAuthMiddleware(), async (c) => {
 /**
  * Restore a previous session from the database
  */
-api.post("/restore", createAuthMiddleware(), async (c) => {
+api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 	const body = await c.req.json<{ sessionId: string }>();
 	const { sessionId } = body;
 
@@ -470,7 +470,7 @@ api.post("/restore", createAuthMiddleware(), async (c) => {
 /**
  * Close a session
  */
-api.post("/disconnect", createAuthMiddleware(), async (c) => {
+api.post("/disconnect", createApprovedAuthMiddleware(), async (c) => {
 	const body = await c.req.json<{ sessionId: string }>();
 	const { sessionId } = body;
 
@@ -493,7 +493,7 @@ api.post("/disconnect", createAuthMiddleware(), async (c) => {
 /**
  * List sessions for the current user with repository info
  */
-api.get("/sessions", createAuthMiddleware(), (c) => {
+api.get("/sessions", createApprovedAuthMiddleware(), (c) => {
 	const payload = getUserFromContext(c);
 	if (!payload) return c.json([], 401);
 
@@ -526,7 +526,7 @@ api.get("/sessions", createAuthMiddleware(), (c) => {
 /**
  * Get messages for a session
  */
-api.get("/sessions/:id/messages", createAuthMiddleware(), (c) => {
+api.get("/sessions/:id/messages", createApprovedAuthMiddleware(), (c) => {
 	const sessionId = c.req.param("id");
 	const messages = getMessagesBySession(sessionId);
 	return c.json(messages);
@@ -535,7 +535,7 @@ api.get("/sessions/:id/messages", createAuthMiddleware(), (c) => {
 /**
  * Rename a session
  */
-api.patch("/sessions/:id", createAuthMiddleware(), async (c) => {
+api.patch("/sessions/:id", createApprovedAuthMiddleware(), async (c) => {
 	const sessionId = c.req.param("id");
 	const body = await c.req.json<{ title: string }>();
 
@@ -550,7 +550,7 @@ api.patch("/sessions/:id", createAuthMiddleware(), async (c) => {
 /**
  * Delete a session
  */
-api.delete("/sessions/:id", createAuthMiddleware(), (c) => {
+api.delete("/sessions/:id", createApprovedAuthMiddleware(), (c) => {
 	const sessionId = c.req.param("id");
 
 	// Close in-memory session if active
@@ -569,7 +569,7 @@ api.delete("/sessions/:id", createAuthMiddleware(), (c) => {
 /**
  * Create a share link for a session (auth required)
  */
-api.post("/sessions/:id/share", createAuthMiddleware(), (c) => {
+api.post("/sessions/:id/share", createApprovedAuthMiddleware(), (c) => {
 	const sessionId = c.req.param("id");
 	const payload = getUserFromContext(c);
 	if (!payload) return c.json({ error: "Unauthorized" }, 401);
@@ -630,7 +630,7 @@ api.post("/sessions/:id/share", createAuthMiddleware(), (c) => {
 /**
  * Delete a share link for a session (auth required)
  */
-api.delete("/sessions/:id/share", createAuthMiddleware(), (c) => {
+api.delete("/sessions/:id/share", createApprovedAuthMiddleware(), (c) => {
 	const sessionId = c.req.param("id");
 	const payload = getUserFromContext(c);
 	if (!payload) return c.json({ error: "Unauthorized" }, 401);

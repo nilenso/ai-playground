@@ -39,6 +39,9 @@ export interface AuthState {
 	avatarUrl: string | null;
 	loading: boolean;
 	error?: string | null;
+	status?: "waitlisted" | "approved";
+	isAdmin?: boolean;
+	waitlistCount?: number;
 }
 
 export interface SessionSummary {

@@ -350,11 +350,7 @@ export function useWebSocket({
 
 					if (streamingMessageIdRef.current) {
 						setMessages((prev) =>
-							prev.map((msg) =>
-								msg.id === streamingMessageIdRef.current
-									? { ...msg, isStreaming: false }
-									: msg
-							),
+							prev.map((msg) => (msg.id === streamingMessageIdRef.current ? { ...msg, isStreaming: false } : msg)),
 						);
 					}
 
@@ -423,7 +419,7 @@ export function useWebSocket({
 
 		ws.onmessage = handleWsMessage;
 
-		ws.onerror = () => { };
+		ws.onerror = () => {};
 
 		ws.onclose = () => {
 			wsRef.current = null;

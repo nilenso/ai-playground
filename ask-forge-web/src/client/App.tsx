@@ -85,7 +85,7 @@ export function App() {
 		setPhase("connect");
 	}, []);
 
-	const { auth, handleLogin, handleLogout } = useAuth({
+	const { auth, handleLogin, handleLogout, refreshAuth } = useAuth({
 		connectionSessionId: connection.sessionId,
 		onLogout,
 	});
@@ -681,6 +681,7 @@ export function App() {
 		setRenameValue: session.setRenameValue,
 		handleDisconnect,
 		handleLogout,
+		refreshAuth,
 		handleRestore: session.handleRestore,
 		handleDeleteSession: session.handleDeleteSession,
 		handleRenameSession: session.handleRenameSession,
@@ -719,6 +720,7 @@ export function App() {
 				bookmarkletError={bookmarkletError}
 				handleConnect={handleConnect}
 				handleLogin={handleLogin}
+				handleLogout={handleLogout}
 				handleKeyDown={handleKeyDown}
 				urlInputRef={urlInputRef}
 				sidebarProps={sidebarProps}
