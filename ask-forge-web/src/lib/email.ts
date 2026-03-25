@@ -101,3 +101,39 @@ Happy forging!
 
 	return sendEmail({ to, subject: "Your AskForge account is approved!", text, html });
 }
+
+/**
+ * Notify an admin that a new user has joined the waitlist.
+ */
+export async function sendWaitlistNotificationEmail(params: {
+	to: string;
+	adminUsername: string;
+	newUsername: string;
+	appUrl: string;
+}): Promise<boolean> {
+	const { to, adminUsername, newUsername, appUrl } = params;
+	const safeAdmin = escapeHtml(adminUsername);
+	const safeNewUser = escapeHtml(newUsername);
+	const safeAppUrl = escapeHtml(appUrl);
+
+	const text = `Hi ${adminUsername},
+
+${newUsername} just signed up for AskForge and is on the waitlist.
+
+You can approve or disapprove them at ${appUrl}
+
+— AskForge`;
+
+	const html = `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 0;">
+  <h2 style="color: #0a2540; margin: 0 0 16px;">New waitlist signup</h2>
+  <p style="color: #425466; font-size: 15px; line-height: 1.6; margin: 0 0 16px;">
+    Hi <strong>${safeAdmin}</strong>, <strong>${safeNewUser}</strong> just signed up for AskForge and is waiting for approval.
+  </p>
+  <a href="${safeAppUrl}" style="display: inline-block; background: #ec4899; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 6px; font-weight: 500; font-size: 14px;">
+    Review waitlist
+  </a>
+</div>`.trim();
+
+	return sendEmail({ to, subject: `AskForge: ${newUsername} is waiting for approval`, text, html });
+}

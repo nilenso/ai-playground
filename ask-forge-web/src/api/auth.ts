@@ -15,6 +15,7 @@ import {
 	getDisabledUsers,
 	getUserById,
 	getUserFromContext,
+	getRandomAdminEmail,
 	getWaitlistCount,
 	getWaitlistedUsers,
 	setAuthCookie,
@@ -22,7 +23,7 @@ import {
 	updateUser,
 } from "../lib/auth.ts";
 import { AUTH_CONFIG, AuthProvider } from "../lib/auth-config.ts";
-import { sendApprovalEmail } from "../lib/email.ts";
+import { sendApprovalEmail, sendWaitlistNotificationEmail } from "../lib/email.ts";
 import { authLogger } from "../lib/logger.ts";
 
 const auth = new Hono();
@@ -175,6 +176,17 @@ async function processGitHubCallback(
 			});
 
 			authLogger.info("New user {username} added to waitlist", { username: githubUser.login });
+
+			// Notify a random admin (fire-and-forget)
+			const admin = getRandomAdminEmail();
+			if (admin) {
+				sendWaitlistNotificationEmail({
+					to: admin.email,
+					adminUsername: admin.username,
+					newUsername: githubUser.login,
+					appUrl: AUTH_CONFIG.app.url,
+				}).catch(() => {});
+			}
 		}
 
 		if (!user) {
