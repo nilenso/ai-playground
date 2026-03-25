@@ -36,6 +36,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Database
 data/
 
+# Phoenix data
+phoenix-data/
+
 # Working directory for cloned repos
 workdir/
 

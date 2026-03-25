@@ -1,3 +1,7 @@
+// Tracing MUST be imported first — registers the OTel TracerProvider
+// before ask-forge's tracing module calls trace.getTracer().
+import "./lib/tracing.ts";
+
 import { honoLogger } from "@logtape/hono";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";

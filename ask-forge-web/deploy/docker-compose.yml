@@ -42,15 +42,50 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - SANDBOX_URL=http://sandbox:8080
       - SANDBOX_SECRET=${SANDBOX_SECRET}
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
+      - PHOENIX_ADMIN_SECRET=${PHOENIX_ADMIN_SECRET}
     volumes:
       - ./data:/app/data
     networks:
       - sandbox
       - web
+      - phoenix
     depends_on:
       sandbox:
         condition: service_healthy
     restart: unless-stopped
+
+  # ── Phoenix (observability) ──────────────────────────────────────────────
+  phoenix:
+    image: arizephoenix/phoenix:version-13.18.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6006:6006"  # localhost only — access via SSH tunnel
+    environment:
+      PHOENIX_ENABLE_AUTH: "True"
+      PHOENIX_SECRET: ${PHOENIX_SECRET}
+      PHOENIX_ADMIN_SECRET: ${PHOENIX_ADMIN_SECRET}
+      PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD: ${PHOENIX_ADMIN_PASSWORD}
+      PHOENIX_DEFAULT_RETENTION_POLICY_DAYS: 60
+      PHOENIX_SQL_DATABASE_URL: postgresql://postgres:${PHOENIX_PG_PASSWORD:-postgres}@phoenix-db:5432/phoenix
+    networks:
+      - phoenix
+    depends_on:
+      - phoenix-db
+
+  phoenix-db:
+    image: postgres:18.3
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: phoenix
+      POSTGRES_PASSWORD: ${PHOENIX_PG_PASSWORD:-postgres}
+    volumes:
+      - phoenix-data:/var/lib/postgresql/data
+    networks:
+      - phoenix
+
+volumes:
+  phoenix-data:
 
 networks:
   sandbox:
@@ -58,3 +93,4 @@ networks:
     # Security layers: bwrap (filesystem/PID), seccomp (network), gVisor (syscall).
   web:
     external: true
+  phoenix:
