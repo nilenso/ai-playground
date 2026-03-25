@@ -3,7 +3,7 @@ services:
   # Security: bwrap (filesystem/PID) + seccomp (network blocking) + gVisor (syscall)
   sandbox:
     build:
-      context: ../../ask-forge/sandbox
+      context: ../ask-forge/sandbox  # Relative to ~/ask-forge-web/ on server
       dockerfile: Containerfile
     runtime: runsc  # gVisor required - handles bwrap namespace creation
     cap_drop:
@@ -16,6 +16,8 @@ services:
       - /tmp:rw,size=64m
     networks:
       - sandbox
+    volumes:
+      - ./sandbox-resolv.conf:/etc/resolv.conf:ro
     deploy:
       resources:
         limits:
@@ -44,6 +46,10 @@ services:
       - SANDBOX_SECRET=${SANDBOX_SECRET}
       - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
       - PHOENIX_ADMIN_SECRET=${PHOENIX_ADMIN_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - APP_URL=${APP_URL}
     volumes:
       - ./data:/app/data
     networks:
@@ -60,7 +66,7 @@ services:
     image: arizephoenix/phoenix:version-13.18.0
     restart: unless-stopped
     ports:
-      - "127.0.0.1:6006:6006"  # localhost only — access via SSH tunnel
+      - "127.0.0.1:6006:6006"  # localhost only — access via SSH tunnel or Caddy
     environment:
       PHOENIX_ENABLE_AUTH: "True"
       PHOENIX_SECRET: ${PHOENIX_SECRET}
@@ -70,6 +76,7 @@ services:
       PHOENIX_SQL_DATABASE_URL: postgresql://postgres:${PHOENIX_PG_PASSWORD:-postgres}@phoenix-db:5432/phoenix
     networks:
       - phoenix
+      - web
     depends_on:
       - phoenix-db
 
@@ -80,7 +87,7 @@ services:
       POSTGRES_DB: phoenix
       POSTGRES_PASSWORD: ${PHOENIX_PG_PASSWORD:-postgres}
     volumes:
-      - phoenix-data:/var/lib/postgresql/data
+      - phoenix-data:/var/lib/postgresql
     networks:
       - phoenix
 
