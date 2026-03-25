@@ -60,14 +60,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Copy deploy files to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: server.ask.nilenso.ai
-          username: root
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "ask-forge-web/deploy/docker-compose.yml,ask-forge-web/deploy/sandbox-resolv.conf"
-          target: "~/ask-forge-web/"
-          strip_components: 2
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H server.ask.nilenso.ai >> ~/.ssh/known_hosts 2>/dev/null
+          scp -i ~/.ssh/deploy_key \
+            ask-forge-web/deploy/docker-compose.yml \
+            ask-forge-web/deploy/sandbox-resolv.conf \
+            root@server.ask.nilenso.ai:~/ask-forge-web/
+          rm ~/.ssh/deploy_key
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1
