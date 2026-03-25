@@ -13,7 +13,7 @@ export interface JWTPayload {
 	[key: string]: unknown;
 }
 
-export type UserStatus = "waitlisted" | "approved";
+export type UserStatus = "waitlisted" | "approved" | "disapproved" | "disabled";
 
 // User interface matching database schema
 export interface User {
@@ -267,12 +267,26 @@ export function approveUser(userId: number): void {
 	db.run("UPDATE users SET status = 'approved', updated_at = ? WHERE id = ?", [new Date().toISOString(), userId]);
 }
 
-export interface WaitlistedUser {
+export function disapproveUser(userId: number): void {
+	const db = getDb();
+	db.run("UPDATE users SET status = 'disapproved', updated_at = ? WHERE id = ?", [
+		new Date().toISOString(),
+		userId,
+	]);
+}
+
+export function disableUser(userId: number): void {
+	const db = getDb();
+	db.run("UPDATE users SET status = 'disabled', updated_at = ? WHERE id = ?", [new Date().toISOString(), userId]);
+}
+
+export interface AdminUserRow {
 	id: number;
 	username: string;
 	display_name: string | null;
 	email: string | null;
 	avatar_url: string | null;
+	status: string;
 	created_at: string;
 }
 
@@ -282,11 +296,29 @@ export function getWaitlistCount(): number {
 	return row?.count ?? 0;
 }
 
-export function getWaitlistedUsers(limit = 100): WaitlistedUser[] {
+export function getWaitlistedUsers(limit = 100): AdminUserRow[] {
 	const db = getDb();
 	return db
-		.query<WaitlistedUser, [number]>(
-			"SELECT id, username, display_name, email, avatar_url, created_at FROM users WHERE status = 'waitlisted' ORDER BY created_at ASC LIMIT ?",
+		.query<AdminUserRow, [number]>(
+			"SELECT id, username, display_name, email, avatar_url, status, created_at FROM users WHERE status = 'waitlisted' ORDER BY created_at ASC LIMIT ?",
+		)
+		.all(limit);
+}
+
+export function getApprovedUsers(limit = 200): AdminUserRow[] {
+	const db = getDb();
+	return db
+		.query<AdminUserRow, [number]>(
+			"SELECT id, username, display_name, email, avatar_url, status, created_at FROM users WHERE status = 'approved' ORDER BY created_at ASC LIMIT ?",
+		)
+		.all(limit);
+}
+
+export function getDisabledUsers(limit = 200): AdminUserRow[] {
+	const db = getDb();
+	return db
+		.query<AdminUserRow, [number]>(
+			"SELECT id, username, display_name, email, avatar_url, status, created_at FROM users WHERE status IN ('disapproved', 'disabled') ORDER BY created_at ASC LIMIT ?",
 		)
 		.all(limit);
 }

@@ -6,9 +6,13 @@ import {
 	createAuthMiddleware,
 	createAuthProvider,
 	createUser,
+	disableUser,
+	disapproveUser,
 	findAuthProvider,
 	type GitHubUser,
 	generateJwt,
+	getApprovedUsers,
+	getDisabledUsers,
 	getUserById,
 	getUserFromContext,
 	getWaitlistCount,
@@ -293,11 +297,15 @@ auth.get("/status", async (c) => {
 // ─── Admin endpoints ─────────────────────────────────────────────────────────
 
 /**
- * GET /api/auth/admin/waitlist
- * Lists all waitlisted users (admin only)
+ * GET /api/auth/admin/users
+ * Lists all users grouped by status (admin only)
  */
-auth.get("/admin/waitlist", createAdminMiddleware(), (c) => {
-	return c.json(getWaitlistedUsers());
+auth.get("/admin/users", createAdminMiddleware(), (c) => {
+	return c.json({
+		waitlisted: getWaitlistedUsers(),
+		approved: getApprovedUsers(),
+		disabled: getDisabledUsers(),
+	});
 });
 
 /**
@@ -337,6 +345,66 @@ auth.post("/admin/approve/:userId", createAdminMiddleware(), (c) => {
 	} else {
 		authLogger.warn("No email on file for {username} — skipping approval email", { username: user.username });
 	}
+
+	return c.json({ success: true });
+});
+
+/**
+ * POST /api/auth/admin/disapprove/:userId
+ * Disapprove a waitlisted user (admin only)
+ */
+auth.post("/admin/disapprove/:userId", createAdminMiddleware(), (c) => {
+	const payload = getUserFromContext(c);
+	const userId = Number(c.req.param("userId"));
+	if (Number.isNaN(userId)) {
+		return c.json({ error: "Invalid user ID" }, 400);
+	}
+
+	const user = getUserById(userId);
+	if (!user) {
+		return c.json({ error: "User not found" }, 404);
+	}
+
+	if (user.status !== "waitlisted") {
+		return c.json({ error: "User is not on the waitlist" }, 400);
+	}
+
+	disapproveUser(userId);
+	authLogger.info("Admin {admin} disapproved user {username} (id={userId})", {
+		admin: payload.username,
+		username: user.username,
+		userId,
+	});
+
+	return c.json({ success: true });
+});
+
+/**
+ * POST /api/auth/admin/disable/:userId
+ * Disable an approved user (admin only)
+ */
+auth.post("/admin/disable/:userId", createAdminMiddleware(), (c) => {
+	const payload = getUserFromContext(c);
+	const userId = Number(c.req.param("userId"));
+	if (Number.isNaN(userId)) {
+		return c.json({ error: "Invalid user ID" }, 400);
+	}
+
+	const user = getUserById(userId);
+	if (!user) {
+		return c.json({ error: "User not found" }, 404);
+	}
+
+	if (user.status !== "approved") {
+		return c.json({ error: "User is not approved" }, 400);
+	}
+
+	disableUser(userId);
+	authLogger.info("Admin {admin} disabled user {username} (id={userId})", {
+		admin: payload.username,
+		username: user.username,
+		userId,
+	});
 
 	return c.json({ success: true });
 });
