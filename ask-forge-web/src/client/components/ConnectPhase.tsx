@@ -85,8 +85,9 @@ export function ConnectPhase({
 		);
 	}
 
-	// Show waitlist screen if user is waitlisted
-	if (auth.status === "waitlisted") {
+	// Show blocking screen for non-approved users
+	if (auth.status && auth.status !== "approved") {
+		const isDisabled = auth.status === "disabled" || auth.status === "disapproved";
 		return (
 			<div className="app-container phase-connect">
 				<div className="app-main">
@@ -107,13 +108,31 @@ export function ConnectPhase({
 								strokeLinejoin="round"
 								aria-hidden="true"
 							>
-								<circle cx="12" cy="12" r="10" />
-								<polyline points="12 6 12 12 16 14" />
+								{isDisabled ? (
+									<>
+										<circle cx="12" cy="12" r="10" />
+										<line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+									</>
+								) : (
+									<>
+										<circle cx="12" cy="12" r="10" />
+										<polyline points="12 6 12 12 16 14" />
+									</>
+								)}
 							</svg>
-							<h2>You're on the waitlist</h2>
+							<h2>{isDisabled ? "Account disabled" : "You're on the waitlist"}</h2>
 							<p>
-								Thanks for signing up, <strong>{auth.username}</strong>! Your account is pending approval. We'll send
-								you an email when you're approved.
+								{isDisabled ? (
+									<>
+										Your account has been disabled, <strong>{auth.username}</strong>. Please contact an administrator
+										if you believe this is an error.
+									</>
+								) : (
+									<>
+										Thanks for signing up, <strong>{auth.username}</strong>! Your account is pending approval. We'll
+										send you an email when you're approved.
+									</>
+								)}
 							</p>
 							<button
 								type="button"
