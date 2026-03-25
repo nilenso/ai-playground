@@ -2155,6 +2155,14 @@
 			color: var(--text-muted);
 		}
 
+		/* Action buttons row */
+		.admin-panel-actions {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			flex-shrink: 0;
+		}
+
 		.admin-panel-approve-btn {
 			background: var(--accent-pink);
 			color: white;
@@ -2177,15 +2185,134 @@
 			background: var(--accent-pink-hover);
 		}
 
-		.admin-panel-approve-btn:disabled {
+		.admin-panel-approve-btn:disabled,
+		.admin-panel-disapprove-btn:disabled,
+		.admin-panel-disable-btn:disabled {
 			opacity: 0.6;
 			cursor: not-allowed;
 		}
 
-		.admin-panel-approve-btn .spinner {
+		.admin-panel-approve-btn .spinner,
+		.admin-panel-disable-btn .spinner {
 			width: 16px;
 			height: 16px;
 			border-width: 2px;
+		}
+
+		.admin-panel-disapprove-btn {
+			background: none;
+			border: 1px solid var(--border-subtle);
+			border-radius: 6px;
+			color: var(--text-muted);
+			cursor: pointer;
+			width: 32px;
+			height: 32px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 0.85rem;
+			transition: border-color 0.15s, color 0.15s;
+			flex-shrink: 0;
+		}
+
+		.admin-panel-disapprove-btn:hover:not(:disabled) {
+			border-color: #ef4444;
+			color: #ef4444;
+		}
+
+		.admin-panel-disable-btn {
+			background: none;
+			border: 1px solid var(--border-subtle);
+			border-radius: 6px;
+			color: var(--text-muted);
+			cursor: pointer;
+			padding: 6px 12px;
+			font-size: 0.8rem;
+			transition: border-color 0.15s, color 0.15s;
+			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: 32px;
+		}
+
+		.admin-panel-disable-btn:hover:not(:disabled) {
+			border-color: #ef4444;
+			color: #ef4444;
+		}
+
+		.admin-panel-status-label {
+			font-size: 0.75rem;
+			color: var(--text-muted);
+			flex-shrink: 0;
+		}
+
+		/* Section styling */
+		.admin-panel-section {
+			margin-bottom: 0.75rem;
+		}
+
+		.admin-panel-section-label {
+			font-size: 0.75rem;
+			font-weight: 600;
+			color: var(--text-secondary);
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			padding: 0.5rem 0;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.admin-panel-section-count {
+			background: var(--bg-tertiary);
+			color: var(--text-secondary);
+			font-size: 0.7rem;
+			font-weight: 600;
+			min-width: 20px;
+			height: 20px;
+			padding: 0 6px;
+			border-radius: 10px;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.admin-panel-section-empty {
+			color: var(--text-muted);
+			font-size: 0.85rem;
+			padding: 0.5rem 0;
+		}
+
+		.admin-panel-section-toggle {
+			background: none;
+			border: none;
+			cursor: pointer;
+			font-size: 0.75rem;
+			font-weight: 600;
+			color: var(--text-secondary);
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			padding: 0.5rem 0;
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			width: 100%;
+		}
+
+		.admin-panel-section-toggle:hover {
+			color: var(--text-primary);
+		}
+
+		.admin-panel-chevron {
+			width: 14px;
+			height: 14px;
+			transition: transform 0.15s;
+			flex-shrink: 0;
+		}
+
+		.admin-panel-chevron.open {
+			transform: rotate(90deg);
 		}
 
 	</style>
