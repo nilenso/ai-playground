@@ -56,6 +56,19 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Copy deploy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ask.nilenso.ai
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "ask-forge-web/deploy/docker-compose.yml,ask-forge-web/deploy/sandbox-resolv.conf"
+          target: "~/ask-forge-web/"
+          strip_components: 2
+
       - name: Deploy to server
         uses: appleboy/ssh-action@v1
         with:
