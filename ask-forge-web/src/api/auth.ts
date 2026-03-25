@@ -281,13 +281,18 @@ auth.get("/status", async (c) => {
 
 		const user = getUserById(payload.sub as number);
 
+		if (!user) {
+			clearAuthCookie(c);
+			return c.json({ authenticated: false });
+		}
+
 		return c.json({
 			authenticated: true,
 			username: payload.username,
-			avatarUrl: user?.avatar_url || null,
-			status: user?.status ?? "waitlisted",
-			isAdmin: user?.is_admin ?? false,
-			waitlistCount: user?.is_admin ? getWaitlistCount() : 0,
+			avatarUrl: user.avatar_url || null,
+			status: user.status,
+			isAdmin: user.is_admin,
+			waitlistCount: user.is_admin ? getWaitlistCount() : 0,
 		});
 	} catch {
 		return c.json({ authenticated: false });
