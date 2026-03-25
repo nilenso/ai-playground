@@ -35,6 +35,7 @@ export function useAuth({ connectionSessionId, onLogout }: UseAuthOptions) {
 				user_fetch_failed: "Failed to fetch user info from GitHub",
 				user_not_found: "User not found",
 				auth_failed: "Authentication failed - please try again",
+				not_allowed: "Signups are currently restricted. Your GitHub account is not on the allowlist.",
 			};
 			setAuth({
 				authenticated: false,

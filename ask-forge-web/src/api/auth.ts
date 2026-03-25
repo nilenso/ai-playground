@@ -133,7 +133,7 @@ async function processGitHubCallback(
 				user = getUserById(user.id);
 			}
 		} else {
-			// New user — create account (anyone can sign up)
+			// New user — create account (anyone can sign up, lands on waitlist)
 			user = createUser({
 				username: githubUser.login,
 				displayName: githubUser.name,
