@@ -17,6 +17,8 @@ export interface ConnectionState {
 	commitish: string | null;
 	error: string | null;
 	repoName: string | null;
+	/** Progress message shown during clone (e.g. "Cloning repository… 45s") */
+	progressMessage: string | null;
 }
 
 export interface ProgressState {
@@ -37,6 +39,9 @@ export interface AuthState {
 	avatarUrl: string | null;
 	loading: boolean;
 	error?: string | null;
+	status?: "waitlisted" | "approved";
+	isAdmin?: boolean;
+	waitlistCount?: number;
 }
 
 export interface SessionSummary {

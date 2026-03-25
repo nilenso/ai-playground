@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthState } from "../types.ts";
 
 interface UseAuthOptions {
@@ -14,11 +14,18 @@ export function useAuth({ connectionSessionId, onLogout }: UseAuthOptions) {
 		loading: true,
 	});
 
+	// Track whether we already processed an error from the URL,
+	// so StrictMode's second mount doesn't overwrite it by fetching /api/auth/status
+	const errorProcessedRef = useRef(false);
+
 	// Check auth status on mount and handle OAuth errors
 	useEffect(() => {
+		if (errorProcessedRef.current) return;
+
 		const params = new URLSearchParams(window.location.search);
 		const authError = params.get("error");
 		if (authError) {
+			errorProcessedRef.current = true;
 			window.history.replaceState({}, "", window.location.pathname);
 			const errorMessages: Record<string, string> = {
 				oauth_denied: "GitHub authorization was denied",
@@ -48,6 +55,9 @@ export function useAuth({ connectionSessionId, onLogout }: UseAuthOptions) {
 					avatarUrl: data.avatarUrl || null,
 					loading: false,
 					error: null,
+					status: data.status || undefined,
+					isAdmin: data.isAdmin || false,
+					waitlistCount: data.waitlistCount || 0,
 				});
 			})
 			.catch(() => {
@@ -78,5 +88,21 @@ export function useAuth({ connectionSessionId, onLogout }: UseAuthOptions) {
 		setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false });
 	}, [connectionSessionId, onLogout]);
 
-	return { auth, handleLogin, handleLogout };
+	const refreshAuth = useCallback(() => {
+		fetch("/api/auth/status")
+			.then((res) => res.json())
+			.then((data) => {
+				if (data.authenticated) {
+					setAuth((prev) => ({
+						...prev,
+						status: data.status || prev.status,
+						isAdmin: data.isAdmin ?? prev.isAdmin,
+						waitlistCount: data.waitlistCount || 0,
+					}));
+				}
+			})
+			.catch(() => {});
+	}, []);
+
+	return { auth, handleLogin, handleLogout, refreshAuth };
 }

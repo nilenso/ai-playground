@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthState, SessionSummary } from "../types.ts";
+import { AdminWaitlistPanel } from "./AdminWaitlistPanel.tsx";
 
 const BOOKMARKLET_CODE = "javascript:location='https://ask.nilenso.ai/go?url='+encodeURIComponent(location.href)";
 
@@ -15,6 +16,7 @@ interface SidebarProps {
 	setRenameValue: (value: string) => void;
 	handleDisconnect: () => void;
 	handleLogout: () => void;
+	refreshAuth: () => void;
 	handleRestore: (session: SessionSummary) => void;
 	handleDeleteSession: (sessionId: string) => void;
 	handleRenameSession: (sessionId: string, title: string) => void;
@@ -32,12 +34,14 @@ export function Sidebar({
 	setRenameValue,
 	handleDisconnect,
 	handleLogout,
+	refreshAuth,
 	handleRestore,
 	handleDeleteSession,
 	handleRenameSession,
 }: SidebarProps) {
 	const [profileOpen, setProfileOpen] = useState(false);
 	const [itemMenuOpen, setItemMenuOpen] = useState<string | null>(null);
+	const [waitlistOpen, setWaitlistOpen] = useState(false);
 	const profileRef = useRef<HTMLDivElement>(null);
 	const itemMenuRef = useRef<HTMLDivElement>(null);
 	const bookmarkletRef = useRef<HTMLAnchorElement>(null);
@@ -204,9 +208,36 @@ export function Sidebar({
 					</span>
 				</div>
 			)}
+			{waitlistOpen && (
+				<AdminWaitlistPanel
+					onClose={() => {
+						setWaitlistOpen(false);
+						refreshAuth();
+					}}
+				/>
+			)}
 			<div className="sidebar-footer" ref={profileRef}>
 				{profileOpen && !sidebarCollapsed && (
 					<div className="sidebar-profile-menu">
+						{auth.isAdmin && (
+							<button
+								type="button"
+								className="sidebar-profile-menu-item"
+								onClick={() => {
+									setProfileOpen(false);
+									setWaitlistOpen(true);
+								}}
+							>
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+									<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+									<circle cx="9" cy="7" r="4" />
+									<path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+									<path d="M16 3.13a4 4 0 0 1 0 7.75" />
+								</svg>
+								Waitlist
+								{(auth.waitlistCount ?? 0) > 0 && <span className="waitlist-badge">{auth.waitlistCount}</span>}
+							</button>
+						)}
 						<button
 							type="button"
 							className="sidebar-profile-menu-item"
@@ -229,11 +260,14 @@ export function Sidebar({
 					className="sidebar-profile"
 					onClick={() => (sidebarCollapsed ? setSidebarCollapsed(false) : setProfileOpen((p) => !p))}
 				>
-					{auth.avatarUrl ? (
-						<img src={auth.avatarUrl} alt="" className="sidebar-profile-avatar" />
-					) : (
-						<div className="sidebar-profile-placeholder">{auth.username?.[0]?.toUpperCase() || "?"}</div>
-					)}
+					<span className="sidebar-profile-avatar-wrapper">
+						{auth.avatarUrl ? (
+							<img src={auth.avatarUrl} alt="" className="sidebar-profile-avatar" />
+						) : (
+							<div className="sidebar-profile-placeholder">{auth.username?.[0]?.toUpperCase() || "?"}</div>
+						)}
+						{auth.isAdmin && (auth.waitlistCount ?? 0) > 0 && <span className="sidebar-profile-badge" />}
+					</span>
 					{!sidebarCollapsed && <span className="sidebar-profile-name">{auth.username}</span>}
 				</button>
 			</div>

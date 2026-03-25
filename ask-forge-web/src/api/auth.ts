@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import {
+	approveUser,
 	clearAuthCookie,
+	createAdminMiddleware,
 	createAuthMiddleware,
 	createAuthProvider,
 	createUser,
@@ -9,11 +11,15 @@ import {
 	generateJwt,
 	getUserById,
 	getUserFromContext,
+	getWaitlistCount,
+	getWaitlistedUsers,
 	setAuthCookie,
 	updateAuthProvider,
 	updateUser,
 } from "../lib/auth.ts";
 import { AUTH_CONFIG, AuthProvider } from "../lib/auth-config.ts";
+import { sendApprovalEmail } from "../lib/email.ts";
+import { authLogger } from "../lib/logger.ts";
 
 const auth = new Hono();
 
@@ -87,7 +93,7 @@ async function processGitHubCallback(
 		const tokenData = await tokenResponse.json();
 
 		if (tokenData.error) {
-			console.error("[Auth] Token exchange error:", tokenData.error);
+			authLogger.error("GitHub token exchange failed: {error}", { error: tokenData.error });
 			return { success: false, redirectUrl: "/?error=token_exchange_failed" };
 		}
 
@@ -102,7 +108,7 @@ async function processGitHubCallback(
 		});
 
 		if (!userResponse.ok) {
-			console.error("[Auth] Failed to fetch user info");
+			authLogger.error("Failed to fetch GitHub user info: HTTP {status}", { status: userResponse.status });
 			return { success: false, redirectUrl: "/?error=user_fetch_failed" };
 		}
 
@@ -127,7 +133,7 @@ async function processGitHubCallback(
 				user = getUserById(user.id);
 			}
 		} else {
-			// New user - create user and auth provider
+			// New user — create account (anyone can sign up)
 			user = createUser({
 				username: githubUser.login,
 				displayName: githubUser.name,
@@ -142,6 +148,8 @@ async function processGitHubCallback(
 				accessToken,
 				refreshToken: null,
 			});
+
+			authLogger.info("New user {username} added to waitlist", { username: githubUser.login });
 		}
 
 		if (!user) {
@@ -150,9 +158,16 @@ async function processGitHubCallback(
 
 		// Generate JWT
 		const jwt = await generateJwt(user);
+		authLogger.info("User authenticated: {username} (id={userId}, provider=github, isNew={isNewUser})", {
+			username: user.username,
+			userId: user.id,
+			isNewUser: !authProvider,
+		});
 		return { success: true, user, jwt };
 	} catch (err) {
-		console.error("[Auth] OAuth callback error:", err);
+		authLogger.error("OAuth callback error: {error}", {
+			error: err instanceof Error ? err.message : String(err),
+		});
 		return { success: false, redirectUrl: "/?error=auth_failed" };
 	}
 }
@@ -193,7 +208,7 @@ auth.get("/github/callback", async (c) => {
 
 	setAuthCookie(c, result.jwt);
 	// Redirect to returnTo if provided and it's a relative path (prevent open redirect)
-	if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+	if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
 		return c.redirect(returnTo);
 	}
 	return c.redirect("/");
@@ -233,6 +248,8 @@ auth.get("/me", createAuthMiddleware(), (c) => {
 		displayName: user.display_name,
 		email: user.email,
 		avatarUrl: user.avatar_url,
+		status: user.status,
+		isAdmin: user.is_admin,
 	});
 });
 
@@ -264,10 +281,64 @@ auth.get("/status", async (c) => {
 			authenticated: true,
 			username: payload.username,
 			avatarUrl: user?.avatar_url || null,
+			status: user?.status ?? "waitlisted",
+			isAdmin: user?.is_admin ?? false,
+			waitlistCount: user?.is_admin ? getWaitlistCount() : 0,
 		});
 	} catch {
 		return c.json({ authenticated: false });
 	}
+});
+
+// ─── Admin endpoints ─────────────────────────────────────────────────────────
+
+/**
+ * GET /api/auth/admin/waitlist
+ * Lists all waitlisted users (admin only)
+ */
+auth.get("/admin/waitlist", createAdminMiddleware(), (c) => {
+	return c.json(getWaitlistedUsers());
+});
+
+/**
+ * POST /api/auth/admin/approve/:userId
+ * Approve a waitlisted user (admin only)
+ */
+auth.post("/admin/approve/:userId", createAdminMiddleware(), (c) => {
+	const payload = getUserFromContext(c);
+	const userId = Number(c.req.param("userId"));
+	if (Number.isNaN(userId)) {
+		return c.json({ error: "Invalid user ID" }, 400);
+	}
+
+	const user = getUserById(userId);
+	if (!user) {
+		return c.json({ error: "User not found" }, 404);
+	}
+
+	if (user.status !== "waitlisted") {
+		return c.json({ error: "User is not on the waitlist" }, 400);
+	}
+
+	approveUser(userId);
+	authLogger.info("Admin {admin} approved user {username} (id={userId})", {
+		admin: payload.username,
+		username: user.username,
+		userId,
+	});
+
+	// Send approval email (fire-and-forget — don't block the response)
+	if (user.email) {
+		sendApprovalEmail({
+			to: user.email,
+			username: user.username,
+			appUrl: AUTH_CONFIG.app.url,
+		}).catch(() => {}); // logged inside sendApprovalEmail
+	} else {
+		authLogger.warn("No email on file for {username} — skipping approval email", { username: user.username });
+	}
+
+	return c.json({ success: true });
 });
 
 export default auth;

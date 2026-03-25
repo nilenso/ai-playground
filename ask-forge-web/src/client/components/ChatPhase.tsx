@@ -154,14 +154,7 @@ export function ChatPhase({
 						>
 							{isAsking ? (
 								<>
-									<svg
-										viewBox="0 0 24 24"
-										width="16"
-										height="16"
-										fill="currentColor"
-										stroke="none"
-										aria-hidden="true"
-									>
+									<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none" aria-hidden="true">
 										<rect x="6" y="6" width="12" height="12" rx="1" />
 									</svg>
 									Stop

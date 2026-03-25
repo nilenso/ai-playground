@@ -13,6 +13,8 @@ export interface JWTPayload {
 	[key: string]: unknown;
 }
 
+export type UserStatus = "waitlisted" | "approved";
+
 // User interface matching database schema
 export interface User {
 	id: number;
@@ -20,6 +22,8 @@ export interface User {
 	display_name: string | null;
 	email: string | null;
 	avatar_url: string | null;
+	status: UserStatus;
+	is_admin: boolean;
 	created_at: string;
 	updated_at: string;
 }
@@ -83,7 +87,9 @@ export function getUserFromContext(c: Context): JWTPayload | null {
 }
 
 // Auth middleware - verifies JWT from cookie
-export function createAuthMiddleware(): MiddlewareHandler {
+export function createAuthMiddleware(options?: { requireApproved?: boolean }): MiddlewareHandler {
+	const requireApproved = options?.requireApproved ?? false;
+
 	return async (c, next) => {
 		const token = getCookie(c, COOKIE_NAME);
 
@@ -101,11 +107,47 @@ export function createAuthMiddleware(): MiddlewareHandler {
 				return c.json({ error: "Token expired" }, 401);
 			}
 
+			// Optionally require approved status (not waitlisted)
+			if (requireApproved) {
+				const db = getDb();
+				const row = db.query<{ status: string }, [number]>("SELECT status FROM users WHERE id = ?").get(payload.sub);
+				if (!row || row.status !== "approved") {
+					return c.json({ error: "Your account is on the waitlist. Please wait for admin approval." }, 403);
+				}
+			}
+
 			c.set("jwtPayload", payload);
 			await next();
 		} catch {
 			clearAuthCookie(c);
 			return c.json({ error: "Invalid token" }, 401);
+		}
+	};
+}
+
+// Convenience: auth middleware that also requires approved status
+export function createApprovedAuthMiddleware(): MiddlewareHandler {
+	return createAuthMiddleware({ requireApproved: true });
+}
+
+// Admin middleware — requires authenticated + approved + is_admin
+export function createAdminMiddleware(): MiddlewareHandler {
+	return async (c, next) => {
+		// First run the approved auth middleware logic
+		const authMw = createAuthMiddleware({ requireApproved: true });
+		let authFailed = false;
+		await authMw(c, async () => {
+			// Auth passed, now check admin
+			const payload = getUserFromContext(c);
+			const admin = payload ? getUserById(payload.sub) : null;
+			if (!admin?.is_admin) {
+				authFailed = true;
+				return;
+			}
+			await next();
+		});
+		if (authFailed) {
+			return c.json({ error: "Forbidden" }, 403);
 		}
 	};
 }
@@ -133,14 +175,22 @@ export function createOptionalAuthMiddleware(): MiddlewareHandler {
 
 // Database operations for users
 
+// SQLite returns is_admin as 0/1; coerce to boolean
+function coerceUser(row: Record<string, unknown> | null): User | null {
+	if (!row) return null;
+	return { ...row, is_admin: Boolean(row.is_admin) } as User;
+}
+
 export function findUserByUsername(username: string): User | null {
 	const db = getDb();
-	return db.query<User, [string]>("SELECT * FROM users WHERE username = ?").get(username) || null;
+	return coerceUser(
+		db.query<Record<string, unknown>, [string]>("SELECT * FROM users WHERE username = ?").get(username),
+	);
 }
 
 export function getUserById(userId: number): User | null {
 	const db = getDb();
-	return db.query<User, [number]>("SELECT * FROM users WHERE id = ?").get(userId) || null;
+	return coerceUser(db.query<Record<string, unknown>, [number]>("SELECT * FROM users WHERE id = ?").get(userId));
 }
 
 export function createUser(params: {
@@ -153,9 +203,9 @@ export function createUser(params: {
 	const now = new Date().toISOString();
 
 	const result = db.run(
-		`INSERT INTO users (username, display_name, email, avatar_url, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		[params.username, params.displayName, params.email, params.avatarUrl, now, now],
+		`INSERT INTO users (username, display_name, email, avatar_url, status, is_admin, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		[params.username, params.displayName, params.email, params.avatarUrl, "waitlisted", 0, now, now],
 	);
 
 	return {
@@ -164,6 +214,8 @@ export function createUser(params: {
 		display_name: params.displayName,
 		email: params.email,
 		avatar_url: params.avatarUrl,
+		status: "waitlisted" as UserStatus,
+		is_admin: false,
 		created_at: now,
 		updated_at: now,
 	};
@@ -206,6 +258,37 @@ export function updateUser(
 
 		db.run(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
 	}
+}
+
+// Waitlist helpers
+
+export function approveUser(userId: number): void {
+	const db = getDb();
+	db.run("UPDATE users SET status = 'approved', updated_at = ? WHERE id = ?", [new Date().toISOString(), userId]);
+}
+
+export interface WaitlistedUser {
+	id: number;
+	username: string;
+	display_name: string | null;
+	email: string | null;
+	avatar_url: string | null;
+	created_at: string;
+}
+
+export function getWaitlistCount(): number {
+	const db = getDb();
+	const row = db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM users WHERE status = 'waitlisted'").get();
+	return row?.count ?? 0;
+}
+
+export function getWaitlistedUsers(limit = 100): WaitlistedUser[] {
+	const db = getDb();
+	return db
+		.query<WaitlistedUser, [number]>(
+			"SELECT id, username, display_name, email, avatar_url, created_at FROM users WHERE status = 'waitlisted' ORDER BY created_at ASC LIMIT ?",
+		)
+		.all(limit);
 }
 
 // Database operations for auth providers

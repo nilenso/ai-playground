@@ -38,6 +38,7 @@ export function App() {
 		commitish: null,
 		error: null,
 		repoName: null,
+		progressMessage: null,
 	});
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [inputValue, setInputValue] = useState("");
@@ -73,11 +74,18 @@ export function App() {
 		setInputValue("");
 		setIsAsking(false);
 		setProgress({ type: "idle" });
-		setConnection({ status: "disconnected", sessionId: null, commitish: null, error: null, repoName: null });
+		setConnection({
+			status: "disconnected",
+			sessionId: null,
+			commitish: null,
+			error: null,
+			repoName: null,
+			progressMessage: null,
+		});
 		setPhase("connect");
 	}, []);
 
-	const { auth, handleLogin, handleLogout } = useAuth({
+	const { auth, handleLogin, handleLogout, refreshAuth } = useAuth({
 		connectionSessionId: connection.sessionId,
 		onLogout,
 	});
@@ -161,50 +169,100 @@ export function App() {
 		[messages, connection.sessionId, wsRef],
 	);
 
-	const handleConnect = useCallback(async () => {
-		if (!url.trim()) return;
+	const connectToRepo = useCallback(
+		async (repoUrl: string) => {
+			setConnection((prev) => ({ ...prev, status: "connecting", error: null, progressMessage: null }));
 
-		setConnection((prev) => ({ ...prev, status: "connecting", error: null }));
+			try {
+				const res = await fetch("/api/connect", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ url: repoUrl }),
+				});
 
-		try {
-			const res = await fetch("/api/connect", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ url: url.trim() }),
-			});
+				if (!res.ok || !res.body) {
+					const text = await res.text();
+					let errorMsg = "Failed to connect";
+					try {
+						errorMsg = JSON.parse(text).error || errorMsg;
+					} catch {
+						/* non-JSON error response */
+					}
+					setConnection((prev) => ({ ...prev, status: "error", error: errorMsg, progressMessage: null }));
+					return;
+				}
 
-			const data = await res.json();
+				// Read SSE stream
+				const reader = res.body.getReader();
+				const decoder = new TextDecoder();
+				let buffer = "";
 
-			if (!data.success) {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					buffer += decoder.decode(value, { stream: true });
+
+					// Parse SSE events from buffer
+					const lines = buffer.split("\n");
+					buffer = lines.pop() ?? ""; // Keep incomplete line in buffer
+
+					let currentEvent = "";
+					for (const line of lines) {
+						if (line.startsWith("event: ")) {
+							currentEvent = line.slice(7);
+						} else if (line.startsWith("data: ")) {
+							const raw = line.slice(6);
+							try {
+								const data = JSON.parse(raw);
+
+								if (currentEvent === "progress" && data.message) {
+									setConnection((prev) => ({ ...prev, progressMessage: data.message }));
+								} else if (currentEvent === "done" && data.success) {
+									const repoName = extractRepoName(repoUrl);
+									setConnection({
+										status: "connected",
+										sessionId: data.sessionId,
+										commitish: data.commitish,
+										error: null,
+										repoName,
+										progressMessage: null,
+									});
+									localStorage.setItem("askforge_repo_url", repoUrl);
+									setPhase("ask");
+									setMessages([]);
+									session.fetchSessionHistory();
+								} else if (currentEvent === "error") {
+									setConnection((prev) => ({
+										...prev,
+										status: "error",
+										error: data.error || "Failed to connect",
+										progressMessage: null,
+									}));
+								}
+							} catch {
+								/* ignore malformed JSON */
+							}
+							currentEvent = "";
+						}
+					}
+				}
+			} catch (err) {
 				setConnection((prev) => ({
 					...prev,
 					status: "error",
-					error: data.error || "Failed to connect",
+					error: err instanceof Error ? err.message : "Network error",
+					progressMessage: null,
 				}));
-				return;
 			}
+		},
+		[session.fetchSessionHistory],
+	);
 
-			const repoName = extractRepoName(url.trim());
-			setConnection({
-				status: "connected",
-				sessionId: data.sessionId,
-				commitish: data.commitish,
-				error: null,
-				repoName,
-			});
-
-			localStorage.setItem("askforge_repo_url", url.trim());
-			setPhase("ask");
-			setMessages([]);
-			session.fetchSessionHistory();
-		} catch (err) {
-			setConnection((prev) => ({
-				...prev,
-				status: "error",
-				error: err instanceof Error ? err.message : "Network error",
-			}));
-		}
-	}, [url]);
+	const handleConnect = useCallback(() => {
+		if (!url.trim()) return;
+		connectToRepo(url.trim());
+	}, [url, connectToRepo]);
 
 	const handleDisconnect = useCallback(async () => {
 		if (connection.sessionId) {
@@ -218,7 +276,14 @@ export function App() {
 				// Ignore disconnect errors
 			}
 		}
-		setConnection({ status: "disconnected", sessionId: null, commitish: null, error: null, repoName: null });
+		setConnection({
+			status: "disconnected",
+			sessionId: null,
+			commitish: null,
+			error: null,
+			repoName: null,
+			progressMessage: null,
+		});
 		setMessages([]);
 		setPhase("connect");
 		// Clear initial session ID so we don't show "restoring" spinner
@@ -501,7 +566,7 @@ export function App() {
 				setBookmarkletError("The page you came from doesn't appear to be a code repository.");
 			}
 			// Clear error after a delay
-			setTimeout(() => setBookmarkletError(null), 5000);
+			setTimeout(() => setBookmarkletError(null), 8000);
 			// Clean up URL
 			window.history.replaceState({}, "", window.location.pathname);
 			return;
@@ -527,47 +592,9 @@ export function App() {
 		if (autoConnectUrl && auth.authenticated && connection.status === "disconnected") {
 			autoConnectUrlRef.current = null; // Clear to prevent re-triggering
 
-			// Show the URL in the input field while connecting
+			// Show the URL in the input field while connecting — reuse handleConnect
 			setUrl(autoConnectUrl);
-			setConnection((prev) => ({ ...prev, status: "connecting", error: null }));
-
-			fetch("/api/connect", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ url: autoConnectUrl }),
-			})
-				.then((res) => res.json())
-				.then((data) => {
-					if (!data.success) {
-						setConnection((prev) => ({
-							...prev,
-							status: "error",
-							error: data.error || "Failed to connect",
-						}));
-						return;
-					}
-
-					const repoName = extractRepoName(autoConnectUrl);
-					setConnection({
-						status: "connected",
-						sessionId: data.sessionId,
-						commitish: data.commitish,
-						error: null,
-						repoName,
-					});
-
-					localStorage.setItem("askforge_repo_url", autoConnectUrl);
-					setPhase("ask");
-					setMessages([]);
-					session.fetchSessionHistory();
-				})
-				.catch((err) => {
-					setConnection((prev) => ({
-						...prev,
-						status: "error",
-						error: err instanceof Error ? err.message : "Network error",
-					}));
-				});
+			connectToRepo(autoConnectUrl);
 		}
 	}, [auth.authenticated, connection.status, session.fetchSessionHistory]);
 
@@ -654,6 +681,7 @@ export function App() {
 		setRenameValue: session.setRenameValue,
 		handleDisconnect,
 		handleLogout,
+		refreshAuth,
 		handleRestore: session.handleRestore,
 		handleDeleteSession: session.handleDeleteSession,
 		handleRenameSession: session.handleRenameSession,
@@ -692,6 +720,7 @@ export function App() {
 				bookmarkletError={bookmarkletError}
 				handleConnect={handleConnect}
 				handleLogin={handleLogin}
+				handleLogout={handleLogout}
 				handleKeyDown={handleKeyDown}
 				urlInputRef={urlInputRef}
 				sidebarProps={sidebarProps}

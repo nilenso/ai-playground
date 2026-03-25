@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "bun run build && bun run --hot src/server.ts",
-		"build": "bun build src/client/index.tsx --outdir public --minify",
+		"build": "bun run scripts/build-client.ts",
 		"dev:visualizer": "bun run build:visualizer && bun run --hot src/visualizer-server.ts",
 		"build:visualizer": "bun build src/client/visualizer-index.tsx --outfile public/visualizer.js --minify",
 		"format": "bunx biome format --write .",
@@ -22,7 +22,9 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
-		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.11",
+		"@logtape/hono": "^2.0.4",
+		"@logtape/logtape": "^2.0.4",
+		"@nilenso/ask-forge": "npm:@jsr/nilenso__ask-forge@0.0.15",
 		"highlight.js": "^11.11.1",
 		"hono": "^4.7.10",
 		"marked": "^17.0.1",

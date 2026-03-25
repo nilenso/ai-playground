@@ -10,6 +10,7 @@ interface ConnectPhaseProps {
 	bookmarkletError: string | null;
 	handleConnect: () => void;
 	handleLogin: () => void;
+	handleLogout: () => void;
 	handleKeyDown: (e: React.KeyboardEvent) => void;
 	urlInputRef: React.RefObject<HTMLInputElement | null>;
 	sidebarProps: React.ComponentProps<typeof Sidebar>;
@@ -24,6 +25,7 @@ export function ConnectPhase({
 	bookmarkletError,
 	handleConnect,
 	handleLogin,
+	handleLogout,
 	handleKeyDown,
 	urlInputRef,
 	sidebarProps,
@@ -58,6 +60,7 @@ export function ConnectPhase({
 							<span className="logo-forge">forge</span>
 						</h1>
 						{auth.error && <div className="error-message">{auth.error}</div>}
+						{bookmarkletError && <div className="error-message">{bookmarkletError}</div>}
 						<button type="button" className="login-button" onClick={handleLogin}>
 							<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 								<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
@@ -82,12 +85,59 @@ export function ConnectPhase({
 		);
 	}
 
+	// Show waitlist screen if user is waitlisted
+	if (auth.status === "waitlisted") {
+		return (
+			<div className="app-container phase-connect">
+				<div className="app-main">
+					<div className="connect-content">
+						<h1 className="logo">
+							<span className="logo-ask">ask</span>
+							<span className="logo-forge">forge</span>
+						</h1>
+						<div className="waitlist-message">
+							<svg
+								width="48"
+								height="48"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="var(--accent-pink)"
+								strokeWidth="1.5"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								aria-hidden="true"
+							>
+								<circle cx="12" cy="12" r="10" />
+								<polyline points="12 6 12 12 16 14" />
+							</svg>
+							<h2>You're on the waitlist</h2>
+							<p>
+								Thanks for signing up, <strong>{auth.username}</strong>! Your account is pending approval. We'll send
+								you an email when you're approved.
+							</p>
+							<button
+								type="button"
+								className="login-button"
+								onClick={handleLogout}
+								style={{ marginTop: "1rem", background: "var(--bg-tertiary)" }}
+							>
+								Sign out
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="app-container phase-connect">
 			<Sidebar {...sidebarProps} />
 			<div className="app-main">
 				<div className="connect-content">
-					<h2 className="greeting">{connection.status === "connecting" ? "Connecting..." : "What can I help with?"}</h2>
+					<h2 className="greeting">
+						{connection.status === "connecting" ? connection.progressMessage || "Connecting…" : "What can I help with?"}
+					</h2>
 
 					<div className="input-container">
 						<input

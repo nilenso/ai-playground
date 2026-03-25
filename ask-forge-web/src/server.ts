@@ -1,3 +1,4 @@
+import { honoLogger } from "@logtape/hono";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { getCookie } from "hono/cookie";
@@ -6,7 +7,11 @@ import auth from "./api/auth.ts";
 import api from "./api/index.ts";
 import { AUTH_CONFIG, validateAuthConfig } from "./lib/auth-config.ts";
 import { extractRepoFromUrl } from "./lib/extract-repo-from-url.ts";
+import { setupLogging, startupLogger } from "./lib/logger.ts";
 import { websocketHandler } from "./websocket.ts";
+
+// Initialize structured logging before anything else
+await setupLogging();
 
 // Validate auth config on startup
 validateAuthConfig();
@@ -21,6 +26,14 @@ validateAuthConfig();
 process.env.GIT_SSH_COMMAND = "ssh -o IdentitiesOnly=yes -o IdentityFile=/dev/null -o StrictHostKeyChecking=accept-new";
 
 const app = new Hono();
+
+// HTTP request logging via LogTape
+app.use(
+	"/api/*",
+	honoLogger({
+		category: ["ask-forge-web", "http"],
+	}),
+);
 
 // Auth routes (before API for /api/auth/* to take priority)
 app.route("/api/auth", auth);
@@ -60,7 +73,7 @@ app.get("/go", async (c) => {
 	const { repoUrl, error } = extractRepoFromUrl(sourceUrl);
 
 	if (!repoUrl) {
-		console.log(`[/go] Failed to extract repo from: ${sourceUrl} - ${error}`);
+		startupLogger.warn("Failed to extract repo from URL: {sourceUrl} — {error}", { sourceUrl, error });
 		return c.redirect("/?error=not-a-repo");
 	}
 
@@ -84,7 +97,7 @@ app.get("*", serveStatic({ path: "./public/index.html" }));
 
 const port = process.env.PORT || 3000;
 
-console.log(`🚀 Server running at http://localhost:${port}`);
+startupLogger.info("Server starting on port {port}", { port });
 
 export default {
 	port,
