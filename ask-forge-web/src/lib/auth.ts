@@ -107,12 +107,16 @@ export function createAuthMiddleware(options?: { requireApproved?: boolean }): M
 				return c.json({ error: "Token expired" }, 401);
 			}
 
-			// Optionally require approved status (not waitlisted)
+			// Optionally require approved status
 			if (requireApproved) {
 				const db = getDb();
 				const row = db.query<{ status: string }, [number]>("SELECT status FROM users WHERE id = ?").get(payload.sub);
 				if (!row || row.status !== "approved") {
-					return c.json({ error: "Your account is on the waitlist. Please wait for admin approval." }, 403);
+					const status = row?.status ?? "unknown";
+					if (status === "disabled" || status === "disapproved") {
+						return c.json({ error: "Your account has been disabled.", status }, 403);
+					}
+					return c.json({ error: "Your account is on the waitlist. Please wait for admin approval.", status }, 403);
 				}
 			}
 
