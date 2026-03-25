@@ -118,6 +118,27 @@ async function processGitHubCallback(
 
 		const githubUser: GitHubUser = await userResponse.json();
 
+		// If no public email, fetch from /user/emails (requires user:email scope)
+		if (!githubUser.email) {
+			try {
+				const emailsResponse = await fetch("https://api.github.com/user/emails", {
+					headers: {
+						Authorization: `Bearer ${accessToken}`,
+						Accept: "application/vnd.github.v3+json",
+					},
+				});
+				if (emailsResponse.ok) {
+					const emails: Array<{ email: string; primary: boolean; verified: boolean }> =
+						await emailsResponse.json();
+					const primary = emails.find((e) => e.primary && e.verified);
+					const verified = emails.find((e) => e.verified);
+					githubUser.email = primary?.email ?? verified?.email ?? null;
+				}
+			} catch {
+				// Non-critical — proceed without email
+			}
+		}
+
 		// Check if this GitHub account is already linked
 		const authProvider = findAuthProvider(AuthProvider.GitHub, String(githubUser.id));
 		let user: Awaited<ReturnType<typeof getUserById>> = null;
