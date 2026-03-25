@@ -322,7 +322,7 @@ export function getRandomAdminEmail(): { username: string; email: string } | nul
 	const db = getDb();
 	const row = db
 		.query<{ username: string; email: string }, []>(
-			"SELECT username, email FROM users WHERE is_admin = 1 AND email IS NOT NULL AND email != '' ORDER BY RANDOM() LIMIT 1",
+			"SELECT username, email FROM users WHERE is_admin = 1 AND status = 'approved' AND email IS NOT NULL AND email != '' ORDER BY RANDOM() LIMIT 1",
 		)
 		.get();
 	return row ?? null;
