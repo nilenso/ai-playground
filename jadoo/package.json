@@ -1,0 +1,25 @@
+{
+	"name": "jadoo",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun --hot src/index.ts",
+		"start": "bun src/index.ts",
+		"migrate": "litem8 up --db ${DB_PATH:-./data/jadoo.db} --migrations ./migrations",
+		"migrate:status": "litem8 status --db ${DB_PATH:-./data/jadoo.db} --migrations ./migrations",
+		"test": "bun test test/*.test.ts",
+		"test:integration": "bun test test/integration/",
+		"test:all": "bun test",
+		"check": "bunx biome check --write ."
+	},
+	"dependencies": {
+		"@googleapis/calendar": "^14.2.0",
+		"@mariozechner/pi-ai": "^0.58.1",
+		"@slack/bolt": "^4.6.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.7",
+		"@types/bun": "^1.3.10"
+	}
+}
