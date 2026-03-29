@@ -13,6 +13,7 @@ import { HarvestAPIService } from "./services/harvest/harvest-service.js";
 import { BoltSlackService } from "./services/slack/bolt-slack-service.js";
 import { BackgroundWorker } from "./worker.js";
 import { registerLeaveHandlers } from "./plugins/leave/leave-worker-handlers.js";
+import { LeavePlugin } from "./plugins/leave/leave-plugin.js";
 import { createWebServer } from "./web/index.js";
 import { logger } from "./logger.js";
 
@@ -57,6 +58,15 @@ if (appConfig.plugins) {
 
 // Assemble bot
 const bot = new Bot({ ai, calendar, harvest, slack }, { pluginConfigs });
+
+// Register the actual Slack plugins based on the config keys
+if (appConfig.plugins) {
+    appConfig.plugins.forEach((p, index) => {
+        if (p.name === "leave") {
+            bot.register(new LeavePlugin(), String(index));
+        }
+    });
+}
 
 await bot.start();
 worker.start();
