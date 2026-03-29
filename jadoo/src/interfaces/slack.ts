@@ -9,15 +9,17 @@
  * touching the real Slack API.
  */
 
+import type { Block as SlackBlock, KnownBlock } from "@slack/types";
+
 // ─── Block Kit ──────────────────────────────────────────
 
 /**
- * A Slack Block Kit block. We pass through Slack's JSON structure directly
- * rather than re-modelling all of Block Kit in TypeScript.
+ * A Slack Block Kit block. We use @slack/types to maintain
+ * accurate strict typings for blocks (e.g. KnownBlock | Block).
  *
  * See: https://api.slack.com/reference/block-kit/blocks
  */
-export type Block = { type: string; [key: string]: unknown };
+export type Block = KnownBlock | SlackBlock;
 
 // ─── Messages ───────────────────────────────────────────
 
