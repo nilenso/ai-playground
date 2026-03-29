@@ -1,0 +1,11 @@
+# deps
+node_modules/
+
+# env
+.env
+
+# bun
+bun.lockb
+
+# output
+dist/
