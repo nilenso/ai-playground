@@ -32,8 +32,11 @@ export interface PluginDefinition {
     config?: Record<string, any>;
 }
 
+import type { WebConfig } from "../web/index.js";
+
 export interface AppConfig {
 	app?: { port?: number };
+	web?: WebConfig;
 	slack: SlackConfig;
 	ai: AIConfig;
 	gcal: GoogleCalendarConfig;
@@ -162,6 +165,7 @@ export function loadConfig(configPath: string = "jadoo.toml"): AppConfig {
 
 	return {
         app: raw.app,
+		web: raw.web,
 		slack: loadSlackConfig(raw),
 		ai: loadAIConfig(raw),
 		gcal: loadGoogleCalendarConfig(raw),

@@ -1,0 +1,43 @@
+name: Jadoo CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: |
+          cd jadoo
+          bun install --frozen-lockfile
+
+      - name: Install litem8
+        run: |
+          mkdir -p ~/.local/bin
+          curl -sL https://github.com/neenaoffline/litem8/releases/latest/download/litem8-linux-x86_64-static -o ~/.local/bin/litem8
+          chmod +x ~/.local/bin/litem8
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Run Biome Check (Lint/Format)
+        run: |
+          cd jadoo
+          bun run check
+
+      - name: Run Tests
+        run: |
+          cd jadoo
+          bun run test:all
+        env:
+          JADOO_CONFIG_PATH: jadoo.example.toml

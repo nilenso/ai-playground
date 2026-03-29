@@ -23,6 +23,7 @@ import type { DbPendingAction } from "./db/types.js";
 import type { CalendarService } from "./interfaces/calendar.js";
 import type { HarvestService } from "./interfaces/harvest.js";
 import type { SlackService } from "./interfaces/slack.js";
+import { logger } from "./logger.js";
 
 // ─── Config ─────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ export class BackgroundWorker {
 		this.processTick();
 		this.expiryTick();
 
-		console.log(`[worker] started (process: ${this.processIntervalMs}ms, expiry: ${this.expiryIntervalMs}ms)`);
+		logger.info("worker started", { processIntervalMs: this.processIntervalMs, expiryIntervalMs: this.expiryIntervalMs });
 	}
 
 	stop(): void {
@@ -98,7 +99,7 @@ export class BackgroundWorker {
 		this.expiryTimer = null;
 		this.running = false;
 
-		console.log("[worker] stopped");
+		logger.info("worker stopped");
 	}
 
 	get isRunning(): boolean {
@@ -117,8 +118,7 @@ export class BackgroundWorker {
 			try {
 				await this.processAction(action);
 			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				console.error(`[worker] failed to process action ${action.id}: ${msg}`);
+				logger.error("failed to process action", err, { actionId: action.id });
 				updatePendingActionStatus(this.db, action.id, "failed");
 			}
 		}
@@ -137,7 +137,7 @@ export class BackgroundWorker {
 		}
 
 		if (expired.length > 0) {
-			console.log(`[worker] expired ${expired.length} action(s)`);
+			logger.info("expired actions", { count: expired.length });
 		}
 	}
 
@@ -152,7 +152,7 @@ export class BackgroundWorker {
         if (handler) {
             await handler(action, this);
         } else {
-            console.warn(`[worker] unknown action type: ${action.action_type}`);
+            logger.warn("unknown action type", { actionType: action.action_type, actionId: action.id });
             updatePendingActionStatus(this.db, action.id, "failed");
         }
 	}
@@ -178,7 +178,7 @@ export class BackgroundWorker {
 				],
 			});
 		} catch (err) {
-			console.error(`[worker] failed to update Slack message for expired action ${action.id}: ${err}`);
+			logger.error("failed to update Slack message for expired action", err, { actionId: action.id });
 		}
 	}
 }

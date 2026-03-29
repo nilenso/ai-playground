@@ -1,0 +1,4 @@
+# Use an environment variable or edit directly, e.g. jadoo.yourdomain.com
+:80 {
+    reverse_proxy jadoo:3000
+}

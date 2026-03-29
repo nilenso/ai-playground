@@ -10,6 +10,7 @@
 import type { PluginConfig } from "./config/plugin-config.js";
 import { resolvePluginConfig } from "./config/plugin-config.js";
 import type { BotContext, Plugin } from "./interfaces/plugin.js";
+import { logger } from "./logger.js";
 
 export interface BotOptions {
 	/**
@@ -53,13 +54,13 @@ export class Bot {
 		// Init plugins in registration order
 		for (const plugin of this.plugins) {
 			const config = this.resolveConfig(plugin);
-			console.log(`[bot] initializing plugin: ${plugin.name}`);
+			logger.info("initializing plugin", { plugin: plugin.name });
 			await plugin.init(this.ctx, config);
 		}
 
 		await this.ctx.slack.start();
 		this.running = true;
-		console.log(`[bot] started with ${this.plugins.length} plugin(s)`);
+		logger.info("bot started", { pluginCount: this.plugins.length });
 	}
 
 	/**
@@ -73,13 +74,13 @@ export class Bot {
 		// Stop plugins in reverse order
 		for (const plugin of [...this.plugins].reverse()) {
 			if (plugin.stop) {
-				console.log(`[bot] stopping plugin: ${plugin.name}`);
+				logger.info("stopping plugin", { plugin: plugin.name });
 				await plugin.stop();
 			}
 		}
 
 		this.running = false;
-		console.log("[bot] stopped");
+		logger.info("bot stopped");
 	}
 
 	get isRunning(): boolean {

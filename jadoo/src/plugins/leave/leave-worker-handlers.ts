@@ -8,6 +8,7 @@ import {
 	upsertLeaveRecord,
 } from "./leave-records.js";
 import type { CancelLeavePayload, CreateLeavePayload } from "./types.js";
+import { logger } from "../../logger.js";
 
 // Hardcoded logic previously in worker.ts
 export function registerLeaveHandlers(worker: BackgroundWorker, db: Database, config: { vacationTaskId: number, sickTaskId: number, projectId: number }, calendar: any, harvest: any, slack: any) {
@@ -15,7 +16,7 @@ export function registerLeaveHandlers(worker: BackgroundWorker, db: Database, co
 		const payload = JSON.parse(action.payload) as CreateLeavePayload;
 		const user = getUserById(db, action.user_id);
 		if (!user) {
-			console.error(`[worker] user ${action.user_id} not found for action ${action.id}`);
+			logger.error("user not found for action", null, { userId: action.user_id, actionId: action.id });
 			updatePendingActionStatus(db, action.id, "failed");
 			return;
 		}
@@ -114,7 +115,7 @@ export function registerLeaveHandlers(worker: BackgroundWorker, db: Database, co
 		const payload = JSON.parse(action.payload) as CancelLeavePayload;
 		const user = getUserById(db, action.user_id);
 		if (!user) {
-			console.error(`[worker] user ${action.user_id} not found for action ${action.id}`);
+			logger.error("user not found for action", null, { userId: action.user_id, actionId: action.id });
 			updatePendingActionStatus(db, action.id, "failed");
 			return;
 		}
@@ -142,7 +143,7 @@ export function registerLeaveHandlers(worker: BackgroundWorker, db: Database, co
 				updateLeaveRecordStatus(db, record.id, { status: "cancelled" });
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
-				console.error(`[worker] failed to cancel leave record ${record.id}: ${msg}`);
+				logger.error("failed to cancel leave record", err, { recordId: record.id });
 				updateLeaveRecordStatus(db, record.id, {
 					status: "failed",
 					errorMessage: msg,
@@ -176,7 +177,7 @@ async function notifyCompleted(action: DbPendingAction, payload: CreateLeavePayl
             ],
         });
     } catch (err) {
-        console.error(`[worker] failed to update Slack message for action ${action.id}: ${err}`);
+        logger.error("failed to update Slack message for action", err, { actionId: action.id });
     }
 }
 
@@ -199,7 +200,7 @@ async function notifyFailed(action: DbPendingAction, slack: any): Promise<void> 
             ],
         });
     } catch (err) {
-        console.error(`[worker] failed to update Slack message for action ${action.id}: ${err}`);
+        logger.error("failed to update Slack message for action", err, { actionId: action.id });
     }
 }
 
@@ -220,6 +221,6 @@ async function notifyCancelled(action: DbPendingAction, payload: CancelLeavePayl
             ],
         });
     } catch (err) {
-        console.error(`[worker] failed to update Slack message for action ${action.id}: ${err}`);
+        logger.error("failed to update Slack message for action", err, { actionId: action.id });
     }
 }

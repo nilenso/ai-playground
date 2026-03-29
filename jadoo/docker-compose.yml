@@ -1,0 +1,39 @@
+version: '3.8'
+services:
+  jadoo:
+    build: .
+    container_name: jadoo-bot
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Optional: set env variables or use jadoo.toml mounted via volumes
+      - JADOO_CONFIG_PATH=/app/jadoo.toml
+    volumes:
+      - ./data:/app/data
+      - ./jadoo.example.toml:/app/jadoo.toml:ro
+    networks:
+      - jadoo-network
+
+  caddy:
+    image: caddy:2
+    container_name: jadoo-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - jadoo-network
+    depends_on:
+      - jadoo
+
+networks:
+  jadoo-network:
+
+volumes:
+  caddy_data:
+  caddy_config:

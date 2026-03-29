@@ -14,6 +14,7 @@ import { BoltSlackService } from "./services/slack/bolt-slack-service.js";
 import { BackgroundWorker } from "./worker.js";
 import { registerLeaveHandlers } from "./plugins/leave/leave-worker-handlers.js";
 import { createWebServer } from "./web/index.js";
+import { logger } from "./logger.js";
 
 // Load configuration from TOML
 const configFilePath = process.env.JADOO_CONFIG_PATH;
@@ -60,17 +61,17 @@ worker.start();
 
 // Simple Web Server
 const port = appConfig.app?.port || 3000;
-const app = createWebServer(db);
+const app = createWebServer(db, appConfig.web);
 const server = Bun.serve({
 	port,
 	fetch: app.fetch,
 });
 
-console.log(`🚀 Jadoo is live (Port: ${server.port})`);
+logger.info("🚀 Jadoo is live", { port: server.port });
 
 // Graceful shutdown
 function shutdown() {
-	console.log("\n[jadoo] shutting down…");
+	logger.info("shutting down…");
 	server.stop();
 	worker.stop();
 	bot.stop();
