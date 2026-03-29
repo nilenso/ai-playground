@@ -1,8 +1,5 @@
-/**
- * 12-factor style configuration.
- * All config is read from environment variables (loaded from .env by Bun automatically).
- * Each integration reads only what it needs; missing optional values are undefined.
- */
+import { parse } from "smol-toml";
+import * as fs from "fs";
 
 export interface SlackConfig {
 	botToken: string;
@@ -28,95 +25,90 @@ export interface GoogleCalendarConfig {
 export interface HarvestConfig {
 	accessToken: string;
 	accountId: string;
-	projectId: number;
-	vacationTaskId: number;
-	sickTaskId: number;
+}
+
+export interface PluginDefinition {
+    name: string;
+    config?: Record<string, any>;
 }
 
 export interface AppConfig {
+	app?: { port?: number };
 	slack: SlackConfig;
 	ai: AIConfig;
 	gcal: GoogleCalendarConfig;
 	harvest: HarvestConfig;
+    plugins?: PluginDefinition[];
 }
 
-function required(name: string): string {
-	const value = process.env[name];
-	if (!value) {
-		throw new Error(`Missing required environment variable: ${name}`);
+function required<T>(obj: Record<string, any> | undefined, section: string, key: string): T {
+	if (!obj || obj[key] === undefined || obj[key] === null || obj[key] === "") {
+		throw new Error(`Missing required config [${section}] ${key}`);
 	}
-	return value;
+	return obj[key] as T;
 }
 
-function optional(name: string): string | undefined {
-	return process.env[name];
+function optional<T>(obj: Record<string, any> | undefined, key: string): T | undefined {
+	return obj && obj[key] !== undefined && obj[key] !== "" ? (obj[key] as T) : undefined;
 }
 
-function optionalInt(name: string): number | undefined {
-	const v = optional(name);
-	return v ? Number.parseInt(v, 10) : undefined;
+function optionalInt(obj: Record<string, any> | undefined, key: string): number | undefined {
+	const v = optional<any>(obj, key);
+    if (v === undefined) return undefined;
+    if (typeof v === "number") return v;
+	return Number.parseInt(String(v), 10);
 }
 
-function requiredInt(name: string): number {
-	const v = required(name);
-	const n = Number.parseInt(v, 10);
+function requiredInt(obj: Record<string, any> | undefined, section: string, key: string): number {
+	const v = required<any>(obj, section, key);
+    if (typeof v === "number") return v;
+	const n = Number.parseInt(String(v), 10);
 	if (Number.isNaN(n)) {
-		throw new Error(`Environment variable ${name} must be an integer, got: ${v}`);
+		throw new Error(`Config [${section}] ${key} must be an integer, got: ${v}`);
 	}
 	return n;
 }
 
-function optionalFloat(name: string): number | undefined {
-	const v = optional(name);
-	return v ? Number.parseFloat(v) : undefined;
+function optionalFloat(obj: Record<string, any> | undefined, key: string): number | undefined {
+	const v = optional<any>(obj, key);
+    if (v === undefined) return undefined;
+    if (typeof v === "number") return v;
+	return Number.parseFloat(String(v));
 }
 
-export function loadSlackConfig(): SlackConfig {
+export function loadSlackConfig(raw: Record<string, any>): SlackConfig {
+    const section = raw.slack;
 	return {
-		botToken: required("SLACK_BOT_TOKEN"),
-		signingSecret: required("SLACK_SIGNING_SECRET"),
-		appToken: required("SLACK_APP_TOKEN"),
-		port: optionalInt("SLACK_PORT"),
+		botToken: required(section, "slack", "botToken"),
+		signingSecret: required(section, "slack", "signingSecret"),
+		appToken: required(section, "slack", "appToken"),
+		port: optionalInt(section, "port"),
 	};
 }
 
-export function loadAIConfig(): AIConfig {
+export function loadAIConfig(raw: Record<string, any>): AIConfig {
+    const section = raw.ai;
 	return {
-		provider: required("AI_PROVIDER"),
-		model: required("AI_MODEL"),
-		apiKey: required("AI_API_KEY"),
-		maxTokens: optionalInt("AI_MAX_TOKENS"),
-		temperature: optionalFloat("AI_TEMPERATURE"),
+		provider: required(section, "ai", "provider"),
+		model: required(section, "ai", "model"),
+		apiKey: required(section, "ai", "apiKey"),
+		maxTokens: optionalInt(section, "maxTokens"),
+		temperature: optionalFloat(section, "temperature"),
 	};
 }
 
-/**
- * Load Google Calendar config.
- *
- * Supports two auth formats (checked in order):
- *
- * 1. **Base64 JSON blob** — `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` contains the
- *    entire GCP service-account JSON file, base64-encoded. One env var,
- *    copy-paste from the GCP console download. `client_email` and
- *    `private_key` are extracted automatically.
- *
- * 2. **Individual fields** — `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY`
- *    (the original approach). More explicit, useful when you don't have the
- *    full JSON file handy.
- *
- * `GOOGLE_CALENDAR_ID` is always required.
- */
-export function loadGoogleCalendarConfig(): GoogleCalendarConfig {
-	const calendarId = required("GOOGLE_CALENDAR_ID");
+export function loadGoogleCalendarConfig(raw: Record<string, any>): GoogleCalendarConfig {
+    const section = raw.gcal;
+	const calendarId = required<string>(section, "gcal", "calendarId");
 
-	const base64Json = optional("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64");
+	const base64Json = optional<string>(section, "serviceAccountJsonBase64");
 	if (base64Json) {
 		return parseServiceAccountJson(base64Json, calendarId);
 	}
 
 	return {
-		clientEmail: required("GOOGLE_CLIENT_EMAIL"),
-		privateKey: required("GOOGLE_PRIVATE_KEY"),
+		clientEmail: required(section, "gcal", "clientEmail"),
+		privateKey: required(section, "gcal", "privateKey"),
 		calendarId,
 	};
 }
@@ -130,45 +122,51 @@ export function parseServiceAccountJson(base64: string, calendarId: string): Goo
 	try {
 		decoded = atob(base64);
 	} catch {
-		throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 is not valid base64");
+		throw new Error("serviceAccountJsonBase64 is not valid base64");
 	}
 
 	let json: Record<string, unknown>;
 	try {
 		json = JSON.parse(decoded);
 	} catch {
-		throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 does not contain valid JSON");
+		throw new Error("serviceAccountJsonBase64 does not contain valid JSON");
 	}
 
 	const clientEmail = json.client_email;
 	if (typeof clientEmail !== "string" || !clientEmail) {
-		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 JSON is missing "client_email"');
+		throw new Error('serviceAccountJsonBase64 JSON is missing "client_email"');
 	}
 
 	const privateKey = json.private_key;
 	if (typeof privateKey !== "string" || !privateKey) {
-		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 JSON is missing "private_key"');
+		throw new Error('serviceAccountJsonBase64 JSON is missing "private_key"');
 	}
 
 	return { clientEmail, privateKey, calendarId };
 }
 
-export function loadHarvestConfig(): HarvestConfig {
+export function loadHarvestConfig(raw: Record<string, any>): HarvestConfig {
+    const section = raw.harvest;
 	return {
-		accessToken: required("HARVEST_ACCESS_TOKEN"),
-		accountId: required("HARVEST_ACCOUNT_ID"),
-		projectId: requiredInt("HARVEST_PROJECT_ID"),
-		vacationTaskId: requiredInt("HARVEST_VACATION_TASK_ID"),
-		sickTaskId: requiredInt("HARVEST_SICK_TASK_ID"),
+		accessToken: required(section, "harvest", "accessToken"),
+		accountId: required(section, "harvest", "accountId"),
 	};
 }
 
-export function loadConfig(): AppConfig {
+export function loadConfig(configPath: string = "jadoo.toml"): AppConfig {
+    if (!fs.existsSync(configPath)) {
+        throw new Error(`Config file not found: ${configPath}`);
+    }
+    const tomlString = fs.readFileSync(configPath, "utf-8");
+    const raw = parse(tomlString);
+
 	return {
-		slack: loadSlackConfig(),
-		ai: loadAIConfig(),
-		gcal: loadGoogleCalendarConfig(),
-		harvest: loadHarvestConfig(),
+        app: raw.app,
+		slack: loadSlackConfig(raw),
+		ai: loadAIConfig(raw),
+		gcal: loadGoogleCalendarConfig(raw),
+		harvest: loadHarvestConfig(raw),
+        plugins: raw.plugins,
 	};
 }
 

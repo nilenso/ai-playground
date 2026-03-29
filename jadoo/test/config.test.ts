@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
 	loadAIConfig,
 	loadGoogleCalendarConfig,
@@ -8,34 +8,12 @@ import {
 } from "../src/config/index.js";
 
 describe("Config loading", () => {
-	const originalEnv = { ...process.env };
-
-	beforeEach(() => {
-		// Clean slate
-		for (const key of Object.keys(process.env)) {
-			if (
-				key.startsWith("SLACK_") ||
-				key.startsWith("AI_") ||
-				key.startsWith("GOOGLE_") ||
-				key.startsWith("HARVEST_")
-			) {
-				delete process.env[key];
-			}
-		}
-	});
-
-	afterEach(() => {
-		// Restore
-		Object.assign(process.env, originalEnv);
-	});
-
 	describe("loadSlackConfig", () => {
 		it("loads required slack config", () => {
-			process.env.SLACK_BOT_TOKEN = "xoxb-test";
-			process.env.SLACK_SIGNING_SECRET = "secret";
-			process.env.SLACK_APP_TOKEN = "xapp-test";
+			const raw = { slack: { botToken: "xoxb-test", signingSecret: "secret", appToken: "xapp-test" }};
 
-			const config = loadSlackConfig();
+			const config = loadSlackConfig(raw);
+
 			expect(config.botToken).toBe("xoxb-test");
 			expect(config.signingSecret).toBe("secret");
 			expect(config.appToken).toBe("xapp-test");
@@ -43,91 +21,71 @@ describe("Config loading", () => {
 		});
 
 		it("throws on missing required field", () => {
-			expect(() => loadSlackConfig()).toThrow("SLACK_BOT_TOKEN");
+			expect(() => loadSlackConfig({ slack: {} })).toThrow("botToken");
 		});
 
 		it("parses optional port", () => {
-			process.env.SLACK_BOT_TOKEN = "xoxb-test";
-			process.env.SLACK_SIGNING_SECRET = "secret";
-			process.env.SLACK_APP_TOKEN = "xapp-test";
-			process.env.SLACK_PORT = "3001";
-
-			const config = loadSlackConfig();
-			expect(config.port).toBe(3001);
+			const raw = { slack: { botToken: "xoxb-test", signingSecret: "secret", appToken: "xapp-test", port: 3000 }};
+			const config = loadSlackConfig(raw);
+			expect(config.port).toBe(3000);
 		});
 	});
 
 	describe("loadAIConfig", () => {
 		it("loads required AI config", () => {
-			process.env.AI_PROVIDER = "anthropic";
-			process.env.AI_MODEL = "claude-sonnet-4-20250514";
-			process.env.AI_API_KEY = "sk-test";
+			const raw = { ai: { provider: "anthropic", model: "claude-sonnet-4-20250514", apiKey: "sk-test" }};
 
-			const config = loadAIConfig();
+			const config = loadAIConfig(raw);
 			expect(config.provider).toBe("anthropic");
 			expect(config.model).toBe("claude-sonnet-4-20250514");
 			expect(config.apiKey).toBe("sk-test");
 		});
 
 		it("throws on missing API key", () => {
-			process.env.AI_PROVIDER = "anthropic";
-			process.env.AI_MODEL = "claude-sonnet-4-20250514";
-			expect(() => loadAIConfig()).toThrow("AI_API_KEY");
+			const raw = { ai: { provider: "anthropic", model: "claude-sonnet-4-20250514" }};
+			expect(() => loadAIConfig(raw)).toThrow("apiKey");
 		});
 	});
 
 	describe("loadGoogleCalendarConfig", () => {
 		it("loads from individual fields", () => {
-			process.env.GOOGLE_CLIENT_EMAIL = "bot@test.iam.gserviceaccount.com";
-			process.env.GOOGLE_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----";
-			process.env.GOOGLE_CALENDAR_ID = "cal@group.calendar.google.com";
+			const raw = { gcal: { calendarId: "cal@group.calendar.google.com", clientEmail: "bot@test.iam.gserviceaccount.com", privateKey: "key" }};
 
-			const config = loadGoogleCalendarConfig();
-			expect(config.clientEmail).toBe("bot@test.iam.gserviceaccount.com");
-			expect(config.privateKey).toBe("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----");
+			const config = loadGoogleCalendarConfig(raw);
 			expect(config.calendarId).toBe("cal@group.calendar.google.com");
+			expect(config.clientEmail).toBe("bot@test.iam.gserviceaccount.com");
+			expect(config.privateKey).toBe("key");
 		});
 
 		it("loads from base64 service account JSON", () => {
-			const serviceAccount = {
-				type: "service_account",
-				client_email: "bot@my-project.iam.gserviceaccount.com",
-				private_key: "-----BEGIN PRIVATE KEY-----\nbase64key\n-----END PRIVATE KEY-----\n",
-				project_id: "my-project",
-			};
-			process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 = btoa(JSON.stringify(serviceAccount));
-			process.env.GOOGLE_CALENDAR_ID = "cal@group.calendar.google.com";
+			const json = { client_email: "bot@json", private_key: "key@json" };
+			const base64 = btoa(JSON.stringify(json));
+			const raw = { gcal: { calendarId: "cal@group", serviceAccountJsonBase64: base64 }};
 
-			const config = loadGoogleCalendarConfig();
-			expect(config.clientEmail).toBe("bot@my-project.iam.gserviceaccount.com");
-			expect(config.privateKey).toBe("-----BEGIN PRIVATE KEY-----\nbase64key\n-----END PRIVATE KEY-----\n");
-			expect(config.calendarId).toBe("cal@group.calendar.google.com");
+			const config = loadGoogleCalendarConfig(raw);
+			expect(config.clientEmail).toBe("bot@json");
+			expect(config.privateKey).toBe("key@json");
+			expect(config.calendarId).toBe("cal@group");
 		});
 
 		it("base64 JSON takes precedence over individual fields", () => {
-			const serviceAccount = {
-				client_email: "from-json@test.iam.gserviceaccount.com",
-				private_key: "json-key",
-			};
-			process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 = btoa(JSON.stringify(serviceAccount));
-			process.env.GOOGLE_CLIENT_EMAIL = "from-env@test.iam.gserviceaccount.com";
-			process.env.GOOGLE_PRIVATE_KEY = "env-key";
-			process.env.GOOGLE_CALENDAR_ID = "cal@group.calendar.google.com";
+			const json = { client_email: "bot@json", private_key: "key@json" };
+			const base64 = btoa(JSON.stringify(json));
+			const raw = { gcal: { calendarId: "cal@group", serviceAccountJsonBase64: base64, clientEmail: "bot@env", privateKey: "key@env" }};
 
-			const config = loadGoogleCalendarConfig();
-			expect(config.clientEmail).toBe("from-json@test.iam.gserviceaccount.com");
-			expect(config.privateKey).toBe("json-key");
+			const config = loadGoogleCalendarConfig(raw);
+			expect(config.clientEmail).toBe("bot@json");
+			expect(config.privateKey).toBe("key@json");
 		});
 
-		it("throws when GOOGLE_CALENDAR_ID is missing", () => {
-			process.env.GOOGLE_CLIENT_EMAIL = "bot@test.iam.gserviceaccount.com";
-			process.env.GOOGLE_PRIVATE_KEY = "key";
-			expect(() => loadGoogleCalendarConfig()).toThrow("GOOGLE_CALENDAR_ID");
+		it("throws when calendarId is missing", () => {
+			const raw = { gcal: { clientEmail: "bot@test.iam.gserviceaccount.com", privateKey: "key" }};
+			expect(() => loadGoogleCalendarConfig(raw)).toThrow("calendarId");
 		});
 
 		it("throws when neither auth format is provided", () => {
-			process.env.GOOGLE_CALENDAR_ID = "cal@group.calendar.google.com";
-			expect(() => loadGoogleCalendarConfig()).toThrow("GOOGLE_CLIENT_EMAIL");
+			const raw = { gcal: { calendarId: "cal@group.calendar.google.com" }};
+			expect(() => loadGoogleCalendarConfig(raw)).toThrow("clientEmail");
 		});
 	});
 
@@ -161,32 +119,15 @@ describe("Config loading", () => {
 
 	describe("loadHarvestConfig", () => {
 		it("loads required harvest config", () => {
-			process.env.HARVEST_ACCESS_TOKEN = "tok-test";
-			process.env.HARVEST_ACCOUNT_ID = "123456";
-			process.env.HARVEST_PROJECT_ID = "789";
-			process.env.HARVEST_VACATION_TASK_ID = "111";
-			process.env.HARVEST_SICK_TASK_ID = "222";
+			const raw = { harvest: { accessToken: "tok-test", accountId: "123456" }};
 
-			const config = loadHarvestConfig();
+			const config = loadHarvestConfig(raw);
 			expect(config.accessToken).toBe("tok-test");
 			expect(config.accountId).toBe("123456");
-			expect(config.projectId).toBe(789);
-			expect(config.vacationTaskId).toBe(111);
-			expect(config.sickTaskId).toBe(222);
 		});
 
 		it("throws on missing access token", () => {
-			expect(() => loadHarvestConfig()).toThrow("HARVEST_ACCESS_TOKEN");
-		});
-
-		it("throws on non-integer project ID", () => {
-			process.env.HARVEST_ACCESS_TOKEN = "tok-test";
-			process.env.HARVEST_ACCOUNT_ID = "123456";
-			process.env.HARVEST_PROJECT_ID = "not-a-number";
-			process.env.HARVEST_VACATION_TASK_ID = "111";
-			process.env.HARVEST_SICK_TASK_ID = "222";
-
-			expect(() => loadHarvestConfig()).toThrow("must be an integer");
+			expect(() => loadHarvestConfig({ harvest: {} })).toThrow("accessToken");
 		});
 	});
 });
