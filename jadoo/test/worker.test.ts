@@ -3,18 +3,22 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	createPendingAction,
 	createUser,
-	getLeaveRecordsByStatus,
 	getPendingActionById,
 	openDatabase,
 	runMigrations,
-	updateLeaveRecordStatus,
 	updatePendingActionBotMessageTs,
 	updatePendingActionStatus,
-	upsertLeaveRecord,
 } from "../src/db/index.js";
+import {
+    getLeaveRecordsByStatus,
+	updateLeaveRecordStatus,
+	upsertLeaveRecord,
+} from "../src/plugins/leave/leave-records.js";
+import { registerLeaveHandlers } from "../src/plugins/leave/leave-worker-handlers.js";
 import type { DbUser } from "../src/db/types.js";
 import { BackgroundWorker, type WorkerDeps } from "../src/worker.js";
 import { MockCalendarService, MockHarvestService, MockSlackService } from "./mocks.js";
+import { join } from "node:path";
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -39,7 +43,7 @@ function pastExpiry(): string {
 
 beforeEach(() => {
 	db = openDatabase({ dbPath: ":memory:" });
-	runMigrations(db, "./migrations");
+	runMigrations(db, join(import.meta.dir, "../migrations"));
 	calendar = new MockCalendarService();
 	harvest = new MockHarvestService();
 	slack = new MockSlackService();
@@ -72,7 +76,7 @@ describe("processTick — create_leave", () => {
 		updatePendingActionBotMessageTs(db, action.id, "bot-msg-1");
 		updatePendingActionStatus(db, action.id, "confirmed");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		// Pending action should be completed
@@ -88,7 +92,9 @@ describe("processTick — create_leave", () => {
 		expect(harvest.createdEntries).toHaveLength(1);
 		expect(harvest.createdEntries[0].harvestUserId).toBe(42);
 		expect(harvest.createdEntries[0].date).toBe("2026-04-01");
-		expect(harvest.createdEntries[0].category).toBe("vacation");
+		expect(harvest.createdEntries[0].taskId).toBe(111);
+		expect(harvest.createdEntries[0].projectId).toBe(999);
+        expect(harvest.createdEntries[0].hours).toBe(8);
 
 		// Leave record should be completed with sync IDs
 		const records = getLeaveRecordsByStatus(db, "completed");
@@ -113,7 +119,7 @@ describe("processTick — create_leave", () => {
 		updatePendingActionBotMessageTs(db, action.id, "bot-msg-1");
 		updatePendingActionStatus(db, action.id, "confirmed");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("completed");
@@ -138,7 +144,7 @@ describe("processTick — create_leave", () => {
 		updatePendingActionBotMessageTs(db, action.id, "bot-msg-1");
 		updatePendingActionStatus(db, action.id, "confirmed");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("completed");
@@ -171,6 +177,7 @@ describe("processTick — create_leave", () => {
 			{ db, calendar: failCalendar, harvest, slack },
 			{ processIntervalMs: 999999, expiryIntervalMs: 999999, maxRetries: 2 },
 		);
+        registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, failCalendar, harvest, slack);
 
 		// Tick 1: fails, retry_count → 1, action goes back to confirmed
 		await worker.processTick();
@@ -205,7 +212,7 @@ describe("processTick — create_leave", () => {
 		updatePendingActionBotMessageTs(db, action.id, "bot-msg-1");
 		updatePendingActionStatus(db, action.id, "confirmed");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("completed");
@@ -221,7 +228,7 @@ describe("processTick — create_leave", () => {
 			expiresAt: futureExpiry(),
 		});
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		expect(calendar.createdEvents).toHaveLength(0);
@@ -249,7 +256,7 @@ describe("processTick — create_leave", () => {
 		updatePendingActionBotMessageTs(db, a2.id, "bot-2");
 		updatePendingActionStatus(db, a2.id, "confirmed");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		expect(getPendingActionById(db, a1.id)?.status).toBe("completed");
@@ -287,7 +294,7 @@ describe("processTick — cancel_leave", () => {
 		updatePendingActionBotMessageTs(db, action.id, "bot-msg-1");
 		updatePendingActionStatus(db, action.id, "confirmed");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("completed");
@@ -323,7 +330,7 @@ describe("processTick — cancel_leave", () => {
 		updatePendingActionBotMessageTs(db, action.id, "bot-msg-1");
 		updatePendingActionStatus(db, action.id, "confirmed");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("completed");
@@ -348,7 +355,7 @@ describe("expiryTick", () => {
 		});
 		updatePendingActionBotMessageTs(db, action.id, "bot-msg-1");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.expiryTick();
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("expired");
@@ -367,7 +374,7 @@ describe("expiryTick", () => {
 		});
 		updatePendingActionBotMessageTs(db, action.id, "bot-msg-1");
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.expiryTick();
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("pending");
@@ -383,7 +390,7 @@ describe("expiryTick", () => {
 			// no slackChannelId → no notification
 		});
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.expiryTick();
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("expired");
@@ -395,7 +402,7 @@ describe("expiryTick", () => {
 
 describe("Worker lifecycle", () => {
 	it("starts and stops", () => {
-		worker = new BackgroundWorker(deps());
+		worker = new BackgroundWorker(deps()); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		expect(worker.isRunning).toBe(false);
 
 		worker.start();
@@ -406,7 +413,7 @@ describe("Worker lifecycle", () => {
 	});
 
 	it("start is idempotent", () => {
-		worker = new BackgroundWorker(deps());
+		worker = new BackgroundWorker(deps()); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		worker.start();
 		worker.start(); // no-op
 		expect(worker.isRunning).toBe(true);
@@ -414,7 +421,7 @@ describe("Worker lifecycle", () => {
 	});
 
 	it("stop is idempotent", () => {
-		worker = new BackgroundWorker(deps());
+		worker = new BackgroundWorker(deps()); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		worker.start();
 		worker.stop();
 		worker.stop(); // no-op
@@ -451,7 +458,7 @@ describe("claimConfirmedActions", () => {
 		});
 		// a3 stays in 'pending' status
 
-		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 }); registerLeaveHandlers(worker, db, { vacationTaskId: 111, sickTaskId: 222, projectId: 999 }, calendar, harvest, slack);
 		await worker.processTick();
 
 		// a1 and a2 processed, a3 untouched

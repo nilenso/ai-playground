@@ -1,0 +1,38 @@
+# Jadoo Configuration File
+
+[app]
+port = 3000
+
+[slack]
+botToken = "xoxb-..."
+signingSecret = "..."
+appToken = "xapp-..."
+
+[ai]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+apiKey = "sk-..."
+
+[gcal]
+calendarId = "c_..."
+clientEmail = "..."
+privateKey = "..."
+
+[harvest]
+accessToken = "..."
+accountId = "..."
+
+# Plugins
+
+[[plugins]]
+name = "leave"
+[plugins.config]
+harvestProjectId = 123
+harvestVacationTaskId = 456
+harvestSickTaskId = 789
+
+[[plugins]]
+name = "greeter"
+[plugins.config]
+channelId = "C12345"
+message = "Welcome to the channel!"

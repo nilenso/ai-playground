@@ -1,12 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
-	createLeaveRecord,
 	createPendingAction,
 	createUser,
 	expirePendingActions,
-	getLeaveRecordsByStatus,
-	getLeaveRecordsByUserAndDates,
 	getPendingActionById,
 	getPendingActionsByStatus,
 	getPendingActionsForThread,
@@ -16,17 +13,23 @@ import {
 	listUsers,
 	openDatabase,
 	runMigrations,
-	updateLeaveRecordStatus,
 	updatePendingActionStatus,
 	updateUser,
-	upsertLeaveRecord,
 } from "../src/db/index.js";
+import {
+    createLeaveRecord,
+	getLeaveRecordsByStatus,
+	getLeaveRecordsByUserAndDates,
+	updateLeaveRecordStatus,
+	upsertLeaveRecord,
+} from "../src/plugins/leave/leave-records.js";
+import { join } from "node:path";
 
 let db: Database;
 
 beforeEach(() => {
 	db = openDatabase({ dbPath: ":memory:" });
-	runMigrations(db, "./migrations");
+	runMigrations(db, join(import.meta.dir, "../migrations"));
 });
 
 afterEach(() => {

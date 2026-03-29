@@ -5,42 +5,56 @@
  */
 
 import { Bot } from "./bot.js";
-import { loadAIConfig, loadGoogleCalendarConfig, loadHarvestConfig, loadSlackConfig } from "./config/index.js";
+import { loadConfig } from "./config/index.js";
 import { openDatabase, runMigrations } from "./db/index.js";
 import { PiAIService } from "./services/ai/pi-ai-service.js";
 import { GCalService } from "./services/calendar/gcal-service.js";
 import { HarvestAPIService } from "./services/harvest/harvest-service.js";
 import { BoltSlackService } from "./services/slack/bolt-slack-service.js";
 import { BackgroundWorker } from "./worker.js";
+import { registerLeaveHandlers } from "./plugins/leave/leave-worker-handlers.js";
 
-// Load configuration from environment
-const slackConfig = loadSlackConfig();
-const aiConfig = loadAIConfig();
-const gcalConfig = loadGoogleCalendarConfig();
-const harvestConfig = loadHarvestConfig();
+// Load configuration from TOML
+const configFilePath = process.env.JADOO_CONFIG_PATH || "jadoo.example.toml";
+const appConfig = loadConfig(configFilePath);
 
 // Database
 const db = openDatabase();
 runMigrations(db);
 
 // Build services
-const slack = new BoltSlackService(slackConfig);
-const ai = new PiAIService(aiConfig);
-const calendar = new GCalService(gcalConfig);
-const harvest = new HarvestAPIService(harvestConfig);
+const slack = new BoltSlackService(appConfig.slack);
+const ai = new PiAIService(appConfig.ai);
+const calendar = new GCalService(appConfig.gcal);
+const harvest = new HarvestAPIService(appConfig.harvest);
+
+// Plugin Configs Map
+const pluginConfigs: Record<string, any> = {};
+if (appConfig.plugins) {
+    for (const p of appConfig.plugins) {
+        pluginConfigs[p.name] = p.config || {};
+    }
+}
 
 // Assemble bot
-const bot = new Bot({ ai, calendar, harvest, slack });
+const bot = new Bot({ ai, calendar, harvest, slack }, { pluginConfigs });
 
-// Register plugins here:
-// bot.register(new LeavePlugin());
-
-// Background worker — processes confirmed leave actions + expires stale ones
+// Background worker — processes confirmed actions + expires stale ones
 const worker = new BackgroundWorker({ db, calendar, harvest, slack });
+
+// Register plugins and their specific worker handlers here
+if (pluginConfigs["leave"]) {
+    // bot.register(new LeavePlugin()); // Example: uncomment when LeavePlugin is implemented
+    registerLeaveHandlers(worker, db, {
+        vacationTaskId: pluginConfigs["leave"].harvestVacationTaskId,
+        sickTaskId: pluginConfigs["leave"].harvestSickTaskId,
+        projectId: pluginConfigs["leave"].harvestProjectId,
+    }, calendar, harvest, slack);
+}
 
 await bot.start();
 worker.start();
-console.log("🚀 Jadoo is live");
+console.log(`🚀 Jadoo is live (Port: ${appConfig.app?.port || 3000})`);
 
 // Graceful shutdown
 function shutdown() {
