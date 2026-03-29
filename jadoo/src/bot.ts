@@ -9,18 +9,7 @@
 
 import type { PluginConfig } from "./config/plugin-config.js";
 import { resolvePluginConfig } from "./config/plugin-config.js";
-import type { AIService } from "./interfaces/ai.js";
-import type { CalendarService } from "./interfaces/calendar.js";
-import type { HarvestService } from "./interfaces/harvest.js";
 import type { BotContext, Plugin } from "./interfaces/plugin.js";
-import type { SlackService } from "./interfaces/slack.js";
-
-export interface BotServices {
-	ai: AIService;
-	calendar: CalendarService;
-	harvest: HarvestService;
-	slack: SlackService;
-}
 
 export interface BotOptions {
 	/**
@@ -36,13 +25,8 @@ export class Bot {
 	private readonly plugins: Plugin[] = [];
 	private running = false;
 
-	constructor(services: BotServices, options?: BotOptions) {
-		this.ctx = {
-			ai: services.ai,
-			calendar: services.calendar,
-			harvest: services.harvest,
-			slack: services.slack,
-		};
+	constructor(services: BotContext, options?: BotOptions) {
+		this.ctx = services;
 		this.env = options?.env ?? process.env;
 	}
 
