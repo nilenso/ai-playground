@@ -7,7 +7,9 @@ port = 3000
 clientId = "YOUR_GOOGLE_OAUTH_CLIENT_ID"
 clientSecret = "YOUR_GOOGLE_OAUTH_CLIENT_SECRET"
 redirectUri = "http://localhost:3000/auth/google/callback"
-adminEmails = ["admin@example.com", "manager@example.com"]
+sessionSecret = "a_very_long_and_secure_random_string_for_cookies"
+adminEmails = ["admin@nilenso.com", "manager@nilenso.com"]
+allowedDomain = "nilenso.com"
 
 [slack]
 botToken = "xoxb-..."

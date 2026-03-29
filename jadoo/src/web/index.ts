@@ -12,6 +12,7 @@ export interface WebConfig {
   redirectUri?: string;
   sessionSecret?: string;
   adminEmails?: string[];
+  allowedDomain?: string;
   devMode?: boolean;
 }
 
@@ -23,6 +24,7 @@ export function createWebServer(db: Database, config?: WebConfig) {
   const redirectUri = config?.redirectUri;
   const sessionSecret = config?.sessionSecret || 'default_insecure_secret_do_not_use_in_prod';
   const adminEmails = config?.adminEmails || [];
+  const allowedDomain = config?.allowedDomain;
   const devMode = config?.devMode === true;
 
   // Signed cookie name
@@ -86,7 +88,14 @@ export function createWebServer(db: Database, config?: WebConfig) {
     }
 
     const session = await getSignedCookie(c, sessionSecret, SESSION_COOKIE);
-    if (!session || !adminEmails.includes(session)) {
+
+    let isAuthorized = false;
+    if (session) {
+      if (adminEmails.includes(session)) isAuthorized = true;
+      if (allowedDomain && session.endsWith(`@${allowedDomain}`)) isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
       return c.redirect('/login');
     }
 
@@ -166,7 +175,11 @@ export function createWebServer(db: Database, config?: WebConfig) {
       const userData = (await userRes.json()) as { email: string };
       const email = userData.email;
 
-      if (!adminEmails.includes(email)) {
+      let isAuthorized = false;
+      if (adminEmails.includes(email)) isAuthorized = true;
+      if (allowedDomain && email.endsWith(`@${allowedDomain}`)) isAuthorized = true;
+
+      if (!isAuthorized) {
         return c.html(
           Layout({
             title: 'Unauthorized',
