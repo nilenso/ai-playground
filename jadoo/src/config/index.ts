@@ -35,7 +35,8 @@ export interface PluginDefinition {
 import type { WebConfig } from "../web/index.js";
 
 export interface AppConfig {
-	app?: { port?: number };
+	app?: { port?: number; defaultTimezone?: string };
+    database?: { url?: string; path?: string };
 	web?: WebConfig;
 	slack: SlackConfig;
 	ai: AIConfig;
@@ -165,6 +166,7 @@ export function loadConfig(configPath: string = "jadoo.toml"): AppConfig {
 
 	return {
         app: raw.app,
+        database: raw.database,
 		web: raw.web,
 		slack: loadSlackConfig(raw),
 		ai: loadAIConfig(raw),

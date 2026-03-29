@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
-import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import { getSignedCookie, setSignedCookie, deleteCookie } from 'hono/cookie';
 import type { Database } from 'bun:sqlite';
 import { listUsers } from '../db/users.js';
 import { getLeaveRecordsByStatus } from '../plugins/leave/leave-records.js';
@@ -12,6 +12,7 @@ export interface WebConfig {
   redirectUri?: string;
   sessionSecret?: string;
   adminEmails?: string[];
+  devMode?: boolean;
 }
 
 export function createWebServer(db: Database, config?: WebConfig) {
@@ -20,9 +21,11 @@ export function createWebServer(db: Database, config?: WebConfig) {
   const clientId = config?.clientId;
   const clientSecret = config?.clientSecret;
   const redirectUri = config?.redirectUri;
+  const sessionSecret = config?.sessionSecret || 'default_insecure_secret_do_not_use_in_prod';
   const adminEmails = config?.adminEmails || [];
+  const devMode = config?.devMode === true;
 
-  // Minimal "session" state via signed/encrypted cookie (or just plain for this demo)
+  // Signed cookie name
   const SESSION_COOKIE = 'jadoo_admin_session';
 
   // Basic HTML layout wrapper
@@ -77,13 +80,12 @@ export function createWebServer(db: Database, config?: WebConfig) {
       return next();
     }
 
-    // If OAuth is not configured, we just bypass auth entirely (dev mode)
-    if (!clientId || !clientSecret) {
+    if (devMode) {
       c.set('user', 'dev@local');
       return next();
     }
 
-    const session = getCookie(c, SESSION_COOKIE);
+    const session = await getSignedCookie(c, sessionSecret, SESSION_COOKIE);
     if (!session || !adminEmails.includes(session)) {
       return c.redirect('/login');
     }
@@ -93,13 +95,13 @@ export function createWebServer(db: Database, config?: WebConfig) {
   });
 
   // Login page
-  app.get('/login', (c) => {
-    if (!clientId) {
+  app.get('/login', async (c) => {
+    if (devMode) {
       return c.html(
         Layout({
           title: 'Login',
           children: html`
-            <h2>OAuth not configured</h2>
+            <h2>OAuth disabled</h2>
             <p>Jadoo is running in dev mode. Auth is bypassed.</p>
             <a href="/">Go to Dashboard</a>
           `,
@@ -107,7 +109,13 @@ export function createWebServer(db: Database, config?: WebConfig) {
       );
     }
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=email profile`;
+    if (!clientId) return c.text('OAuth not configured. Cannot login.', 500);
+
+    // CSRF state
+    const state = crypto.randomUUID();
+    await setSignedCookie(c, 'oauth_state', state, sessionSecret, { path: '/', httpOnly: true, maxAge: 600, sameSite: 'Lax' });
+
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=email profile&state=${state}`;
     return c.html(
       Layout({
         title: 'Login',
@@ -125,7 +133,15 @@ export function createWebServer(db: Database, config?: WebConfig) {
   // OAuth Callback
   app.get('/auth/google/callback', async (c) => {
     const code = c.req.query('code');
-    if (!code) return c.text('Missing authorization code', 400);
+    const state = c.req.query('state');
+
+    if (!code || !state) return c.text('Missing authorization code or state', 400);
+
+    const savedState = await getSignedCookie(c, sessionSecret, 'oauth_state');
+    if (!savedState || savedState !== state) {
+        return c.text('Invalid OAuth state (CSRF detected)', 403);
+    }
+    deleteCookie(c, 'oauth_state');
 
     try {
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -165,7 +181,7 @@ export function createWebServer(db: Database, config?: WebConfig) {
         );
       }
 
-      setCookie(c, SESSION_COOKIE, email, { path: '/', httpOnly: true, secure: true, sameSite: 'Lax' });
+      await setSignedCookie(c, SESSION_COOKIE, email, sessionSecret, { path: '/', httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'Lax' });
       return c.redirect('/');
     } catch (e) {
       console.error('OAuth Error:', e);

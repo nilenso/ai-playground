@@ -11,7 +11,7 @@ import type { CancelLeavePayload, CreateLeavePayload } from "./types.js";
 import { logger } from "../../logger.js";
 
 // Hardcoded logic previously in worker.ts
-export function registerLeaveHandlers(worker: BackgroundWorker, db: Database, config: { vacationTaskId: number, sickTaskId: number, projectId: number }, calendar: any, harvest: any, slack: any) {
+export function registerLeaveHandlers(worker: BackgroundWorker, db: Database, config: { vacationTaskId: number, sickTaskId: number, projectId: number, slackChannelId?: string }, calendar: any, harvest: any, slack: any) {
     worker.registerHandler("create_leave", async (action: DbPendingAction, w: BackgroundWorker) => {
 		const payload = JSON.parse(action.payload) as CreateLeavePayload;
 		const user = getUserById(db, action.user_id);
@@ -88,7 +88,7 @@ export function registerLeaveHandlers(worker: BackgroundWorker, db: Database, co
 
 		if (allSucceeded) {
 			updatePendingActionStatus(db, action.id, "completed");
-			await notifyCompleted(action, payload, slack);
+			await notifyCompleted(action, payload, slack, config.slackChannelId);
 		} else {
 			// Check if any records still need processing
 			const hasRetriable = payload.dates.some((date) => {
@@ -157,8 +157,18 @@ export function registerLeaveHandlers(worker: BackgroundWorker, db: Database, co
 }
 
 
-async function notifyCompleted(action: DbPendingAction, payload: CreateLeavePayload, slack: any): Promise<void> {
+async function notifyCompleted(action: DbPendingAction, payload: CreateLeavePayload, slack: any, broadcastChannelId?: string): Promise<void> {
     const channel = action.slack_channel_id;
+
+    if (broadcastChannelId && channel !== broadcastChannelId) {
+        try {
+            await slack.postMessage(broadcastChannelId, {
+                text: `✈️ <@${action.user_id}> has leave: ${payload.dates.join(", ")} (${payload.leaveType})`
+            });
+        } catch (err) {
+            logger.error("failed to broadcast leave", err, { actionId: action.id });
+        }
+    }
     const ts = action.slack_bot_message_ts;
     if (!channel || !ts) return;
 

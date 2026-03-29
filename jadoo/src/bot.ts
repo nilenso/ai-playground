@@ -14,47 +14,53 @@ import { logger } from "./logger.js";
 
 export interface BotOptions {
 	/**
-	 * Environment source for resolving plugin config.
-	 * Defaults to `process.env`. Override in tests to avoid touching real env vars.
+	 * Optional dictionary of plugin configurations.
+     * Can optionally use a `pluginInstanceId` if multiple instances of the same plugin exist.
 	 */
-	env?: Record<string, string | undefined>;
+	pluginConfigs?: Record<string, Record<string, any>>;
+}
+
+export interface RegisteredPlugin {
+    plugin: Plugin;
+    instanceId?: string;
 }
 
 export class Bot {
 	private readonly ctx: BotContext;
-	private readonly env: Record<string, string | undefined>;
-	private readonly plugins: Plugin[] = [];
+	private readonly pluginConfigs: Record<string, Record<string, any>>;
+	private readonly plugins: RegisteredPlugin[] = [];
 	private running = false;
 
 	constructor(services: BotContext, options?: BotOptions) {
 		this.ctx = services;
-		this.env = options?.env ?? process.env;
+		this.pluginConfigs = options?.pluginConfigs ?? {};
 	}
 
 	/**
-	 * Register a plugin. Must be called before start().
+	 * Register a plugin. Can optionally pass an instanceId.
+	 * Must be called before start().
 	 */
-	register(plugin: Plugin): this {
+	register(plugin: Plugin, instanceId?: string): this {
 		if (this.running) {
 			throw new Error(`Cannot register plugin "${plugin.name}" after bot has started`);
 		}
-		this.plugins.push(plugin);
+		this.plugins.push({ plugin, instanceId });
 		return this;
 	}
 
 	/**
 	 * Initialize all plugins, then start the Slack service.
 	 *
-	 * For each plugin with a `configSchema`, env vars are resolved and validated
+	 * For each plugin with a `configSchema`, local configs are resolved and validated
 	 * before calling `init()`. Missing required config causes a fast failure.
 	 */
 	async start(): Promise<void> {
 		if (this.running) return;
 
 		// Init plugins in registration order
-		for (const plugin of this.plugins) {
-			const config = this.resolveConfig(plugin);
-			logger.info("initializing plugin", { plugin: plugin.name });
+		for (const { plugin, instanceId } of this.plugins) {
+			const config = this.resolveConfig(plugin, instanceId);
+			logger.info("initializing plugin", { plugin: plugin.name, instanceId });
 			await plugin.init(this.ctx, config);
 		}
 
@@ -72,9 +78,9 @@ export class Bot {
 		await this.ctx.slack.stop();
 
 		// Stop plugins in reverse order
-		for (const plugin of [...this.plugins].reverse()) {
+		for (const { plugin, instanceId } of [...this.plugins].reverse()) {
 			if (plugin.stop) {
-				logger.info("stopping plugin", { plugin: plugin.name });
+				logger.info("stopping plugin", { plugin: plugin.name, instanceId });
 				await plugin.stop();
 			}
 		}
@@ -88,11 +94,13 @@ export class Bot {
 	}
 
 	get registeredPlugins(): readonly Plugin[] {
-		return this.plugins;
+		return this.plugins.map(p => p.plugin);
 	}
 
-	private resolveConfig(plugin: Plugin): PluginConfig {
+	private resolveConfig(plugin: Plugin, instanceId?: string): PluginConfig {
 		if (!plugin.configSchema) return {};
-		return resolvePluginConfig(plugin.name, plugin.configSchema, this.env);
+        const configKey = instanceId ? `${plugin.name}_${instanceId}` : plugin.name;
+		const localConfig = this.pluginConfigs[configKey] || {};
+		return resolvePluginConfig(plugin.name, plugin.configSchema, localConfig);
 	}
 }

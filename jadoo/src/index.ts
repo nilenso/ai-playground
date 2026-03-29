@@ -24,7 +24,8 @@ if (!configFilePath) {
 const appConfig = loadConfig(configFilePath);
 
 // Database
-const db = openDatabase();
+const dbPath = appConfig.database?.url || appConfig.database?.path;
+const db = openDatabase({ dbPath });
 runMigrations(db);
 
 // Build services
@@ -48,6 +49,7 @@ if (appConfig.plugins) {
                 vacationTaskId: p.config?.harvestVacationTaskId,
                 sickTaskId: p.config?.harvestSickTaskId,
                 projectId: p.config?.harvestProjectId,
+                slackChannelId: p.config?.slackChannelId,
             }, calendar, harvest, slack);
         }
     });

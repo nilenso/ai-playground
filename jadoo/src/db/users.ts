@@ -14,6 +14,7 @@ export function createUser(
 		slackTimezone?: string;
 		harvestUserId?: number | null;
 	},
+    defaultTimezone: string = "Asia/Kolkata"
 ): DbUser {
 	const now = new Date().toISOString();
 	db.run(
@@ -23,7 +24,7 @@ export function createUser(
 			params.slackUserId,
 			params.slackDisplayName,
 			params.email ?? null,
-			params.slackTimezone ?? "Asia/Kolkata",
+			params.slackTimezone ?? defaultTimezone,
 			params.harvestUserId ?? null,
 			now,
 			now,
