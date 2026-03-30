@@ -29,12 +29,14 @@ const ai = new PiAIService(aiConfig);
 const calendar = new GCalService(gcalConfig);
 const harvest = new HarvestAPIService(harvestConfig);
 
+import { AdminPlugin } from "./plugins/admin/index.js";
 import { LeavePlugin } from "./plugins/leave/index.js";
 
 // Assemble bot
 const bot = new Bot({ ai, calendar, harvest, slack });
 
 // Register plugins here:
+bot.register(new AdminPlugin(db));
 bot.register(new LeavePlugin(db));
 
 // Background worker — processes confirmed leave actions + expires stale ones
