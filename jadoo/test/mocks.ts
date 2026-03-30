@@ -228,6 +228,13 @@ export class MockSlackService implements SlackService {
 		);
 	}
 
+	/** Canned channel members — keyed by channel ID */
+	readonly channelMembers: Map<string, string[]> = new Map();
+
+	async getChannelMembers(channel: string): Promise<string[]> {
+		return this.channelMembers.get(channel) ?? [];
+	}
+
 	// ── Test helpers ──────────────────────────
 
 	/**

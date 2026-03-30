@@ -9,7 +9,7 @@
  * touching the real Slack API.
  */
 
-import type { Block as SlackBlock, KnownBlock } from "@slack/types";
+import type { KnownBlock, Block as SlackBlock } from "@slack/types";
 
 // ─── Block Kit ──────────────────────────────────────────
 
@@ -157,4 +157,9 @@ export interface SlackService {
 	 * Get user profile information (users.info).
 	 */
 	getUserInfo(userId: string): Promise<SlackUserInfo>;
+
+	/**
+	 * List all member IDs in a channel (conversations.members, handles pagination).
+	 */
+	getChannelMembers(channel: string): Promise<string[]>;
 }

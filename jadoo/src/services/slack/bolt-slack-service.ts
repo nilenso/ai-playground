@@ -146,6 +146,25 @@ export class BoltSlackService implements SlackService {
 		}));
 	}
 
+	async getChannelMembers(channel: string): Promise<string[]> {
+		const members: string[] = [];
+		let cursor: string | undefined;
+
+		do {
+			const result = await this.app.client.conversations.members({
+				channel,
+				cursor,
+				limit: 200,
+			});
+			if (result.members) {
+				members.push(...result.members);
+			}
+			cursor = result.response_metadata?.next_cursor || undefined;
+		} while (cursor);
+
+		return members;
+	}
+
 	async getUserInfo(userId: string): Promise<SlackUserInfo> {
 		const result = await this.app.client.users.info({ user: userId });
 		const user = result.user as {
