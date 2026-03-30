@@ -1,0 +1,19 @@
+[Unit]
+Description=Jadoo Slack Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/jadoo
+ExecStart=/root/.bun/bin/bun src/index.ts
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/opt/jadoo/.env
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/jadoo/data
+
+[Install]
+WantedBy=multi-user.target

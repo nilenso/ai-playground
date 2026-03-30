@@ -1,0 +1,86 @@
+name: Test & Deploy Jadoo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "jadoo/**"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: jadoo
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        working-directory: jadoo
+        run: bun test test/*.test.ts
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: jadoo-prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.JADOO_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.JADOO_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ secrets.JADOO_HOST }}
+          DOTENV: ${{ secrets.JADOO_DOTENV }}
+        run: |
+          rsync -az --delete \
+            --exclude='node_modules' \
+            --exclude='data' \
+            --exclude='.env' \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            jadoo/ root@"$DEPLOY_HOST":/opt/jadoo/
+
+          # Write .env from secret
+          echo "$DOTENV" | ssh -i ~/.ssh/deploy_key root@"$DEPLOY_HOST" \
+            "cat > /opt/jadoo/.env && chmod 600 /opt/jadoo/.env"
+
+          ssh -i ~/.ssh/deploy_key root@"$DEPLOY_HOST" bash -s <<'EOF'
+            set -e
+
+            # Install Bun if missing
+            if ! command -v bun &>/dev/null && [ ! -f ~/.bun/bin/bun ]; then
+              curl -fsSL https://bun.sh/install | bash
+            fi
+            export PATH="$HOME/.bun/bin:$PATH"
+
+            cd /opt/jadoo
+            mkdir -p data
+            bun install --frozen-lockfile
+
+            # Install & reload systemd service
+            cp deploy/jadoo.service /etc/systemd/system/jadoo.service
+            systemctl daemon-reload
+            systemctl enable jadoo
+            systemctl restart jadoo
+
+            echo "Jadoo deployed successfully"
+          EOF
+
+      - name: Cleanup SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
