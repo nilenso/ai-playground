@@ -115,7 +115,7 @@ jobs:
           host: 143.244.150.18
           username: deploy
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          command_timeout: 30m
+          command_timeout: 5m
           script: |
             set -e
             cd ~/jadoo
