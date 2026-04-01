@@ -1,8 +1,41 @@
 /**
- * 12-factor style configuration.
- * All config is read from environment variables (loaded from .env by Bun automatically).
- * Each integration reads only what it needs; missing optional values are undefined.
+ * Configuration loader.
+ *
+ * Reads from a TOML config file (default: `config.toml`, override via `CONFIG_PATH` env var).
+ * Falls back to environment variables when no TOML file is found.
+ *
+ * TOML structure mirrors the typed interfaces:
+ *
+ *   [slack]
+ *   bot_token = "xoxb-..."
+ *   signing_secret = "..."
+ *   app_token = "xapp-..."
+ *   port = 3000          # optional
+ *
+ *   [ai]
+ *   provider = "anthropic"
+ *   model = "claude-sonnet-4-20250514"
+ *   api_key = "sk-..."
+ *   max_tokens = 4096    # optional
+ *   temperature = 0.7    # optional
+ *
+ *   [google_calendar]
+ *   service_account_json_base64 = "eyJ0..."   # option 1
+ *   # — or —
+ *   client_email = "bot@..."                   # option 2
+ *   private_key = "-----BEGIN..."              # option 2
+ *   calendar_id = "...@group.calendar.google.com"
+ *
+ *   [harvest]
+ *   access_token = "..."
+ *   account_id = "318270"
+ *   project_id = "39766381"
+ *   vacation_task_id = "21993693"
+ *   sick_task_id = "2286530"
  */
+
+import { existsSync, readFileSync } from "node:fs";
+import { parse } from "smol-toml";
 
 export interface SlackConfig {
 	botToken: string;
@@ -40,53 +73,97 @@ export interface AppConfig {
 	harvest: HarvestConfig;
 }
 
-function required(name: string): string {
-	const value = process.env[name];
+// ── TOML loading ────────────────────────────────────
+
+type TomlData = Record<string, Record<string, unknown>>;
+
+let _toml: TomlData | null | undefined; // undefined = not yet attempted
+
+/**
+ * Load and cache the TOML config file.
+ * Returns null when no file is found (falls back to env vars).
+ */
+function loadToml(): TomlData | null {
+	if (_toml !== undefined) return _toml;
+
+	const configPath = process.env.CONFIG_PATH ?? "config.toml";
+	if (!existsSync(configPath)) {
+		_toml = null;
+		return null;
+	}
+
+	const raw = readFileSync(configPath, "utf-8");
+	_toml = parse(raw) as TomlData;
+	return _toml;
+}
+
+/** Reset cached TOML (for testing). */
+export function _resetTomlCache(): void {
+	_toml = undefined;
+}
+
+// ── Value accessors (TOML-first, env-var fallback) ──
+
+function tomlGet(section: string, key: string): string | undefined {
+	const toml = loadToml();
+	if (toml?.[section]) {
+		const val = toml[section][key];
+		if (val !== undefined && val !== null && val !== "") return String(val);
+	}
+	return undefined;
+}
+
+function required(section: string, key: string, envName: string): string {
+	const value = tomlGet(section, key) ?? process.env[envName];
 	if (!value) {
-		throw new Error(`Missing required environment variable: ${name}`);
+		const source = loadToml() ? `[${section}] ${key}` : envName;
+		throw new Error(`Missing required config: ${source}`);
 	}
 	return value;
 }
 
-function optional(name: string): string | undefined {
-	return process.env[name];
+function optional(section: string, key: string, envName: string): string | undefined {
+	return tomlGet(section, key) ?? process.env[envName];
 }
 
-function optionalInt(name: string): number | undefined {
-	const v = optional(name);
+function optionalInt(section: string, key: string, envName: string): number | undefined {
+	const v = optional(section, key, envName);
 	return v ? Number.parseInt(v, 10) : undefined;
 }
 
-function requiredInt(name: string): number {
-	const v = required(name);
+function requiredInt(section: string, key: string, envName: string): number {
+	const v = required(section, key, envName);
 	const n = Number.parseInt(v, 10);
 	if (Number.isNaN(n)) {
-		throw new Error(`Environment variable ${name} must be an integer, got: ${v}`);
+		const source = loadToml() ? `[${section}] ${key}` : envName;
+		throw new Error(`Config ${source} must be an integer, got: ${v}`);
 	}
 	return n;
 }
 
-function optionalFloat(name: string): number | undefined {
-	const v = optional(name);
+function optionalFloat(section: string, key: string, envName: string): number | undefined {
+	const v = optional(section, key, envName);
 	return v ? Number.parseFloat(v) : undefined;
 }
 
+// ── Section loaders ─────────────────────────────────
+
 export function loadSlackConfig(): SlackConfig {
 	return {
-		botToken: required("SLACK_BOT_TOKEN"),
-		signingSecret: required("SLACK_SIGNING_SECRET"),
-		appToken: required("SLACK_APP_TOKEN"),
-		port: optionalInt("SLACK_PORT"),
+		botToken: required("slack", "bot_token", "SLACK_BOT_TOKEN"),
+		signingSecret: required("slack", "signing_secret", "SLACK_SIGNING_SECRET"),
+		appToken: required("slack", "app_token", "SLACK_APP_TOKEN"),
+		port: optionalInt("slack", "port", "SLACK_PORT"),
 	};
 }
 
 export function loadAIConfig(): AIConfig {
 	return {
-		provider: required("AI_PROVIDER"),
-		model: required("AI_MODEL"),
-		apiKey: required("AI_API_KEY"),
-		maxTokens: optionalInt("AI_MAX_TOKENS"),
-		temperature: optionalFloat("AI_TEMPERATURE"),
+		provider: required("ai", "provider", "AI_PROVIDER"),
+		model: required("ai", "model", "AI_MODEL"),
+		apiKey: required("ai", "api_key", "AI_API_KEY"),
+		maxTokens: optionalInt("ai", "max_tokens", "AI_MAX_TOKENS"),
+		temperature: optionalFloat("ai", "temperature", "AI_TEMPERATURE"),
 	};
 }
 
@@ -95,28 +172,26 @@ export function loadAIConfig(): AIConfig {
  *
  * Supports two auth formats (checked in order):
  *
- * 1. **Base64 JSON blob** — `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` contains the
- *    entire GCP service-account JSON file, base64-encoded. One env var,
- *    copy-paste from the GCP console download. `client_email` and
- *    `private_key` are extracted automatically.
+ * 1. **Base64 JSON blob** — `service_account_json_base64` (TOML) or
+ *    `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` (env). One value containing the
+ *    entire GCP service-account JSON file, base64-encoded.
  *
- * 2. **Individual fields** — `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY`
- *    (the original approach). More explicit, useful when you don't have the
- *    full JSON file handy.
+ * 2. **Individual fields** — `client_email` + `private_key` (TOML) or
+ *    `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY` (env).
  *
- * `GOOGLE_CALENDAR_ID` is always required.
+ * `calendar_id` / `GOOGLE_CALENDAR_ID` is always required.
  */
 export function loadGoogleCalendarConfig(): GoogleCalendarConfig {
-	const calendarId = required("GOOGLE_CALENDAR_ID");
+	const calendarId = required("google_calendar", "calendar_id", "GOOGLE_CALENDAR_ID");
 
-	const base64Json = optional("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64");
+	const base64Json = optional("google_calendar", "service_account_json_base64", "GOOGLE_SERVICE_ACCOUNT_JSON_BASE64");
 	if (base64Json) {
 		return parseServiceAccountJson(base64Json, calendarId);
 	}
 
 	return {
-		clientEmail: required("GOOGLE_CLIENT_EMAIL"),
-		privateKey: required("GOOGLE_PRIVATE_KEY"),
+		clientEmail: required("google_calendar", "client_email", "GOOGLE_CLIENT_EMAIL"),
+		privateKey: required("google_calendar", "private_key", "GOOGLE_PRIVATE_KEY"),
 		calendarId,
 	};
 }
@@ -130,24 +205,24 @@ export function parseServiceAccountJson(base64: string, calendarId: string): Goo
 	try {
 		decoded = atob(base64);
 	} catch {
-		throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 is not valid base64");
+		throw new Error("service_account_json_base64 is not valid base64");
 	}
 
 	let json: Record<string, unknown>;
 	try {
 		json = JSON.parse(decoded);
 	} catch {
-		throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 does not contain valid JSON");
+		throw new Error("service_account_json_base64 does not contain valid JSON");
 	}
 
 	const clientEmail = json.client_email;
 	if (typeof clientEmail !== "string" || !clientEmail) {
-		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 JSON is missing "client_email"');
+		throw new Error('service_account_json_base64 JSON is missing "client_email"');
 	}
 
 	const privateKey = json.private_key;
 	if (typeof privateKey !== "string" || !privateKey) {
-		throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 JSON is missing "private_key"');
+		throw new Error('service_account_json_base64 JSON is missing "private_key"');
 	}
 
 	return { clientEmail, privateKey, calendarId };
@@ -155,11 +230,11 @@ export function parseServiceAccountJson(base64: string, calendarId: string): Goo
 
 export function loadHarvestConfig(): HarvestConfig {
 	return {
-		accessToken: required("HARVEST_ACCESS_TOKEN"),
-		accountId: required("HARVEST_ACCOUNT_ID"),
-		projectId: requiredInt("HARVEST_PROJECT_ID"),
-		vacationTaskId: requiredInt("HARVEST_VACATION_TASK_ID"),
-		sickTaskId: requiredInt("HARVEST_SICK_TASK_ID"),
+		accessToken: required("harvest", "access_token", "HARVEST_ACCESS_TOKEN"),
+		accountId: required("harvest", "account_id", "HARVEST_ACCOUNT_ID"),
+		projectId: requiredInt("harvest", "project_id", "HARVEST_PROJECT_ID"),
+		vacationTaskId: requiredInt("harvest", "vacation_task_id", "HARVEST_VACATION_TASK_ID"),
+		sickTaskId: requiredInt("harvest", "sick_task_id", "HARVEST_SICK_TASK_ID"),
 	};
 }
 

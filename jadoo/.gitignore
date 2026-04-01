@@ -10,3 +10,4 @@ bun.lockb
 # output
 dist/
 *.prod.toml
+*.prod.secret

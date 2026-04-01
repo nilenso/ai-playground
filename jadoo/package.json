@@ -16,7 +16,8 @@
 	"dependencies": {
 		"@googleapis/calendar": "^14.2.0",
 		"@mariozechner/pi-ai": "^0.58.1",
-		"@slack/bolt": "^4.6.0"
+		"@slack/bolt": "^4.6.0",
+		"smol-toml": "^1.6.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.7",

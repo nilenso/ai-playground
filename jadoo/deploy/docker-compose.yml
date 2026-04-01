@@ -3,8 +3,10 @@ services:
     image: ghcr.io/nilenso/jadoo:latest
     container_name: jadoo
     restart: unless-stopped
-    env_file: .env
+    environment:
+      CONFIG_PATH: /app/config.toml
     volumes:
+      - ./config.toml:/app/config.toml:ro
       - jadoo-data:/app/data
 
 volumes:

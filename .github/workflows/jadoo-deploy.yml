@@ -96,19 +96,19 @@ jobs:
             deploy@143.244.150.18:~/jadoo/
           rm ~/.ssh/deploy_key
 
-      - name: Write .env to server
+      - name: Write config.toml to server
         uses: appleboy/ssh-action@v1
         with:
           host: 143.244.150.18
           username: deploy
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
-          envs: JADOO_DOTENV
+          envs: JADOO_CONFIG_TOML
           script: |
-            echo "$JADOO_DOTENV" > ~/jadoo/.env
-            chmod 600 ~/jadoo/.env
+            echo "$JADOO_CONFIG_TOML" > ~/jadoo/config.toml
+            chmod 600 ~/jadoo/config.toml
         env:
-          JADOO_DOTENV: ${{ secrets.JADOO_DOTENV }}
+          JADOO_CONFIG_TOML: ${{ secrets.JADOO_CONFIG_TOML }}
 
       - name: Deploy
         uses: appleboy/ssh-action@v1
