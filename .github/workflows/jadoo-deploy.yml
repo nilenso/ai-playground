@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "jadoo/**"
+      - ".github/workflows/jadoo-deploy.yml"
   pull_request:
     paths:
       - "jadoo/**"
@@ -84,22 +85,36 @@ jobs:
       - name: Copy compose file to server
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           mkdir -p ~/.ssh
           echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H 143.244.150.18 >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key deploy@143.244.150.18 "mkdir -p ~/jadoo"
           scp -i ~/.ssh/deploy_key \
             jadoo/deploy/docker-compose.yml \
-            root@"$DEPLOY_HOST":~/jadoo/
+            deploy@143.244.150.18:~/jadoo/
           rm ~/.ssh/deploy_key
 
-      - name: Deploy to server
+      - name: Write .env to server
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: root
+          host: 143.244.150.18
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          envs: JADOO_DOTENV
+          script: |
+            echo "$JADOO_DOTENV" > ~/jadoo/.env
+            chmod 600 ~/jadoo/.env
+        env:
+          JADOO_DOTENV: ${{ secrets.JADOO_DOTENV }}
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 143.244.150.18
+          username: deploy
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
           script: |
@@ -109,3 +124,5 @@ jobs:
             docker compose down --remove-orphans || true
             docker compose up -d
             docker image prune -f
+            echo "--- container status ---"
+            docker compose ps
