@@ -89,9 +89,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H 143.244.150.18 >> ~/.ssh/known_hosts 2>/dev/null
-          ssh -i ~/.ssh/deploy_key deploy@143.244.150.18 "mkdir -p ~/jadoo"
-          scp -i ~/.ssh/deploy_key \
+          ssh-keyscan -H 143.244.150.18 >> ~/.ssh/known_hosts 2>&1
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key deploy@143.244.150.18 "mkdir -p ~/jadoo"
+          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key \
             jadoo/deploy/docker-compose.yml \
             deploy@143.244.150.18:~/jadoo/
           rm ~/.ssh/deploy_key
