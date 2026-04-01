@@ -86,11 +86,12 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
+          set -eux
           mkdir -p ~/.ssh
           echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H 143.244.150.18 >> ~/.ssh/known_hosts 2>&1
-          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key deploy@143.244.150.18 "mkdir -p ~/jadoo"
+          ssh-keyscan -H 143.244.150.18 >> ~/.ssh/known_hosts || true
+          ssh -v -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key deploy@143.244.150.18 "mkdir -p ~/jadoo"
           scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key \
             jadoo/deploy/docker-compose.yml \
             deploy@143.244.150.18:~/jadoo/
