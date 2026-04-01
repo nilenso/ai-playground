@@ -32,6 +32,11 @@
  *   project_id = "39766381"
  *   vacation_task_id = "21993693"
  *   sick_task_id = "2286530"
+ *
+ *   # Plugin env vars — seeded into process.env so plugins pick them up
+ *   [env]
+ *   SLACK_LEAVE_CHANNEL_ID = "CMVPEEWCQ"
+ *   TRIGGER_KEYWORDS = "leave,ooo,wfh,sick,vacation,pto,day off"
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -94,6 +99,17 @@ function loadToml(): TomlData | null {
 
 	const raw = readFileSync(configPath, "utf-8");
 	_toml = parse(raw) as TomlData;
+
+	// Seed process.env from [env] section so plugin configs (which read
+	// process.env directly) can be driven from the TOML file too.
+	if (_toml.env) {
+		for (const [key, val] of Object.entries(_toml.env)) {
+			if (val !== undefined && val !== null && val !== "" && !process.env[key]) {
+				process.env[key] = String(val);
+			}
+		}
+	}
+
 	return _toml;
 }
 

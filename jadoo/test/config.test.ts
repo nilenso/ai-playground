@@ -320,6 +320,45 @@ port = 4000
 		expect(config.port).toBe(4000);
 	});
 
+	it("seeds process.env from [env] section for plugin config", () => {
+		delete process.env.SLACK_LEAVE_CHANNEL_ID;
+		delete process.env.TRIGGER_KEYWORDS;
+
+		writeToml(`
+[slack]
+bot_token = "xoxb-toml"
+signing_secret = "sec"
+app_token = "xapp-toml"
+
+[env]
+SLACK_LEAVE_CHANNEL_ID = "C12345"
+TRIGGER_KEYWORDS = "leave,sick"
+`);
+
+		// Loading any config triggers TOML parse + env seeding
+		loadSlackConfig();
+
+		expect(process.env.SLACK_LEAVE_CHANNEL_ID).toBe("C12345");
+		expect(process.env.TRIGGER_KEYWORDS).toBe("leave,sick");
+	});
+
+	it("[env] does not overwrite existing env vars", () => {
+		process.env.SLACK_LEAVE_CHANNEL_ID = "CORIGINAL";
+
+		writeToml(`
+[slack]
+bot_token = "xoxb-toml"
+signing_secret = "sec"
+app_token = "xapp-toml"
+
+[env]
+SLACK_LEAVE_CHANNEL_ID = "CFROMTOML"
+`);
+
+		loadSlackConfig();
+		expect(process.env.SLACK_LEAVE_CHANNEL_ID).toBe("CORIGINAL");
+	});
+
 	it("loads google_calendar with individual fields from TOML", () => {
 		writeToml(`
 [google_calendar]
