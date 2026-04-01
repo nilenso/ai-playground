@@ -1,0 +1,11 @@
+services:
+  jadoo:
+    image: ghcr.io/nilenso/jadoo:latest
+    container_name: jadoo
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - jadoo-data:/app/data
+
+volumes:
+  jadoo-data:
