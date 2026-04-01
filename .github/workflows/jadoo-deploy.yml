@@ -87,10 +87,11 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
+          echo "143.244.150.18 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJd1UgVA1dwm/C46a5aRNn9/DmY1PnFytZMGrzL11ZYU" >> ~/.ssh/known_hosts
           echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key deploy@143.244.150.18 "mkdir -p ~/jadoo"
-          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key \
+          ssh -i ~/.ssh/deploy_key deploy@143.244.150.18 "mkdir -p ~/jadoo"
+          scp -i ~/.ssh/deploy_key \
             jadoo/deploy/docker-compose.yml \
             deploy@143.244.150.18:~/jadoo/
           rm ~/.ssh/deploy_key
