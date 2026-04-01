@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+	_resetTomlCache,
 	loadAIConfig,
 	loadGoogleCalendarConfig,
 	loadHarvestConfig,
@@ -7,26 +11,33 @@ import {
 	parseServiceAccountJson,
 } from "../src/config/index.js";
 
-describe("Config loading", () => {
+function clearConfigEnv() {
+	for (const key of Object.keys(process.env)) {
+		if (
+			key.startsWith("SLACK_") ||
+			key.startsWith("AI_") ||
+			key.startsWith("GOOGLE_") ||
+			key.startsWith("HARVEST_") ||
+			key === "CONFIG_PATH"
+		) {
+			delete process.env[key];
+		}
+	}
+}
+
+describe("Config loading (env vars)", () => {
 	const originalEnv = { ...process.env };
 
 	beforeEach(() => {
-		// Clean slate
-		for (const key of Object.keys(process.env)) {
-			if (
-				key.startsWith("SLACK_") ||
-				key.startsWith("AI_") ||
-				key.startsWith("GOOGLE_") ||
-				key.startsWith("HARVEST_")
-			) {
-				delete process.env[key];
-			}
-		}
+		_resetTomlCache();
+		clearConfigEnv();
+		// Point CONFIG_PATH to a non-existent file so TOML is skipped
+		process.env.CONFIG_PATH = "/tmp/does-not-exist.toml";
 	});
 
 	afterEach(() => {
-		// Restore
 		Object.assign(process.env, originalEnv);
+		_resetTomlCache();
 	});
 
 	describe("loadSlackConfig", () => {
@@ -188,5 +199,137 @@ describe("Config loading", () => {
 
 			expect(() => loadHarvestConfig()).toThrow("must be an integer");
 		});
+	});
+});
+
+describe("Config loading (TOML)", () => {
+	const originalEnv = { ...process.env };
+	let tmpDir: string;
+
+	beforeEach(() => {
+		_resetTomlCache();
+		clearConfigEnv();
+		tmpDir = mkdtempSync(join(tmpdir(), "jadoo-config-test-"));
+	});
+
+	afterEach(() => {
+		Object.assign(process.env, originalEnv);
+		_resetTomlCache();
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function writeToml(content: string): void {
+		const path = join(tmpDir, "config.toml");
+		writeFileSync(path, content);
+		process.env.CONFIG_PATH = path;
+	}
+
+	it("loads all config sections from TOML", () => {
+		const sa = { client_email: "bot@test.iam.gserviceaccount.com", private_key: "pk" };
+		writeToml(`
+[slack]
+bot_token = "xoxb-toml"
+signing_secret = "toml-secret"
+app_token = "xapp-toml"
+
+[ai]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+api_key = "sk-toml"
+
+[google_calendar]
+service_account_json_base64 = "${btoa(JSON.stringify(sa))}"
+calendar_id = "cal@test.com"
+
+[harvest]
+access_token = "tok-toml"
+account_id = "111"
+project_id = "222"
+vacation_task_id = "333"
+sick_task_id = "444"
+`);
+
+		const slack = loadSlackConfig();
+		expect(slack.botToken).toBe("xoxb-toml");
+		expect(slack.signingSecret).toBe("toml-secret");
+		expect(slack.appToken).toBe("xapp-toml");
+
+		_resetTomlCache();
+		process.env.CONFIG_PATH = join(tmpDir, "config.toml");
+
+		const ai = loadAIConfig();
+		expect(ai.provider).toBe("anthropic");
+		expect(ai.apiKey).toBe("sk-toml");
+
+		_resetTomlCache();
+		process.env.CONFIG_PATH = join(tmpDir, "config.toml");
+
+		const harvest = loadHarvestConfig();
+		expect(harvest.accessToken).toBe("tok-toml");
+		expect(harvest.projectId).toBe(222);
+	});
+
+	it("TOML values take precedence over env vars", () => {
+		writeToml(`
+[slack]
+bot_token = "xoxb-from-toml"
+signing_secret = "toml-secret"
+app_token = "xapp-from-toml"
+`);
+		process.env.SLACK_BOT_TOKEN = "xoxb-from-env";
+		process.env.SLACK_SIGNING_SECRET = "env-secret";
+		process.env.SLACK_APP_TOKEN = "xapp-from-env";
+
+		const config = loadSlackConfig();
+		expect(config.botToken).toBe("xoxb-from-toml");
+	});
+
+	it("falls back to env vars for missing TOML keys", () => {
+		writeToml(`
+[slack]
+bot_token = "xoxb-toml"
+signing_secret = "toml-secret"
+`);
+		// app_token missing from TOML, provide via env
+		process.env.SLACK_APP_TOKEN = "xapp-from-env";
+
+		const config = loadSlackConfig();
+		expect(config.botToken).toBe("xoxb-toml");
+		expect(config.appToken).toBe("xapp-from-env");
+	});
+
+	it("throws with TOML-style error when key is missing", () => {
+		writeToml(`
+[slack]
+bot_token = "xoxb-toml"
+`);
+
+		expect(() => loadSlackConfig()).toThrow("[slack] signing_secret");
+	});
+
+	it("handles optional TOML fields", () => {
+		writeToml(`
+[slack]
+bot_token = "xoxb-toml"
+signing_secret = "sec"
+app_token = "xapp-toml"
+port = 4000
+`);
+
+		const config = loadSlackConfig();
+		expect(config.port).toBe(4000);
+	});
+
+	it("loads google_calendar with individual fields from TOML", () => {
+		writeToml(`
+[google_calendar]
+client_email = "bot@toml.iam.gserviceaccount.com"
+private_key = "-----BEGIN PRIVATE KEY-----\\ntoml-key\\n-----END PRIVATE KEY-----"
+calendar_id = "cal@toml.com"
+`);
+
+		const config = loadGoogleCalendarConfig();
+		expect(config.clientEmail).toBe("bot@toml.iam.gserviceaccount.com");
+		expect(config.calendarId).toBe("cal@toml.com");
 	});
 });
