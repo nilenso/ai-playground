@@ -102,7 +102,6 @@ jobs:
           host: 143.244.150.18
           username: deploy
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script_stop: true
           envs: JADOO_CONFIG_TOML
           script: |
             echo "$JADOO_CONFIG_TOML" > ~/jadoo/config.toml
@@ -116,7 +115,7 @@ jobs:
           host: 143.244.150.18
           username: deploy
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script_stop: true
+          command_timeout: 30m
           script: |
             set -e
             cd ~/jadoo
