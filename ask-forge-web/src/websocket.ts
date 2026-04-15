@@ -1,8 +1,8 @@
 import type { ServerWebSocket } from "bun";
 import { sessions, sessionTimestamps } from "./api/index.ts";
-import { forceCompact } from "./lib/compaction.ts";
-import { createCompaction, getLatestCompaction } from "./lib/db.ts";
+import { createCompaction } from "./lib/db.ts";
 import { wsLogger } from "./lib/logger.ts";
+import { buildDoneData, getTurnText, getTurnToolCalls, mapStreamEvent } from "./lib/stream-adapter.ts";
 
 interface WebSocketData {
 	sessionId: string | null;
@@ -136,8 +136,6 @@ export const websocketHandler = {
 					}
 
 					// Signal end of buffer replay
-					// If completed, send resume_complete so client finalizes
-					// If still streaming, send resume_caught_up so client knows to process new events normally
 					if (buffer.completed) {
 						ws.send(JSON.stringify({ type: "resume_complete", requestId: buffer.requestId }));
 					} else {
@@ -271,104 +269,6 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 		return;
 	}
 
-	// Handle /compact command
-	if (question.startsWith("/compact")) {
-		const customInstructions = question.slice("/compact".length).trim() || undefined;
-
-		// Initialize stream buffer
-		streamBuffers.set(sessionId, {
-			requestId,
-			sessionId,
-			question,
-			events: [],
-			completed: false,
-		});
-
-		broadcastAndBuffer(sessionId, { type: "progress", requestId, data: { type: "thinking" } });
-
-		const compactStart = Date.now();
-		try {
-			const currentMessages = session.getMessages();
-			const previousCompaction = getLatestCompaction(sessionId);
-			const compactionResult = await forceCompact(currentMessages, previousCompaction?.summary, customInstructions);
-
-			if (compactionResult.wasCompacted && compactionResult.summary) {
-				// Replace session messages with compacted version
-				session.replaceMessages(compactionResult.messages);
-
-				// Persist compaction to database
-				createCompaction({
-					sessionId,
-					summary: compactionResult.summary,
-					firstKeptOrdinal: compactionResult.firstKeptOrdinal,
-					tokensBefore: compactionResult.tokensBefore,
-					tokensAfter: compactionResult.tokensAfter,
-					readFiles: compactionResult.readFiles,
-					modifiedFiles: compactionResult.modifiedFiles,
-				});
-
-				// Send compaction notification
-				broadcastAndBuffer(sessionId, {
-					type: "progress",
-					requestId,
-					data: {
-						type: "compaction",
-						tokensBefore: compactionResult.tokensBefore,
-						tokensAfter: compactionResult.tokensAfter,
-						messagesSummarized: currentMessages.length - compactionResult.messages.length,
-					},
-				});
-
-				// Send done with compaction result
-				const doneEvent = {
-					type: "done",
-					requestId,
-					data: {
-						success: true,
-						response: `✅ Context compacted: ${compactionResult.tokensBefore.toLocaleString()} → ${compactionResult.tokensAfter.toLocaleString()} tokens (summarized ${currentMessages.length - compactionResult.messages.length} messages)`,
-						toolCalls: [],
-					},
-				};
-				broadcastAndBuffer(sessionId, doneEvent);
-
-				wsLogger.info("Force compact done: session={sessionId}, {tokensBefore}→{tokensAfter} tokens ({durationMs}ms)", {
-					sessionId,
-					tokensBefore: compactionResult.tokensBefore,
-					tokensAfter: compactionResult.tokensAfter,
-					messagesSummarized: currentMessages.length - compactionResult.messages.length,
-					durationMs: Date.now() - compactStart,
-				});
-			} else {
-				const doneEvent = {
-					type: "done",
-					requestId,
-					data: {
-						success: true,
-						response: "ℹ️ Nothing to compact - conversation is too short.",
-						toolCalls: [],
-					},
-				};
-				broadcastAndBuffer(sessionId, doneEvent);
-				wsLogger.info("Force compact skipped (too short): session={sessionId}", { sessionId });
-			}
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : "Unknown error";
-			broadcastAndBuffer(sessionId, { type: "error", requestId, error: `Compaction failed: ${errorMessage}` });
-			wsLogger.error("Force compact failed: session={sessionId}, error={error} ({durationMs}ms)", {
-				sessionId,
-				error: errorMessage,
-				durationMs: Date.now() - compactStart,
-			});
-		} finally {
-			const buffer = streamBuffers.get(sessionId);
-			if (buffer) {
-				buffer.completed = true;
-				buffer.completedAt = Date.now();
-			}
-		}
-		return;
-	}
-
 	// Create abort controller for this request
 	const abortController = new AbortController();
 	activeRequests.set(requestId, abortController);
@@ -399,13 +299,29 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 	});
 
 	try {
-		const result = await session.ask(question, {
-			onProgress: (event) => {
-				// Check if cancelled
-				if (abortController.signal.aborted) return;
-				broadcastAndBuffer(sessionId, { type: "progress", requestId, data: event });
-			},
-		});
+		const stream = session.ask(question, { signal: abortController.signal });
+
+		for await (const event of stream) {
+			if (abortController.signal.aborted) break;
+
+			// Persist compaction events to the database
+			if (event.type === "compaction") {
+				createCompaction({
+					sessionId,
+					summary: event.summary,
+					firstKeptOrdinal: event.firstKeptOrdinal,
+					tokensBefore: event.tokensBefore,
+					tokensAfter: event.tokensAfter,
+					readFiles: event.readFiles,
+					modifiedFiles: event.modifiedFiles,
+				});
+			}
+
+			const mapped = mapStreamEvent(event);
+			if (mapped) {
+				broadcastAndBuffer(sessionId, { type: "progress", requestId, data: mapped });
+			}
+		}
 
 		// Check if cancelled before sending result
 		if (abortController.signal.aborted) {
@@ -416,14 +332,12 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 			return;
 		}
 
+		const turn = await stream.result();
+
 		const doneEvent = {
 			type: "done",
 			requestId,
-			data: {
-				success: true,
-				response: result.response,
-				toolCalls: result.toolCalls,
-			},
+			data: buildDoneData(turn),
 		};
 		broadcastAndBuffer(sessionId, doneEvent);
 
@@ -439,8 +353,8 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 			{
 				sessionId,
 				requestId,
-				toolCallCount: result.toolCalls?.length ?? 0,
-				responseLength: result.response.length,
+				toolCallCount: getTurnToolCalls(turn).length,
+				responseLength: getTurnText(turn).length,
 				durationMs: Date.now() - askStart,
 			},
 		);

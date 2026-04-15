@@ -1,169 +1,127 @@
-import type { Message } from "@mariozechner/pi-ai";
-import type { AskOptions, AskResult, Session } from "@nilenso/ask-forge";
-import { maybeCompact } from "./compaction.ts";
 import {
 	createCompaction,
 	createMessage,
-	getLatestCompaction,
 	getMessagesBySession,
 	getSession,
 	updateSessionStatus,
 	updateSessionTitle,
 } from "./db.ts";
-import { compactionLogger } from "./logger.ts";
+import type { AskOptions, AskStream, Session, StreamEvent, TurnResult } from "./stream-adapter.ts";
+import { getTurnText, getTurnThinking, getTurnToolCalls } from "./stream-adapter.ts";
 
-function persistMessage(sessionId: string, ordinal: number, msg: Message): void {
-	switch (msg.role) {
-		case "user": {
-			const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-			createMessage({ sessionId, role: "user", ordinal, content });
-			break;
-		}
-		case "assistant": {
-			// Serialize the full content array as JSON to preserve all tool calls and thinking blocks
-			const content = JSON.stringify(msg.content);
-			createMessage({ sessionId, role: "assistant", ordinal, content });
-			break;
-		}
-		case "toolResult": {
-			const contentText = msg.content.map((c) => ("text" in c ? c.text : "")).join("");
-			createMessage({
-				sessionId,
-				role: "tool",
-				ordinal,
-				content: contentText,
-				toolName: msg.toolName,
-				toolArguments: msg.toolCallId,
-				toolResult: contentText,
-			});
-			break;
+function persistTurn(sessionId: string, ordinal: { value: number }, turn: TurnResult): void {
+	const text = getTurnText(turn);
+	const thinking = getTurnThinking(turn);
+	const toolCalls = getTurnToolCalls(turn);
+
+	// Persist the assistant response as a single message with JSON content
+	const content = JSON.stringify(toolCalls.length > 0 ? { text, toolCalls } : text);
+
+	createMessage({
+		sessionId,
+		role: "assistant",
+		ordinal: ordinal.value,
+		content,
+		thinking: thinking ?? undefined,
+	});
+	ordinal.value++;
+
+	if (turn.error) {
+		updateSessionStatus(sessionId, "error");
+	}
+}
+
+/**
+ * Wraps an AskStream to persist the TurnResult to the DB after completion,
+ * and to persist compaction events from the library's stream.
+ */
+function wrapAskStream(inner: AskStream, sessionId: string, ordinal: { value: number }): AskStream {
+	let cachedResult: Promise<TurnResult> | null = null;
+
+	// Create a passthrough async iterator that also handles compaction events
+	async function* iterateAndPersistCompaction(): AsyncGenerator<StreamEvent> {
+		for await (const event of inner) {
+			if (event.type === "compaction") {
+				createCompaction({
+					sessionId,
+					summary: event.summary,
+					firstKeptOrdinal: event.firstKeptOrdinal,
+					tokensBefore: event.tokensBefore,
+					tokensAfter: event.tokensAfter,
+					readFiles: event.readFiles,
+					modifiedFiles: event.modifiedFiles,
+				});
+			}
+			yield event;
 		}
 	}
+
+	const wrappedIterator = iterateAndPersistCompaction();
+
+	return {
+		[Symbol.asyncIterator]() {
+			return wrappedIterator;
+		},
+		result() {
+			if (!cachedResult) {
+				cachedResult = inner.result().then((turn) => {
+					persistTurn(sessionId, ordinal, turn);
+					return turn;
+				});
+			}
+			return cachedResult;
+		},
+	};
 }
 
 export function wrapSession(session: Session, sessionId: string): Session {
 	const existingSession = getSession(sessionId);
 	let hasTitle = !!existingSession?.title;
 	const dbMessages = getMessagesBySession(sessionId);
-	let ordinal = dbMessages.length;
+	const ordinal = { value: dbMessages.length };
 
 	// Backfill title from first user message if missing
 	if (!hasTitle && dbMessages.length > 0) {
 		const firstUserMsg = dbMessages.find((m) => m.role === "user");
 		if (firstUserMsg?.content) {
-			const title = firstUserMsg.content.length > 80 ? `${firstUserMsg.content.slice(0, 77)}...` : firstUserMsg.content;
+			const title =
+				firstUserMsg.content.length > 80 ? `${firstUserMsg.content.slice(0, 77)}...` : firstUserMsg.content;
 			updateSessionTitle(sessionId, title);
 			hasTitle = true;
 		}
 	}
 
-	const persistMessages = () => {
-		const messages: Message[] = session.getMessages();
-		// Persist only new messages (from ordinal onward)
-		for (let i = ordinal; i < messages.length; i++) {
-			persistMessage(sessionId, i, messages[i]);
-		}
-		ordinal = messages.length;
-	};
-
-	const wrapped = {
+	return {
 		id: sessionId,
 		repo: session.repo,
+		config: session.config,
 
-		async ask(question: string, options?: AskOptions): Promise<AskResult> {
-			// Persist user message immediately so it's available if user switches away
-			createMessage({ sessionId, role: "user", ordinal, content: question });
-			ordinal++;
+		ask(prompt: string, options?: AskOptions): AskStream {
+			// Persist user message immediately so it's visible if user switches away
+			createMessage({ sessionId, role: "user", ordinal: ordinal.value, content: prompt });
+			ordinal.value++;
 
-			// Auto-set session title from first question (skip if already titled, e.g. restored sessions)
+			// Auto-set session title from first question
 			if (!hasTitle) {
-				const title = question.length > 80 ? `${question.slice(0, 77)}...` : question;
+				const title = prompt.length > 80 ? `${prompt.slice(0, 77)}...` : prompt;
 				updateSessionTitle(sessionId, title);
 				hasTitle = true;
 			}
 
-			// Check for compaction before asking (context might be too large)
-			// Include the new question in the token estimate since it will be added to context
-			try {
-				const currentMessages = session.getMessages();
-				const newQuestionMessage: Message = { role: "user", content: question, timestamp: Date.now() };
-				const messagesWithQuestion = [...currentMessages, newQuestionMessage];
-
-				const previousCompaction = getLatestCompaction(sessionId);
-				const compactionResult = await maybeCompact(messagesWithQuestion, previousCompaction?.summary);
-
-				if (compactionResult.wasCompacted && compactionResult.summary) {
-					// Replace session messages with compacted version
-					session.replaceMessages(compactionResult.messages);
-
-					// Persist compaction to database
-					createCompaction({
-						sessionId,
-						summary: compactionResult.summary,
-						firstKeptOrdinal: compactionResult.firstKeptOrdinal,
-						tokensBefore: compactionResult.tokensBefore,
-						tokensAfter: compactionResult.tokensAfter,
-						readFiles: compactionResult.readFiles,
-						modifiedFiles: compactionResult.modifiedFiles,
-					});
-
-					// Notify UI about compaction via progress callback
-					options?.onProgress?.({
-						type: "compaction" as never,
-						tokensBefore: compactionResult.tokensBefore,
-						tokensAfter: compactionResult.tokensAfter,
-						messagesSummarized: messagesWithQuestion.length - compactionResult.messages.length,
-					} as never);
-
-					compactionLogger.info(
-						"Auto-compacted session {sessionId}: {tokensBefore}→{tokensAfter} tokens, summarized {messagesSummarized} messages",
-						{
-							sessionId,
-							tokensBefore: compactionResult.tokensBefore,
-							tokensAfter: compactionResult.tokensAfter,
-							messagesSummarized: messagesWithQuestion.length - compactionResult.messages.length,
-						},
-					);
-				}
-			} catch (compactionError) {
-				// Compaction failed - mark session as error and terminate
-				compactionLogger.error("Compaction failed for session {sessionId}: {error}", {
-					sessionId,
-					error: compactionError instanceof Error ? compactionError.message : String(compactionError),
-				});
-				updateSessionStatus(sessionId, "error");
-				const errorMessage = compactionError instanceof Error ? compactionError.message : "Unknown compaction error";
-				throw new Error(`Compaction failed: ${errorMessage}. Session terminated due to context overflow risk.`);
-			}
-
-			try {
-				const result = await session.ask(question, options);
-
-				if (result.response.startsWith("[ERROR:")) {
-					updateSessionStatus(sessionId, "error");
-				}
-
-				return result;
-			} catch (err) {
-				updateSessionStatus(sessionId, "error");
-				throw err;
-			} finally {
-				persistMessages();
-			}
+			const innerStream = session.ask(prompt, options);
+			return wrapAskStream(innerStream, sessionId, ordinal);
 		},
 
-		replaceMessages(messages: Parameters<Session["replaceMessages"]>[0]) {
-			session.replaceMessages(messages);
+		getTurns() {
+			return session.getTurns();
 		},
 
-		getMessages() {
-			return session.getMessages();
+		getTurn(id: string) {
+			return session.getTurn(id);
 		},
 
 		close() {
 			session.close();
 		},
 	};
-
-	return wrapped;
 }

@@ -1,5 +1,7 @@
-import { AskForgeClient, type Session } from "@nilenso/ask-forge";
+import { Client } from "@nilenso/ask-forge";
 import { Hono } from "hono";
+import type { Session } from "../lib/stream-adapter.ts";
+import { buildDoneData, getTurnText, getTurnThinking, getTurnToolCalls, mapStreamEvent } from "../lib/stream-adapter.ts";
 
 // The SYSTEM_PROMPT is not re-exported from @nilenso/ask-forge's package index,
 // so we read it from the config module at the resolved path.
@@ -7,11 +9,15 @@ import { Hono } from "hono";
 const askForgeConfig: any = await import(import.meta.resolve("@nilenso/ask-forge").replace("/index.js", "/config.js"));
 const SYSTEM_PROMPT: string = askForgeConfig.SYSTEM_PROMPT;
 
+// Model configuration from environment
+const MODEL_PROVIDER = process.env.MODEL_PROVIDER || "anthropic";
+const MODEL_ID = process.env.MODEL_ID || "claude-sonnet-4-6";
+
 // Initialize ask-forge client with sandbox configuration if available
 const sandboxUrl = process.env.SANDBOX_URL;
 const sandboxSecret = process.env.SANDBOX_SECRET;
 
-const askForgeClient = new AskForgeClient(
+const askForgeClient = new Client(
 	sandboxUrl
 		? {
 				sandbox: {
@@ -37,9 +43,7 @@ import {
 	deleteShareLink,
 	findOrCreateRepository,
 	getDb,
-	getLatestCompaction,
 	getMessagesBySession,
-	getNonCompactedMessages,
 	getRepositoryByGitUrl,
 	getSession,
 	getShareLink,
@@ -49,7 +53,6 @@ import {
 } from "../lib/db.ts";
 import { sandboxLogger, sessionLogger, startupLogger } from "../lib/logger.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
-import { buildSessionContext } from "../lib/session-context.ts";
 import { wrapSession } from "../lib/session-logger.ts";
 import { getActiveRequest } from "../websocket.ts";
 
@@ -197,9 +200,19 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 
 			const connectStart = Date.now();
 			try {
-				const rawSession = await askForgeClient.connect(normalized, { commitish: commit }, (message) => {
-					send("progress", { message });
-				});
+				const rawSession = await askForgeClient.connect(
+					{
+						repo: { url: normalized, commitish: commit },
+						model: { provider: MODEL_PROVIDER, id: MODEL_ID },
+						thinking: { type: "adaptive", effort: "high" },
+						maxIterations: 20,
+						compaction: { enabled: true, contextWindow: 200_000 },
+						systemPrompt: SYSTEM_PROMPT,
+					},
+					(message) => {
+						send("progress", { message });
+					},
+				);
 
 				// Check for cached summary
 				const existingRepo = getRepositoryByGitUrl(normalized);
@@ -295,7 +308,7 @@ api.post("/ask", createApprovedAuthMiddleware(), async (c) => {
 	// Update session timestamp
 	sessionTimestamps.set(sessionId, Date.now());
 
-	// Stream progress events via SSE
+	// Stream progress events via SSE using AskStream
 	const stream = new ReadableStream({
 		async start(controller) {
 			const encoder = new TextEncoder();
@@ -314,17 +327,15 @@ api.post("/ask", createApprovedAuthMiddleware(), async (c) => {
 			}, 15000);
 
 			try {
-				const result = await session.ask(question, {
-					onProgress: (event) => {
-						send("progress", event);
-					},
-				});
+				const askStream = session.ask(question);
 
-				send("done", {
-					success: true,
-					response: result.response,
-					toolCalls: result.toolCalls,
-				});
+				for await (const event of askStream) {
+					const mapped = mapStreamEvent(event);
+					if (mapped) send("progress", mapped);
+				}
+
+				const turn = await askStream.result();
+				send("done", buildDoneData(turn));
 			} catch (err) {
 				const message = err instanceof Error ? err.message : "Unknown error";
 				send("error", { success: false, error: message });
@@ -379,7 +390,7 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 			commitish: existingSession.repo.commitish,
 			summary: repoRow?.summary,
 			repositoryId: repoRow?.id,
-			messageCount: existingSession.getMessages().length,
+			messageCount: existingSession.getTurns().length,
 			activeRequest: activeReq,
 		});
 	}
@@ -415,16 +426,22 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 		}
 
 		// Reconnect to the repository at the same commit
-		const session = wrapSession(await askForgeClient.connect(repoRow.git_url, { commitish }), sessionId);
+		// TODO: Once the library exposes `initialTurns` in SessionConfig or `session.loadTurns()`,
+		// load prior turns from DB and inject them here so the LLM retains conversation context.
+		// For now, the session starts fresh — messages are loaded from DB for display only.
+		const session = wrapSession(
+			await askForgeClient.connect({
+				repo: { url: repoRow.git_url, commitish },
+				model: { provider: MODEL_PROVIDER, id: MODEL_ID },
+				thinking: { type: "adaptive", effort: "high" },
+				maxIterations: 20,
+				compaction: { enabled: true, contextWindow: 200_000 },
+				systemPrompt: SYSTEM_PROMPT,
+			}),
+			sessionId,
+		);
 
-		// Load messages from DB and restore them, considering compaction
-		const compaction = getLatestCompaction(sessionId);
-		const dbMessages = compaction ? getNonCompactedMessages(sessionId) : getMessagesBySession(sessionId);
-
-		if (dbMessages.length > 0 || compaction) {
-			const messages = buildSessionContext(dbMessages, compaction);
-			session.replaceMessages(messages);
-		}
+		const dbMessages = getMessagesBySession(sessionId);
 
 		// Store the session in memory and mark as active
 		sessions.set(session.id, session);
@@ -480,7 +497,7 @@ api.post("/disconnect", createApprovedAuthMiddleware(), async (c) => {
 
 	const session = sessions.get(sessionId);
 	if (session) {
-		await session.close();
+		session.close();
 		sessions.delete(sessionId);
 		sessionTimestamps.delete(sessionId);
 	}
@@ -604,19 +621,23 @@ api.post("/sessions/:id/share", createApprovedAuthMiddleware(), (c) => {
 	if (memSession) {
 		const existingMessages = getMessagesBySession(sessionId);
 		if (existingMessages.length === 0) {
-			const msgs = memSession.getMessages();
-			for (let i = 0; i < msgs.length; i++) {
-				const msg = msgs[i];
-				if (msg.role === "user") {
-					const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-					createMessage({ sessionId, role: "user", ordinal: i, content });
-				} else if (msg.role === "assistant") {
-					const content = JSON.stringify(msg.content);
-					createMessage({ sessionId, role: "assistant", ordinal: i, content });
-				} else if (msg.role === "toolResult") {
-					const contentText = msg.content.map((ct: { text?: string }) => ct.text ?? "").join("");
-					createMessage({ sessionId, role: "tool", ordinal: i, content: contentText, toolName: msg.toolName });
-				}
+			const turns = memSession.getTurns();
+			let ordinal = 0;
+			for (const turn of turns) {
+				const text = getTurnText(turn);
+				const thinking = getTurnThinking(turn);
+				const toolCalls = getTurnToolCalls(turn);
+				createMessage({ sessionId, role: "user", ordinal, content: turn.prompt });
+				ordinal++;
+				const content = JSON.stringify(toolCalls.length > 0 ? { text, toolCalls } : text);
+				createMessage({
+					sessionId,
+					role: "assistant",
+					ordinal,
+					content,
+					thinking: thinking ?? undefined,
+				});
+				ordinal++;
 			}
 		}
 	}
