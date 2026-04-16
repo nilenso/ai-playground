@@ -12,7 +12,7 @@ It is a polyglot monorepo with multiple small services and tools organized in to
 | [faceplant](./faceplant) | Single-binary local observability stack with dashboards, metrics scraping/querying, log ingestion/querying, alerts, and a minimal web UI | Zig, SQLite, Nix, Apache ECharts |
 | [fivetwo](./fivetwo) | Long-term memory and project tracking for AI coding agents | TypeScript, Bun, Hono |
 | [lenso2](./lenso2) | Real-time voice/video meeting assistant | TypeScript, Bun |
-| [jadoo](./jadoo) | Experimental project in this monorepo | Mixed |
+| [jadoo](./jadoo) | Slack bot for assorted Nilenso tasks | Mixed |
 
 ## Notes
 
