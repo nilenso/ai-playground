@@ -31,6 +31,7 @@ Additional maturity included beyond the MVP:
 - scrape target edit/delete flow
 - basic diagnostics summary in Settings
 - authenticated `/status` page
+- `/metrics` endpoint for internal self-observability metrics
 - HTML escaping for user-provided dashboard, panel, alert, and scrape-target values in rendered pages
 - internal self-observability loggers routed through the same Loki-like ingest surface
 - stat panel support
@@ -46,7 +47,7 @@ nix build .#default
 
 ### With Zig
 
-Use a Zig 0.15.x toolchain and SQLite development libraries.
+Use a Zig 0.16.x toolchain and SQLite development libraries.
 
 ```bash
 zig build -Doptimize=ReleaseSafe
@@ -159,6 +160,7 @@ rate({app="demo"} |= "error" [5m])
 - `GET /alerts` - alerts page
 - `GET /settings` - settings page
 - `GET /status` - authenticated status/diagnostics page
+- `GET /metrics` - Prometheus-style internal metrics endpoint
 - `POST /settings/scrape-targets` - add scrape target
 - `POST /settings/scrape-target/:id/update` - update scrape target
 - `POST /settings/scrape-target/:id/delete` - delete scrape target
@@ -206,6 +208,24 @@ Not implemented:
 - regexp filters
 - Loki chunk/index behavior
 - full metric-from-logs aggregation parity
+
+## Internal self-observability metrics
+
+Faceplant also exposes internal Prometheus-style metrics at `/metrics`.
+
+Current metrics include counters/gauges for:
+- handled HTTP requests
+- failed HTTP requests
+- metric samples ingested
+- log entries ingested
+- scrape runs and scrape failures
+- alert evaluations and transitions
+- internal stable/derived log emissions
+- dropped derived logs
+- current row counts for key SQLite tables
+- process uptime
+
+`/metrics` is intentionally read-only and excluded from the generic request counter so self-scrapes do not perturb that metric.
 
 ## Internal self-observability loggers
 

@@ -121,12 +121,23 @@ const App = struct {
     secret_mutex: std.Thread.Mutex = .{},
     runtime_secret: ?[]u8 = null,
     internal_log_mutex: std.Thread.Mutex = .{},
+    metrics_mutex: std.Thread.Mutex = .{},
     derived_logs_enabled: bool = false,
     derived_tokens: f64 = 100,
     derived_capacity: f64 = 100,
     derived_refill_per_sec: f64 = 10,
     derived_last_refill_ms: i64 = 0,
     derived_dropped: u64 = 0,
+    http_requests_total: u64 = 0,
+    http_requests_failed_total: u64 = 0,
+    metric_samples_ingested_total: u64 = 0,
+    log_entries_ingested_total: u64 = 0,
+    scrape_runs_total: u64 = 0,
+    scrape_failures_total: u64 = 0,
+    alert_evaluations_total: u64 = 0,
+    alert_transitions_total: u64 = 0,
+    stable_internal_logs_total: u64 = 0,
+    derived_internal_logs_total: u64 = 0,
 
     fn init(allocator: Allocator, data_dir: []const u8) !App {
         try std.fs.cwd().makePath(data_dir);
@@ -330,6 +341,12 @@ const App = struct {
     }
 
     fn emitInternalLog(self: *App, kind: InternalLoggerKind, component: []const u8, level: []const u8, line: []const u8) !void {
+        self.metrics_mutex.lock();
+        switch (kind) {
+            .stable => self.stable_internal_logs_total += 1,
+            .derived => self.derived_internal_logs_total += 1,
+        }
+        self.metrics_mutex.unlock();
         const kind_text = switch (kind) {
             .stable => "stable",
             .derived => "derived",
@@ -451,13 +468,17 @@ const App = struct {
             return res;
         }
 
-        if (!(std.mem.eql(u8, req.path, "/login") or std.mem.eql(u8, req.path, "/api/logs/push") or std.mem.eql(u8, req.path, "/healthz"))) {
+        if (!(std.mem.eql(u8, req.path, "/login") or std.mem.eql(u8, req.path, "/api/logs/push") or std.mem.eql(u8, req.path, "/healthz") or std.mem.eql(u8, req.path, "/metrics"))) {
             if (!(try self.requireAuth(req, &res))) return res;
         }
 
         if (std.mem.eql(u8, req.path, "/healthz")) {
             res.content_type = "text/plain; charset=utf-8";
             try res.write("ok\n");
+            return res;
+        }
+        if (std.mem.eql(u8, req.path, "/metrics") and std.mem.eql(u8, req.method, "GET")) {
+            try self.renderMetrics(&res);
             return res;
         }
 
@@ -689,6 +710,68 @@ const App = struct {
         return c.sqlite3_column_int64(stmt, 0);
     }
 
+    fn recordHttpRequest(self: *App, success: bool) void {
+        self.metrics_mutex.lock();
+        defer self.metrics_mutex.unlock();
+        self.http_requests_total += 1;
+        if (!success) self.http_requests_failed_total += 1;
+    }
+
+    fn renderMetrics(self: *App, res: *Response) !void {
+        const dashboards = try self.countRows("dashboards");
+        const panels = try self.countRows("panels");
+        const targets = try self.countRows("scrape_targets");
+        const samples = try self.countRows("metric_samples");
+        const logs = try self.countRows("logs");
+        const rules = try self.countRows("alert_rules");
+        const sessions = try self.countRows("sessions");
+        self.metrics_mutex.lock();
+        const http_requests_total = self.http_requests_total;
+        const http_requests_failed_total = self.http_requests_failed_total;
+        const metric_samples_ingested_total = self.metric_samples_ingested_total;
+        const log_entries_ingested_total = self.log_entries_ingested_total;
+        const scrape_runs_total = self.scrape_runs_total;
+        const scrape_failures_total = self.scrape_failures_total;
+        const alert_evaluations_total = self.alert_evaluations_total;
+        const alert_transitions_total = self.alert_transitions_total;
+        const stable_internal_logs_total = self.stable_internal_logs_total;
+        const derived_internal_logs_total = self.derived_internal_logs_total;
+        self.metrics_mutex.unlock();
+        res.content_type = "text/plain; version=0.0.4; charset=utf-8";
+        var w = res.writer();
+        try w.writeAll("# HELP faceplant_http_requests_total Total handled HTTP requests excluding /metrics.\n# TYPE faceplant_http_requests_total counter\n");
+        try w.print("faceplant_http_requests_total {d}\n", .{http_requests_total});
+        try w.writeAll("# HELP faceplant_http_requests_failed_total Total failed HTTP requests excluding /metrics.\n# TYPE faceplant_http_requests_failed_total counter\n");
+        try w.print("faceplant_http_requests_failed_total {d}\n", .{http_requests_failed_total});
+        try w.writeAll("# HELP faceplant_metric_samples_ingested_total Total ingested metric samples.\n# TYPE faceplant_metric_samples_ingested_total counter\n");
+        try w.print("faceplant_metric_samples_ingested_total {d}\n", .{metric_samples_ingested_total});
+        try w.writeAll("# HELP faceplant_log_entries_ingested_total Total ingested log entries.\n# TYPE faceplant_log_entries_ingested_total counter\n");
+        try w.print("faceplant_log_entries_ingested_total {d}\n", .{log_entries_ingested_total});
+        try w.writeAll("# HELP faceplant_scrape_runs_total Total scrape target runs attempted.\n# TYPE faceplant_scrape_runs_total counter\n");
+        try w.print("faceplant_scrape_runs_total {d}\n", .{scrape_runs_total});
+        try w.writeAll("# HELP faceplant_scrape_failures_total Total scrape target failures.\n# TYPE faceplant_scrape_failures_total counter\n");
+        try w.print("faceplant_scrape_failures_total {d}\n", .{scrape_failures_total});
+        try w.writeAll("# HELP faceplant_alert_evaluations_total Total alert rule evaluations.\n# TYPE faceplant_alert_evaluations_total counter\n");
+        try w.print("faceplant_alert_evaluations_total {d}\n", .{alert_evaluations_total});
+        try w.writeAll("# HELP faceplant_alert_transitions_total Total alert state transitions.\n# TYPE faceplant_alert_transitions_total counter\n");
+        try w.print("faceplant_alert_transitions_total {d}\n", .{alert_transitions_total});
+        try w.writeAll("# HELP faceplant_internal_logs_total Total emitted internal logs by logger kind.\n# TYPE faceplant_internal_logs_total counter\n");
+        try w.print("faceplant_internal_logs_total{{logger=\"stable\"}} {d}\n", .{stable_internal_logs_total});
+        try w.print("faceplant_internal_logs_total{{logger=\"derived\"}} {d}\n", .{derived_internal_logs_total});
+        try w.writeAll("# HELP faceplant_derived_logs_dropped_total Total derived internal logs dropped by rate limiting.\n# TYPE faceplant_derived_logs_dropped_total counter\n");
+        try w.print("faceplant_derived_logs_dropped_total {d}\n", .{self.derived_dropped});
+        try w.writeAll("# HELP faceplant_rows Current SQLite row counts by table.\n# TYPE faceplant_rows gauge\n");
+        try w.print("faceplant_rows{{table=\"dashboards\"}} {d}\n", .{dashboards});
+        try w.print("faceplant_rows{{table=\"panels\"}} {d}\n", .{panels});
+        try w.print("faceplant_rows{{table=\"scrape_targets\"}} {d}\n", .{targets});
+        try w.print("faceplant_rows{{table=\"metric_samples\"}} {d}\n", .{samples});
+        try w.print("faceplant_rows{{table=\"logs\"}} {d}\n", .{logs});
+        try w.print("faceplant_rows{{table=\"alert_rules\"}} {d}\n", .{rules});
+        try w.print("faceplant_rows{{table=\"sessions\"}} {d}\n", .{sessions});
+        try w.writeAll("# HELP faceplant_uptime_seconds Process uptime in seconds.\n# TYPE faceplant_uptime_seconds gauge\n");
+        try w.print("faceplant_uptime_seconds {d}\n", .{@divFloor(nowMs() - self.started_at_ms, 1000)});
+    }
+
     fn insertMetric(self: *App, name: []const u8, labels: []const u8, ts_ms: i64, value: f64) !void {
         const stmt = try self.prepare("INSERT INTO metric_samples(name, labels, ts_ms, value) VALUES(?1, ?2, ?3, ?4)");
         defer _ = c.sqlite3_finalize(stmt);
@@ -697,6 +780,9 @@ const App = struct {
         try bindInt(stmt, 3, ts_ms);
         try bindDouble(stmt, 4, value);
         try stepDone(stmt);
+        self.metrics_mutex.lock();
+        self.metric_samples_ingested_total += 1;
+        self.metrics_mutex.unlock();
     }
 
     fn insertLog(self: *App, labels: []const u8, ts_ms: i64, line: []const u8) !void {
@@ -706,6 +792,9 @@ const App = struct {
         try bindInt(stmt, 2, ts_ms);
         try bindText(stmt, 3, line);
         try stepDone(stmt);
+        self.metrics_mutex.lock();
+        self.log_entries_ingested_total += 1;
+        self.metrics_mutex.unlock();
     }
 
     fn createAlert(self: *App, input: RuleInput) !void {
@@ -939,7 +1028,13 @@ const App = struct {
         defer _ = c.sqlite3_finalize(stmt);
         while (c.sqlite3_step(stmt) == c.SQLITE_ROW) {
             const url = sqliteText(stmt, 0);
+            self.metrics_mutex.lock();
+            self.scrape_runs_total += 1;
+            self.metrics_mutex.unlock();
             self.scrapeTarget(url) catch |err| {
+                self.metrics_mutex.lock();
+                self.scrape_failures_total += 1;
+                self.metrics_mutex.unlock();
                 const msg = std.fmt.allocPrint(self.allocator, "scrape failed target={s} err={s}", .{ url, @errorName(err) }) catch null;
                 if (msg) |m| {
                     defer self.allocator.free(m);
@@ -1161,6 +1256,10 @@ const App = struct {
             try bindDouble(hist, 3, value);
             try bindInt(hist, 4, now);
             try stepDone(hist);
+            self.metrics_mutex.lock();
+            self.alert_evaluations_total += 1;
+            if (!std.mem.eql(u8, prev_state, state)) self.alert_transitions_total += 1;
+            self.metrics_mutex.unlock();
             if (!std.mem.eql(u8, prev_state, state)) {
                 const msg = std.fmt.allocPrint(self.allocator, "alert transitioned rule={s} state={s} value={d:.3}", .{ rule_name, state, value }) catch null;
                 if (msg) |m| {
@@ -1762,6 +1861,7 @@ fn handleConnection(app: *App, conn: std.net.Server.Connection) !void {
         defer res.deinit();
         res.status = .bad_request;
         try res.write("bad request");
+        app.recordHttpRequest(false);
         try sendResponse(conn.stream, &res);
         return;
     };
@@ -1774,6 +1874,7 @@ fn handleConnection(app: *App, conn: std.net.Server.Connection) !void {
         break :blk r;
     };
     defer res.deinit();
+    if (!std.mem.eql(u8, req.path, "/metrics")) app.recordHttpRequest(res.status != .internal_server_error and res.status != .bad_request);
     try sendResponse(conn.stream, &res);
 }
 
@@ -1809,7 +1910,9 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator;
     const data_dir = std.process.getEnvVarOwned(allocator, "FACEPLANT_DATA_DIR") catch try allocator.dupe(u8, "./data");
     defer allocator.free(data_dir);
-    const port = std.fmt.parseInt(u16, std.process.getEnvVarOwned(allocator, "FACEPLANT_PORT") catch try allocator.dupe(u8, "8080"), 10) catch 8080;
+    const port_text = std.process.getEnvVarOwned(allocator, "FACEPLANT_PORT") catch try allocator.dupe(u8, "8080");
+    defer allocator.free(port_text);
+    const port = std.fmt.parseInt(u16, port_text, 10) catch 8080;
 
     var app = try App.init(allocator, data_dir);
     defer app.deinit();
@@ -1964,6 +2067,30 @@ test "alert evaluation" {
     defer _ = c.sqlite3_finalize(hist);
     try std.testing.expect(c.sqlite3_step(hist) == c.SQLITE_ROW);
     try std.testing.expect(c.sqlite3_column_int64(hist, 0) >= 1);
+}
+
+test "metrics endpoint exposes internal counters" {
+    const allocator = std.heap.page_allocator;
+    const dir = "zig-cache/test-metrics-endpoint";
+    std.fs.cwd().deleteTree(dir) catch {};
+    var app = try App.init(allocator, dir);
+    defer app.deinit();
+    try app.insertMetric("cpu_usage", "host=a", 1000, 1);
+    try app.insertLog("app=demo", 1000, "hello");
+    app.emitStableLog("lifecycle", "info", "started");
+    app.metrics_mutex.lock();
+    app.http_requests_total = 5;
+    app.scrape_runs_total = 2;
+    app.alert_evaluations_total = 3;
+    app.metrics_mutex.unlock();
+    var res = Response.init(allocator);
+    defer res.deinit();
+    try app.renderMetrics(&res);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.items, "faceplant_http_requests_total 5") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.items, "faceplant_metric_samples_ingested_total 1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.items, "faceplant_log_entries_ingested_total 2") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.items, "faceplant_internal_logs_total{logger=\"stable\"} 1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, res.body.items, "faceplant_rows{table=\"logs\"} 2") != null);
 }
 
 test "settings scrape target update delete and logout routes" {

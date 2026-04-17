@@ -4,6 +4,8 @@
   - `stable`: safe default for lifecycle/auth/scrape/alert events.
   - `derived`: potentially amplifying/log-driven diagnostics. Keep this rare.
 - Both internal logger classes route through the same Loki-like ingest payload handling used by `/api/logs/push`.
+- Internal self-metrics are exposed at `/metrics` in Prometheus text format.
+- Keep `/metrics` read-only and cheap. Avoid making self-scrapes trigger more work than simple metric rendering.
 - Do not add new internal logs on a per-log-entry or per-query-result basis unless they clearly belong in the derived logger.
 - Prefer `stable` internal logs for bounded operational events.
 - Keep derived logging guarded. It is intentionally token-bucket limited and may drop aggressively.

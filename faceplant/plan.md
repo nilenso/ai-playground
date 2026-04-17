@@ -43,6 +43,7 @@
 - [x] scrape target edit/delete flow
 - [x] basic diagnostics summary in settings
 - [x] authenticated status page
+- [x] `/metrics` endpoint for internal self-observability metrics
 - [x] HTML escaping for rendered user-provided values
 - [x] internal stable/derived self-loggers with guardrails
 - [x] logout flow
@@ -59,12 +60,12 @@
 - **Auth/session flow:** `/login` accepts the shared secret, initializes `instance_secret` when `FACEPLANT_SECRET` is unset, creates a `faceplant_session` cookie, and protects all app/API routes except `/login`, `/api/logs/push`, and `/healthz`.
 - **Pages delivered:** `/`, `/dashboard/:id`, `/logs`, `/alerts`, `/settings`, `/status`, `/login`.
 - **Mutation/auth routes delivered:** `/login`, `/logout`, `/dashboards/create`, `/dashboard/:id/rename`, `/dashboard/:id/delete`, `/dashboard/:id/panels/create`, `/dashboard/:id/panel/:panel_id/delete`, `/settings/scrape-targets`, `/settings/scrape-target/:id/update`, `/settings/scrape-target/:id/delete`.
-- **JSON/text routes delivered:** `/api/metrics/query`, `/api/logs/query`, `/api/logs/push`, `/api/alerts/state`, `/api/admin/scrape`, `/healthz`.
+- **JSON/text routes delivered:** `/api/metrics/query`, `/api/logs/query`, `/api/logs/push`, `/api/alerts/state`, `/api/admin/scrape`, `/healthz`, `/metrics`.
 - **Dashboard capability:** create/rename/delete dashboards; add/remove `metrics`, `logs`, and `stat` panels; Apache ECharts drives metrics charts.
 - **Metrics/query subset delivered:** PromQL-style selectors, `=`/`!=` label matching, `sum`, `avg`, `min`, `max`, `rate`, and `last_over_time` over the stored metric samples.
 - **Logs/query subset delivered:** Loki-style selectors with `=`/`!=`, line include/exclude filters, log line queries, plus `count_over_time` and `rate` metric-from-logs queries.
 - **Alerting delivered:** rules persist in SQLite, background evaluation updates `alert_state`, each evaluation appends to `alert_history`, recent history is visible on the Alerts page, timestamps are rendered in a more readable form, and state transitions emit stable internal self-logs.
-- **Operational controls delivered:** scrape targets are managed in Settings, can be edited or deleted, can be triggered immediately via manual scrape, Settings includes a small diagnostics summary, `/status` exposes authenticated runtime counters, rendered user-provided values are HTML-escaped in the UI, and internal self-logs use stable/derived logger classes with guardrails.
+- **Operational controls delivered:** scrape targets are managed in Settings, can be edited or deleted, can be triggered immediately via manual scrape, Settings includes a small diagnostics summary, `/status` exposes authenticated runtime counters, `/metrics` exposes internal Prometheus-style counters/gauges, rendered user-provided values are HTML-escaped in the UI, and internal self-logs use stable/derived logger classes with guardrails.
 
 ### Remaining intentionally deferred work
 - richer dashboard layout editing, duplication, reordering, and resizing
