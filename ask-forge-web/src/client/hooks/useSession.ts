@@ -112,7 +112,27 @@ export function useSession({
 						try {
 							const blocks: ContentBlock[] = [];
 							const parsed = JSON.parse(msg.content);
-							if (Array.isArray(parsed)) {
+
+							if (typeof parsed === "string") {
+								// Text-only response: persisted as JSON.stringify("text")
+								blocks.push({ type: "text", content: parsed });
+							} else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+								// Object format: { text, toolCalls } from session-logger
+								if (parsed.text) {
+									blocks.push({ type: "text", content: parsed.text });
+								}
+								if (Array.isArray(parsed.toolCalls)) {
+									for (const tc of parsed.toolCalls) {
+										blocks.push({
+											type: "tool_call",
+											name: tc.name || "unknown",
+											arguments: tc.params || tc.arguments || {},
+											isComplete: true,
+										});
+									}
+								}
+							} else if (Array.isArray(parsed)) {
+								// Array format (legacy or future)
 								for (const block of parsed) {
 									if (block.type === "text" && typeof block.text === "string") {
 										blocks.push({ type: "text", content: block.text });
@@ -126,6 +146,7 @@ export function useSession({
 									}
 								}
 							}
+
 							if (blocks.length > 0) {
 								// Merge with previous assistant message if exists
 								const lastMsg = clientMessages[clientMessages.length - 1];

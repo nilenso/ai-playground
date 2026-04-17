@@ -44,20 +44,43 @@ function dbMessagesToDisplay(dbMessages: DbMessage[]): Message[] {
 		} else if (msg.role === "assistant") {
 			let blocks: ContentBlock[];
 			try {
-				const content = JSON.parse(msg.content ?? "[]");
+				const parsed = JSON.parse(msg.content ?? "[]");
 				blocks = [];
-				for (const item of content) {
-					if (item.type === "text") {
-						blocks.push({ type: "text", content: item.text ?? "" });
-					} else if (item.type === "tool_use") {
-						blocks.push({
-							type: "tool_call",
-							name: item.name ?? "",
-							arguments: item.input ?? {},
-							isComplete: true,
-						});
+
+				if (typeof parsed === "string") {
+					// Text-only response: persisted as JSON.stringify("text")
+					blocks.push({ type: "text", content: parsed });
+				} else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+					// Object format: { text, toolCalls } from session-logger
+					if (parsed.text) {
+						blocks.push({ type: "text", content: parsed.text });
+					}
+					if (Array.isArray(parsed.toolCalls)) {
+						for (const tc of parsed.toolCalls) {
+							blocks.push({
+								type: "tool_call",
+								name: tc.name || "",
+								arguments: tc.params || tc.arguments || {},
+								isComplete: true,
+							});
+						}
+					}
+				} else if (Array.isArray(parsed)) {
+					// Array format (legacy or future)
+					for (const item of parsed) {
+						if (item.type === "text") {
+							blocks.push({ type: "text", content: item.text ?? "" });
+						} else if (item.type === "tool_use") {
+							blocks.push({
+								type: "tool_call",
+								name: item.name ?? "",
+								arguments: item.input ?? {},
+								isComplete: true,
+							});
+						}
 					}
 				}
+
 				if (blocks.length === 0) {
 					blocks = [{ type: "text", content: msg.content ?? "" }];
 				}
