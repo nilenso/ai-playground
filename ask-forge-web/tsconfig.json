@@ -14,6 +14,13 @@
 		"verbatimModuleSyntax": true,
 		"noEmit": true,
 
+		// Local link: @nilenso/megasthenes resolves via symlink in node_modules at runtime,
+		// but its package.json has no `exports`/`types` fields (JSR uses jsr.json for publish),
+		// so TS needs a path hint to find the source. Remove once published to JSR.
+		"paths": {
+			"@nilenso/megasthenes": ["./node_modules/@nilenso/megasthenes/src/index.ts"]
+		},
+
 		// Best practices
 		"strict": true,
 		"skipLibCheck": true,

@@ -1,13 +1,13 @@
-import { Client } from "@nilenso/ask-forge";
+import { Client } from "@nilenso/megasthenes";
 import { Hono } from "hono";
 import type { Session } from "../lib/stream-adapter.ts";
-import { buildDoneData, getTurnText, getTurnThinking, getTurnToolCalls, mapStreamEvent } from "../lib/stream-adapter.ts";
-
-// The SYSTEM_PROMPT is not re-exported from @nilenso/ask-forge's package index,
-// so we read it from the config module at the resolved path.
-// biome-ignore lint/suspicious/noExplicitAny: dynamic import of internal module
-const askForgeConfig: any = await import(import.meta.resolve("@nilenso/ask-forge").replace("/index.js", "/config.js"));
-const SYSTEM_PROMPT: string = askForgeConfig.SYSTEM_PROMPT;
+import {
+	buildDoneData,
+	getTurnText,
+	getTurnThinking,
+	getTurnToolCalls,
+	mapStreamEvent,
+} from "../lib/stream-adapter.ts";
 
 // Model configuration from environment
 const MODEL_PROVIDER = process.env.MODEL_PROVIDER || "anthropic";
@@ -207,7 +207,6 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 						thinking: { type: "adaptive", effort: "high" },
 						maxIterations: 20,
 						compaction: { enabled: true, contextWindow: 200_000 },
-						systemPrompt: SYSTEM_PROMPT,
 					},
 					(message) => {
 						send("progress", { message });
@@ -237,7 +236,6 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 					userId: payload.sub,
 					repositoryId: repository.id,
 					checkoutId: checkout.id,
-					systemPrompt: SYSTEM_PROMPT,
 				});
 
 				const session = wrapSession(rawSession, rawSession.id);
@@ -436,7 +434,6 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 				thinking: { type: "adaptive", effort: "high" },
 				maxIterations: 20,
 				compaction: { enabled: true, contextWindow: 200_000 },
-				systemPrompt: SYSTEM_PROMPT,
 			}),
 			sessionId,
 		);
@@ -451,16 +448,12 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 		// Check if there's an active streaming request for this session
 		const activeReq = getActiveRequest(sessionId);
 
-		sessionLogger.info(
-			"Session restored: {sessionId} with {messageCount} messages, compacted={hasCompaction} ({durationMs}ms)",
-			{
-				sessionId,
-				repoUrl: repoRow.git_url,
-				messageCount: dbMessages.length,
-				hasCompaction: !!compaction,
-				durationMs: Date.now() - restoreStart,
-			},
-		);
+		sessionLogger.info("Session restored: {sessionId} with {messageCount} messages ({durationMs}ms)", {
+			sessionId,
+			repoUrl: repoRow.git_url,
+			messageCount: dbMessages.length,
+			durationMs: Date.now() - restoreStart,
+		});
 
 		return c.json({
 			success: true,
