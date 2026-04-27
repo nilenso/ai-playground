@@ -21,7 +21,7 @@
 // Tracing MUST be imported before ask-forge
 import "../src/lib/tracing.ts";
 
-import { AskForgeClient } from "@nilenso/ask-forge";
+import { Client } from "@nilenso/megasthenes";
 
 const PHOENIX_BASE = process.env.PHOENIX_COLLECTOR_ENDPOINT?.replace("/v1/traces", "") ?? "http://localhost:6006";
 const REPO_URL = "https://github.com/nilenso/ask-forge";
@@ -134,7 +134,7 @@ console.log(`Phoenix reachable — trace count before: ${beforeCount}\n`);
 
 // Ask a question (forces tool use so we can verify tool spans)
 console.log(`Connecting to ${REPO_URL}...`);
-const client = new AskForgeClient();
+const client = new Client();
 const session = await client.connect(REPO_URL, {}, () => process.stdout.write("."));
 console.log(" connected.\n");
 

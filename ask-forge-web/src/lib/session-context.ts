@@ -1,4 +1,4 @@
-import type { Message } from "@nilenso/ask-forge";
+import type { Message } from "@nilenso/megasthenes";
 import { createSummaryMessage } from "./compaction.ts";
 import type { DbCompaction, DbMessage } from "./db.ts";
 

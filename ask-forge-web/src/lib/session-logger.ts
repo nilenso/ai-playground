@@ -1,5 +1,5 @@
 import type { Message } from "@mariozechner/pi-ai";
-import type { AskOptions, AskResult, Session } from "@nilenso/ask-forge";
+import type { AskOptions, AskResult, Session } from "@nilenso/megasthenes";
 import { maybeCompact } from "./compaction.ts";
 import {
 	createCompaction,

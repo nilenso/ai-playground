@@ -111,7 +111,7 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 		const attrs = span.attributes as Record<string, unknown>;
 
 		// Drop no-op compaction spans — they add noise when no compaction occurred
-		if (span.name === "compaction" && attrs["ask_forge.compaction.was_compacted"] === false) {
+		if (span.name === "compaction" && attrs["megasthenes.compaction.was_compacted"] === false) {
 			return;
 		}
 
@@ -210,13 +210,13 @@ class PhoenixEnrichingProcessor implements SpanProcessor {
 		} else if (span.name === "ask") {
 			attrs[OI_ATTR.SPAN_KIND] = "CHAIN";
 			// Map session ID
-			const sessionId = attrs["ask_forge.session.id"];
+			const sessionId = attrs["megasthenes.session.id"];
 			if (typeof sessionId === "string") attrs[OI_ATTR.SESSION_ID] = sessionId;
 			// Set metadata with repo context
-			const repoUrl = attrs["ask_forge.repo.url"];
-			const commitish = attrs["ask_forge.repo.commitish"];
-			const iterations = attrs["ask_forge.total_iterations"];
-			const toolCalls = attrs["ask_forge.total_tool_calls"];
+			const repoUrl = attrs["megasthenes.repo.url"];
+			const commitish = attrs["megasthenes.repo.commitish"];
+			const iterations = attrs["megasthenes.total_iterations"];
+			const toolCalls = attrs["megasthenes.total_tool_calls"];
 			const metadata: Record<string, unknown> = {};
 			if (typeof repoUrl === "string") metadata.repo_url = repoUrl;
 			if (typeof commitish === "string") metadata.commitish = commitish;

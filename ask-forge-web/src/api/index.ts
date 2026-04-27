@@ -1,17 +1,10 @@
-import { AskForgeClient, type Session } from "@nilenso/ask-forge";
+import { buildDefaultSystemPrompt, Client, type Session } from "@nilenso/megasthenes";
 import { Hono } from "hono";
 
-// The SYSTEM_PROMPT is not re-exported from @nilenso/ask-forge's package index,
-// so we read it from the config module at the resolved path.
-// biome-ignore lint/suspicious/noExplicitAny: dynamic import of internal module
-const askForgeConfig: any = await import(import.meta.resolve("@nilenso/ask-forge").replace("/index.js", "/config.js"));
-const SYSTEM_PROMPT: string = askForgeConfig.SYSTEM_PROMPT;
-
-// Initialize ask-forge client with sandbox configuration if available
 const sandboxUrl = process.env.SANDBOX_URL;
 const sandboxSecret = process.env.SANDBOX_SECRET;
 
-const askForgeClient = new AskForgeClient(
+const client = new Client(
 	sandboxUrl
 		? {
 				sandbox: {
@@ -197,7 +190,7 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 
 			const connectStart = Date.now();
 			try {
-				const rawSession = await askForgeClient.connect(normalized, { commitish: commit }, (message) => {
+				const rawSession = await client.connect(normalized, { commitish: commit }, (message) => {
 					send("progress", { message });
 				});
 
@@ -224,7 +217,7 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 					userId: payload.sub,
 					repositoryId: repository.id,
 					checkoutId: checkout.id,
-					systemPrompt: SYSTEM_PROMPT,
+					systemPrompt: buildDefaultSystemPrompt(normalized, rawSession.repo.commitish),
 				});
 
 				const session = wrapSession(rawSession, rawSession.id);
@@ -415,7 +408,7 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 		}
 
 		// Reconnect to the repository at the same commit
-		const session = wrapSession(await askForgeClient.connect(repoRow.git_url, { commitish }), sessionId);
+		const session = wrapSession(await client.connect(repoRow.git_url, { commitish }), sessionId);
 
 		// Load messages from DB and restore them, considering compaction
 		const compaction = getLatestCompaction(sessionId);
