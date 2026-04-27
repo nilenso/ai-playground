@@ -124,8 +124,8 @@ export function ConnectPhase({
 							<p>
 								{isDisabled ? (
 									<>
-										Your account has been disabled, <strong>{auth.username}</strong>. Please contact an administrator
-										if you believe this is an error.
+										Your account has been disabled, <strong>{auth.username}</strong>. Please contact an administrator if
+										you believe this is an error.
 									</>
 								) : (
 									<>

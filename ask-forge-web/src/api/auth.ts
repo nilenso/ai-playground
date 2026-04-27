@@ -13,9 +13,9 @@ import {
 	generateJwt,
 	getApprovedUsers,
 	getDisabledUsers,
+	getRandomAdminEmail,
 	getUserById,
 	getUserFromContext,
-	getRandomAdminEmail,
 	getWaitlistCount,
 	getWaitlistedUsers,
 	setAuthCookie,
@@ -129,8 +129,7 @@ async function processGitHubCallback(
 					},
 				});
 				if (emailsResponse.ok) {
-					const emails: Array<{ email: string; primary: boolean; verified: boolean }> =
-						await emailsResponse.json();
+					const emails: Array<{ email: string; primary: boolean; verified: boolean }> = await emailsResponse.json();
 					const primary = emails.find((e) => e.primary && e.verified);
 					const verified = emails.find((e) => e.verified);
 					githubUser.email = primary?.email ?? verified?.email ?? null;

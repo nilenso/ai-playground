@@ -183,11 +183,7 @@ export function AdminWaitlistPanel({ onClose }: AdminWaitlistPanelProps) {
 
 							{/* ── Approved ── */}
 							<div className="admin-panel-section">
-								<button
-									type="button"
-									className="admin-panel-section-toggle"
-									onClick={() => setApprovedOpen((o) => !o)}
-								>
+								<button type="button" className="admin-panel-section-toggle" onClick={() => setApprovedOpen((o) => !o)}>
 									<svg
 										className={`admin-panel-chevron ${approvedOpen ? "open" : ""}`}
 										viewBox="0 0 24 24"

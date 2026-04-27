@@ -273,10 +273,7 @@ export function approveUser(userId: number): void {
 
 export function disapproveUser(userId: number): void {
 	const db = getDb();
-	db.run("UPDATE users SET status = 'disapproved', updated_at = ? WHERE id = ?", [
-		new Date().toISOString(),
-		userId,
-	]);
+	db.run("UPDATE users SET status = 'disapproved', updated_at = ? WHERE id = ?", [new Date().toISOString(), userId]);
 }
 
 export function disableUser(userId: number): void {
