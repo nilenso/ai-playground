@@ -1,4 +1,4 @@
-import { buildDefaultSystemPrompt, Client, type Session } from "@nilenso/megasthenes";
+import { buildDefaultSystemPrompt, Client, type ModelConfig, type Session } from "@nilenso/megasthenes";
 import { Hono } from "hono";
 
 const sandboxUrl = process.env.SANDBOX_URL;
@@ -15,6 +15,12 @@ const client = new Client(
 			}
 		: undefined,
 );
+
+const DEFAULT_MODEL: ModelConfig = {
+	provider: process.env.MEGASTHENES_MODEL_PROVIDER ?? "openrouter",
+	id: process.env.MEGASTHENES_MODEL_ID ?? "anthropic/claude-sonnet-4.6",
+};
+const DEFAULT_MAX_ITERATIONS = Number.parseInt(process.env.MEGASTHENES_MAX_ITERATIONS ?? "20", 10) || 20;
 
 sandboxLogger.info("Sandbox mode: {mode}", {
 	mode: sandboxUrl ? "enabled" : "disabled",
@@ -189,10 +195,20 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 			}, 15000);
 
 			const connectStart = Date.now();
+			let rawSession: Session | undefined;
+			let ownsSession = false;
 			try {
-				const rawSession = await client.connect(normalized, { commitish: commit }, (message) => {
-					send("progress", { message });
-				});
+				rawSession = await client.connect(
+					{
+						repo: { url: normalized, commitish: commit },
+						model: DEFAULT_MODEL,
+						maxIterations: DEFAULT_MAX_ITERATIONS,
+					},
+					(message) => {
+						send("progress", { message });
+					},
+				);
+				ownsSession = true;
 
 				// Check for cached summary
 				const existingRepo = getRepositoryByGitUrl(normalized);
@@ -222,9 +238,10 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 
 				const session = wrapSession(rawSession, rawSession.id);
 
-				// Store the session
+				// Store the session — ownership transfers to the in-memory map
 				sessions.set(session.id, session);
 				sessionTimestamps.set(session.id, Date.now());
+				ownsSession = false;
 
 				sessionLogger.info("Session connected: {sessionId} to {repoUrl} @ {commit} (user={userId}, {durationMs}ms)", {
 					sessionId: session.id,
@@ -253,6 +270,15 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 				});
 				send("error", { success: false, error: message });
 			} finally {
+				if (ownsSession && rawSession) {
+					try {
+						await rawSession.close();
+					} catch (closeErr) {
+						sessionLogger.error("Failed to close orphaned session after connect failure: {error}", {
+							error: closeErr instanceof Error ? closeErr.message : String(closeErr),
+						});
+					}
+				}
 				clearInterval(heartbeat);
 				closed = true;
 				controller.close();
@@ -397,6 +423,8 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 	}
 
 	const restoreStart = Date.now();
+	let rawSession: Session | undefined;
+	let ownsSession = false;
 	try {
 		// Look up the commit from the checkout record
 		let commitish: string | undefined;
@@ -408,7 +436,13 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 		}
 
 		// Reconnect to the repository at the same commit
-		const session = wrapSession(await client.connect(repoRow.git_url, { commitish }), sessionId);
+		rawSession = await client.connect({
+			repo: { url: repoRow.git_url, commitish },
+			model: DEFAULT_MODEL,
+			maxIterations: DEFAULT_MAX_ITERATIONS,
+		});
+		ownsSession = true;
+		const session = wrapSession(rawSession, sessionId);
 
 		// Load messages from DB and restore them, considering compaction
 		const compaction = getLatestCompaction(sessionId);
@@ -419,10 +453,11 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 			session.replaceMessages(messages);
 		}
 
-		// Store the session in memory and mark as active
+		// Store the session in memory and mark as active — ownership transfers to the in-memory map
 		sessions.set(session.id, session);
 		sessionTimestamps.set(session.id, Date.now());
 		updateSessionStatus(sessionId, "active");
+		ownsSession = false;
 
 		// Check if there's an active streaming request for this session
 		const activeReq = getActiveRequest(sessionId);
@@ -457,6 +492,16 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 			durationMs: Date.now() - restoreStart,
 		});
 		return c.json({ success: false, error: message }, 500);
+	} finally {
+		if (ownsSession && rawSession) {
+			try {
+				await rawSession.close();
+			} catch (closeErr) {
+				sessionLogger.error("Failed to close orphaned session after restore failure: {error}", {
+					error: closeErr instanceof Error ? closeErr.message : String(closeErr),
+				});
+			}
+		}
 	}
 });
 
