@@ -87,6 +87,32 @@ export interface ActionEvent {
  */
 export type ActionHandler = (event: ActionEvent) => Promise<void>;
 
+// ─── Slash commands ─────────────────────────────────────
+
+export interface SlashCommandResponseOptions {
+	/** Plain text response */
+	text?: string;
+	/** Block Kit blocks */
+	blocks?: Block[];
+	/** Slack response visibility */
+	responseType?: "ephemeral" | "in_channel";
+}
+
+export interface SlashCommandEvent {
+	/** Command name, e.g. /jadoo-sync */
+	command: string;
+	/** Free-form text after the command */
+	text: string;
+	/** Slack user ID of the invoker */
+	userId: string;
+	/** Channel where the command was invoked */
+	channelId: string;
+	/** Send a response via Slack's slash-command response channel. */
+	respond(options: SlashCommandResponseOptions): Promise<void>;
+}
+
+export type SlashCommandHandler = (event: SlashCommandEvent) => Promise<void>;
+
 // ─── User info ──────────────────────────────────────────
 
 export interface SlackUserInfo {
@@ -133,6 +159,12 @@ export interface SlackService {
 	 * The framework calls Slack's ack() before invoking the handler.
 	 */
 	onAction(pattern: RegExp, handler: ActionHandler): void;
+
+	/**
+	 * Register a handler for a slash command, e.g. `/jadoo-sync`.
+	 * The framework acks the command before invoking the handler.
+	 */
+	onCommand(command: string, handler: SlashCommandHandler): void;
 
 	// ── Outgoing messages ─────────────────────
 

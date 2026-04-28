@@ -25,6 +25,9 @@ import type {
 	SlackMessage,
 	SlackService,
 	SlackUserInfo,
+	SlashCommandEvent,
+	SlashCommandHandler,
+	SlashCommandResponseOptions,
 	UpdateMessageOptions,
 } from "../src/interfaces/slack.js";
 import { validateStructuredResponse } from "../src/services/ai/structured.js";
@@ -146,6 +149,18 @@ interface RegisteredAction {
 	handler: ActionHandler;
 }
 
+interface RegisteredCommand {
+	command: string;
+	handler: SlashCommandHandler;
+}
+
+export interface SlashCommandResponseRecord {
+	command: string;
+	userId: string;
+	channelId: string;
+	options: SlashCommandResponseOptions;
+}
+
 /** Recorded postMessage call, including the options. */
 export interface SentSlackMessage extends SentMessage {
 	options: PostMessageOptions;
@@ -161,11 +176,14 @@ export interface UpdatedSlackMessage {
 export class MockSlackService implements SlackService {
 	readonly messageHandlers: MessageHandler[] = [];
 	readonly actionHandlers: RegisteredAction[] = [];
+	readonly commandHandlers: RegisteredCommand[] = [];
 
 	/** All messages posted via postMessage() */
 	readonly postedMessages: SentSlackMessage[] = [];
 	/** All messages updated via updateMessage() */
 	readonly updatedMessages: UpdatedSlackMessage[] = [];
+	/** All slash-command responses sent via respond() */
+	readonly commandResponses: SlashCommandResponseRecord[] = [];
 
 	/** Canned user info — keyed by user ID */
 	readonly users: Map<string, SlackUserInfo> = new Map();
@@ -197,6 +215,10 @@ export class MockSlackService implements SlackService {
 
 	onAction(pattern: RegExp, handler: ActionHandler): void {
 		this.actionHandlers.push({ pattern, handler });
+	}
+
+	onCommand(command: string, handler: SlashCommandHandler): void {
+		this.commandHandlers.push({ command, handler });
 	}
 
 	// ── Outgoing messages ─────────────────────
@@ -255,6 +277,27 @@ export class MockSlackService implements SlackService {
 		for (const { pattern, handler } of this.actionHandlers) {
 			if (pattern.test(event.actionId)) {
 				await handler(event);
+			}
+		}
+	}
+
+	/**
+	 * Simulate a slash command invocation.
+	 */
+	async simulateCommand(event: Omit<SlashCommandEvent, "respond">): Promise<void> {
+		for (const { command, handler } of this.commandHandlers) {
+			if (command === event.command) {
+				await handler({
+					...event,
+					respond: async (options: SlashCommandResponseOptions) => {
+						this.commandResponses.push({
+							command: event.command,
+							userId: event.userId,
+							channelId: event.channelId,
+							options,
+						});
+					},
+				});
 			}
 		}
 	}

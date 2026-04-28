@@ -1,10 +1,9 @@
 /**
- * Admin plugin — provides a "sync users" button for importing Slack channel
- * members and linking their Harvest accounts by email.
+ * Admin plugin — provides a `/jadoo-sync` slash command for importing Slack
+ * channel members and linking their Harvest accounts by email.
  *
- * Listens for messages containing "!sync" in the configured leave channel
- * (from non-bot users only). Responds with a confirmation button, then runs
- * the import on confirm.
+ * The slash command responds ephemerally so only the invoker sees the sync
+ * output. This avoids noisy visible admin messages in the leave channel.
  */
 
 import type { Database } from "bun:sqlite";
@@ -31,87 +30,32 @@ export class AdminPlugin implements Plugin {
 	async init(ctx: BotContext, config: Record<string, string | undefined>) {
 		const channelId = config.channelId as string;
 
-		// Listen for "!sync" messages
-		ctx.slack.onMessage(async (msg) => {
-			if (msg.botId) return null;
-			if (msg.channelId !== channelId) return null;
-			if (!msg.text.trim().toLowerCase().startsWith("!sync")) return null;
+		ctx.slack.onCommand("/jadoo-sync", async (event) => {
+			if (event.channelId !== channelId) {
+				await event.respond({
+					text: `⚠️ Please run /jadoo-sync in the configured leave channel (<#${channelId}>).`,
+				});
+				return;
+			}
 
-			await ctx.slack.postMessage(msg.channelId, {
-				text: "Sync users from Slack & Harvest?",
-				blocks: [
-					{
-						type: "section",
-						text: {
-							type: "mrkdwn",
-							text: "🔄 *Sync users*\n\nThis will:\n• Import all channel members from Slack\n• Match Harvest accounts by email",
-						},
-					},
-					{
-						type: "actions",
-						elements: [
-							{
-								type: "button",
-								text: { type: "plain_text", text: "✓ Run sync", emoji: true },
-								action_id: "admin_sync_confirm",
-								style: "primary",
-							},
-							{
-								type: "button",
-								text: { type: "plain_text", text: "✗ Cancel", emoji: true },
-								action_id: "admin_sync_cancel",
-								style: "danger",
-							},
-						],
-					},
-				],
-				threadTs: msg.threadTs ?? msg.ts,
-			});
-
-			return null;
-		});
-
-		// Handle confirm
-		ctx.slack.onAction(/^admin_sync_confirm$/, async (event) => {
-			await ctx.slack.updateMessage(event.channelId, event.messageTs, {
-				text: "⏳ Syncing users…",
-				blocks: [{ type: "section", text: { type: "mrkdwn", text: "⏳ *Syncing users…*" } }],
+			await event.respond({
+				text: "⏳ Syncing users from Slack and Harvest…",
 			});
 
 			try {
 				const result = await syncUsers(this.db, ctx, channelId);
-				const lines = [
-					"✅ *User sync complete*",
-					`• Imported: ${result.imported}`,
-					`• Updated: ${result.updated}`,
-					`• Skipped: ${result.skipped} (bots/deactivated)`,
-					`• Harvest linked: ${result.harvestLinked}`,
-				];
-				if (result.errors.length > 0) {
-					lines.push(`• Errors: ${result.errors.length}`);
-					for (const err of result.errors.slice(0, 3)) {
-						lines.push(`  – ${err}`);
-					}
-				}
-				await ctx.slack.updateMessage(event.channelId, event.messageTs, {
-					text: lines.join("\n"),
-					blocks: [{ type: "section", text: { type: "mrkdwn", text: lines.join("\n") } }],
+				const summary = formatSyncResult(result);
+				await event.respond({
+					text: summary,
+					blocks: [{ type: "section", text: { type: "mrkdwn", text: summary } }],
 				});
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
-				await ctx.slack.updateMessage(event.channelId, event.messageTs, {
+				await event.respond({
 					text: `❌ Sync failed: ${msg}`,
 					blocks: [{ type: "section", text: { type: "mrkdwn", text: `❌ *Sync failed:* ${msg}` } }],
 				});
 			}
-		});
-
-		// Handle cancel
-		ctx.slack.onAction(/^admin_sync_cancel$/, async (event) => {
-			await ctx.slack.updateMessage(event.channelId, event.messageTs, {
-				text: "Sync cancelled.",
-				blocks: [{ type: "section", text: { type: "mrkdwn", text: "🚫 *Sync cancelled.*" } }],
-			});
 		});
 	}
 }
@@ -124,6 +68,25 @@ interface SyncResult {
 	skipped: number;
 	harvestLinked: number;
 	errors: string[];
+}
+
+function formatSyncResult(result: SyncResult): string {
+	const lines = [
+		"✅ *User sync complete*",
+		`• Imported: ${result.imported}`,
+		`• Updated: ${result.updated}`,
+		`• Skipped: ${result.skipped} (bots/deactivated)`,
+		`• Harvest linked: ${result.harvestLinked}`,
+	];
+
+	if (result.errors.length > 0) {
+		lines.push(`• Errors: ${result.errors.length}`);
+		for (const err of result.errors.slice(0, 3)) {
+			lines.push(`  – ${err}`);
+		}
+	}
+
+	return lines.join("\n");
 }
 
 async function syncUsers(db: Database, ctx: BotContext, channelId: string): Promise<SyncResult> {
