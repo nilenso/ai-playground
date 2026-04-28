@@ -13,6 +13,8 @@ import type {
 	SlackMessage,
 	SlackService,
 	SlackUserInfo,
+	SlashCommandHandler,
+	SlashCommandResponseOptions,
 	UpdateMessageOptions,
 } from "../../interfaces/slack.js";
 
@@ -133,6 +135,38 @@ export class BoltSlackService implements SlackService {
 							},
 						},
 					],
+				});
+			}
+		});
+	}
+
+	onCommand(command: string, handler: SlashCommandHandler): void {
+		this.app.command(command, async ({ ack, command: slashCommand, respond }) => {
+			await ack();
+
+			const event = {
+				command: slashCommand.command,
+				text: slashCommand.text,
+				userId: slashCommand.user_id,
+				channelId: slashCommand.channel_id,
+				respond: async (options: SlashCommandResponseOptions) => {
+					await respond({
+						text: options.text,
+						blocks: options.blocks,
+						response_type: options.responseType ?? "ephemeral",
+					});
+				},
+			};
+
+			try {
+				await handler(event);
+			} catch (err) {
+				const errorMessage = this.formatError(err);
+				console.error(
+					`[slack] slash command handler failed for command=${event.command} user=${event.userId} channel=${event.channelId}: ${errorMessage}`,
+				);
+				await event.respond({
+					text: "⚠️ Sorry, something went wrong while processing that command. Please try again or contact an admin if it keeps happening.",
 				});
 			}
 		});

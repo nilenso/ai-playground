@@ -212,6 +212,27 @@ describe("MockSlackService", () => {
 		expect(received).toHaveLength(0);
 	});
 
+	it("dispatches slash commands and records ephemeral responses", async () => {
+		const slack = new MockSlackService();
+		const received: string[] = [];
+
+		slack.onCommand("/jadoo-sync", async (event) => {
+			received.push(`${event.command}:${event.text}`);
+			await event.respond({ text: "done" });
+		});
+
+		await slack.simulateCommand({
+			command: "/jadoo-sync",
+			text: "",
+			userId: "U1",
+			channelId: "C1",
+		});
+
+		expect(received).toEqual(["/jadoo-sync:"]);
+		expect(slack.commandResponses).toHaveLength(1);
+		expect(slack.commandResponses[0].options.text).toBe("done");
+	});
+
 	// ── Thread replies ───────────────────────
 
 	it("returns seeded thread replies", async () => {
