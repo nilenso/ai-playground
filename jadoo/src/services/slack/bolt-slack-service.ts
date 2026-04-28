@@ -20,6 +20,10 @@ export class BoltSlackService implements SlackService {
 	private app: App;
 	private handlers: MessageHandler[] = [];
 
+	private formatError(err: unknown): string {
+		return err instanceof Error ? err.message : String(err);
+	}
+
 	constructor(config: SlackConfig) {
 		this.app = new BoltApp({
 			token: config.botToken,
@@ -54,9 +58,20 @@ export class BoltSlackService implements SlackService {
 			};
 
 			for (const handler of this.handlers) {
-				const reply = await handler(incoming);
-				if (reply) {
-					await say({ text: reply, thread_ts: msg.thread_ts ?? msg.ts });
+				try {
+					const reply = await handler(incoming);
+					if (reply) {
+						await say({ text: reply, thread_ts: msg.thread_ts ?? msg.ts });
+					}
+				} catch (err) {
+					const errorMessage = this.formatError(err);
+					console.error(
+						`[slack] message handler failed for user=${incoming.userId} channel=${incoming.channelId} ts=${incoming.ts}: ${errorMessage}`,
+					);
+					await say({
+						text: "⚠️ Sorry, something went wrong while processing that message. Please try again or contact an admin if it keeps happening.",
+						thread_ts: msg.thread_ts ?? msg.ts,
+					});
 				}
 			}
 		});
@@ -91,14 +106,35 @@ export class BoltSlackService implements SlackService {
 
 			if (!action?.action_id || !user?.id || !channel?.id || !message?.ts) return;
 
-			await handler({
+			const event = {
 				actionId: action.action_id,
 				value: action.value ?? "",
 				userId: user.id,
 				channelId: channel.id,
 				messageTs: message.ts,
 				threadTs: message.thread_ts,
-			});
+			};
+
+			try {
+				await handler(event);
+			} catch (err) {
+				const errorMessage = this.formatError(err);
+				console.error(
+					`[slack] action handler failed for action=${event.actionId} user=${event.userId} channel=${event.channelId} ts=${event.messageTs}: ${errorMessage}`,
+				);
+				await this.updateMessage(event.channelId, event.messageTs, {
+					text: "⚠️ Sorry, something went wrong while processing that action. Please try again or contact an admin if it keeps happening.",
+					blocks: [
+						{
+							type: "section",
+							text: {
+								type: "mrkdwn",
+								text: "⚠️ *Something went wrong while processing that action.* Please try again or contact an admin if it keeps happening.",
+							},
+						},
+					],
+				});
+			}
 		});
 	}
 
