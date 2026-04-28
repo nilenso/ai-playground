@@ -43,6 +43,12 @@ export interface CancelLeavePayload {
 	dates: string[]; // YYYY-MM-DD
 }
 
+interface LeaveProcessingFailure {
+	date: string;
+	stage: "calendar" | "harvest" | "cancel" | "validation";
+	message: string;
+}
+
 // ─── Config ─────────────────────────────────────────────
 
 export interface WorkerConfig {
@@ -179,10 +185,18 @@ export class BackgroundWorker {
 		if (!user) {
 			console.error(`[worker] user ${action.user_id} not found for action ${action.id}`);
 			updatePendingActionStatus(this.db, action.id, "failed");
+			await this.notifyFailed(action, [
+				{
+					date: payload.dates.join(", "),
+					stage: "validation",
+					message: `User ${action.user_id} no longer exists in Jadoo's database.`,
+				},
+			]);
 			return;
 		}
 
 		let allSucceeded = true;
+		const failures: LeaveProcessingFailure[] = [];
 
 		for (const date of payload.dates) {
 			// Upsert a leave record in 'confirmed' state
@@ -196,6 +210,7 @@ export class BackgroundWorker {
 				status: "confirmed",
 			});
 
+			let stage: LeaveProcessingFailure["stage"] = "calendar";
 			try {
 				// Sync to Calendar
 				const start = new Date(`${date}T00:00:00`);
@@ -210,6 +225,7 @@ export class BackgroundWorker {
 				// Sync to Harvest (only if user has a Harvest mapping)
 				let harvestEntryId: number | null = null;
 				if (user.harvest_user_id) {
+					stage = "harvest";
 					harvestEntryId = await this.harvest.createTimeEntry({
 						harvestUserId: user.harvest_user_id,
 						date,
@@ -228,6 +244,8 @@ export class BackgroundWorker {
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
 				const retryCount = incrementLeaveRecordRetry(this.db, record.id, msg);
+
+				failures.push({ date, stage, message: msg });
 
 				if (retryCount >= this.maxRetries) {
 					updateLeaveRecordStatus(this.db, record.id, {
@@ -263,7 +281,7 @@ export class BackgroundWorker {
 			} else {
 				// All dates either completed or failed
 				updatePendingActionStatus(this.db, action.id, "failed");
-				await this.notifyFailed(action);
+				await this.notifyFailed(action, failures, payload);
 			}
 		}
 	}
@@ -274,6 +292,13 @@ export class BackgroundWorker {
 		if (!user) {
 			console.error(`[worker] user ${action.user_id} not found for action ${action.id}`);
 			updatePendingActionStatus(this.db, action.id, "failed");
+			await this.notifyFailed(action, [
+				{
+					date: payload.dates.join(", "),
+					stage: "validation",
+					message: `User ${action.user_id} no longer exists in Jadoo's database.`,
+				},
+			]);
 			return;
 		}
 
@@ -289,6 +314,21 @@ export class BackgroundWorker {
 			)
 			.all(user.id, ...payload.dates);
 
+		if (records.length === 0) {
+			updatePendingActionStatus(this.db, action.id, "failed");
+			await this.notifyFailed(
+				action,
+				payload.dates.map((date) => ({
+					date,
+					stage: "validation",
+					message: "No matching leave record was found to cancel.",
+				})),
+			);
+			return;
+		}
+
+		const failures: LeaveProcessingFailure[] = [];
+
 		for (const record of records) {
 			try {
 				if (record.calendar_event_id) {
@@ -301,11 +341,18 @@ export class BackgroundWorker {
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
 				console.error(`[worker] failed to cancel leave record ${record.id}: ${msg}`);
+				failures.push({ date: record.date, stage: "cancel", message: msg });
 				updateLeaveRecordStatus(this.db, record.id, {
 					status: "failed",
 					errorMessage: msg,
 				});
 			}
+		}
+
+		if (failures.length > 0) {
+			updatePendingActionStatus(this.db, action.id, "failed");
+			await this.notifyFailed(action, failures);
+			return;
 		}
 
 		updatePendingActionStatus(this.db, action.id, "completed");
@@ -338,20 +385,47 @@ export class BackgroundWorker {
 		}
 	}
 
-	private async notifyFailed(action: DbPendingAction): Promise<void> {
+	private async notifyFailed(
+		action: DbPendingAction,
+		failures: LeaveProcessingFailure[],
+		payload?: CreateLeavePayload,
+	): Promise<void> {
 		const channel = action.slack_channel_id;
 		const ts = action.slack_bot_message_ts;
 		if (!channel || !ts) return;
 
+		const totalDates = payload?.dates.length;
+		const uniqueFailures = failures.slice(0, 5).map((failure) => {
+			const stageLabel =
+				failure.stage === "calendar"
+					? "Calendar"
+					: failure.stage === "harvest"
+						? "Harvest"
+						: failure.stage === "cancel"
+							? "Cancellation"
+							: "Validation";
+			return `• ${failure.date}: ${stageLabel} — ${failure.message}`;
+		});
+		const summary =
+			totalDates && totalDates > failures.length
+				? `Some dates may have succeeded, but ${failures.length} date(s) failed.`
+				: "The request could not be completed.";
+		const message = [
+			"❌ Leave processing failed.",
+			summary,
+			"Please try again or contact an admin.",
+			...uniqueFailures,
+		].join("\n");
+
 		try {
 			await this.slack.updateMessage(channel, ts, {
-				text: "❌ Leave sync failed after retries. Please contact an admin.",
+				text: message,
 				blocks: [
 					{
 						type: "section",
 						text: {
 							type: "mrkdwn",
-							text: "❌ *Leave sync failed* after retries. Please contact an admin.",
+							text: `❌ *Leave processing failed*\n${summary}\nPlease try again or contact an admin.${uniqueFailures.length ? `\n\n${uniqueFailures.join("\n")}` : ""}`,
 						},
 					},
 				],

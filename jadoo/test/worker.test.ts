@@ -189,6 +189,8 @@ describe("processTick — create_leave", () => {
 		expect(slack.updatedMessages.length).toBeGreaterThanOrEqual(1);
 		const lastUpdate = slack.updatedMessages[slack.updatedMessages.length - 1];
 		expect(lastUpdate.options.text).toContain("❌");
+		expect(lastUpdate.options.text).toContain("Calendar");
+		expect(lastUpdate.options.text).toContain("2026-04-01");
 	});
 
 	it("still processes leave for a deactivated user", async () => {
@@ -332,6 +334,26 @@ describe("processTick — cancel_leave", () => {
 
 		const records = getLeaveRecordsByStatus(db, "cancelled");
 		expect(records).toHaveLength(1);
+	});
+
+	it("fails cancellation with a helpful message when no matching leave exists", async () => {
+		const action = createPendingAction(db, {
+			userId: user.id,
+			actionType: "cancel_leave",
+			payload: { dates: ["2026-04-09"] },
+			slackChannelId: "C1",
+			expiresAt: futureExpiry(),
+		});
+		updatePendingActionBotMessageTs(db, action.id, "bot-msg-404");
+		updatePendingActionStatus(db, action.id, "confirmed");
+
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		await worker.processTick();
+
+		expect(getPendingActionById(db, action.id)?.status).toBe("failed");
+		expect(slack.updatedMessages).toHaveLength(1);
+		expect(slack.updatedMessages[0].options.text).toContain("No matching leave record");
+		expect(slack.updatedMessages[0].options.text).toContain("2026-04-09");
 	});
 });
 
