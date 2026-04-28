@@ -2,8 +2,10 @@ import type { AskOptions, AskStream, Session, StreamEvent, TurnResult } from "@n
 import {
 	createCompaction,
 	createMessage,
+	createTurn,
 	getMessagesBySession,
 	getSession,
+	getTurnsBySession,
 	updateSessionStatus,
 	updateSessionTitle,
 } from "./db.ts";
@@ -110,6 +112,7 @@ export function wrapSession(session: Session, sessionId: string): WrappedSession
 	const existingSession = getSession(sessionId);
 	let hasTitle = !!existingSession?.title;
 	let ordinal = getMessagesBySession(sessionId).length;
+	let turnOrdinal = getTurnsBySession(sessionId).length;
 
 	// Backfill title from first user message if missing (e.g., shared/restored sessions)
 	if (!hasTitle) {
@@ -151,6 +154,22 @@ export function wrapSession(session: Session, sessionId: string): WrappedSession
 				} finally {
 					try {
 						const turn = await innerStream.result();
+						// Native turn persistence — canonical source for `initialTurns` on restore.
+						createTurn({
+							sessionId,
+							turnId: turn.id,
+							ordinal: turnOrdinal,
+							prompt: turn.prompt,
+							stepsJson: JSON.stringify(turn.steps),
+							usageJson: JSON.stringify(turn.usage),
+							metadataJson: JSON.stringify(turn.metadata),
+							errorJson: turn.error ? JSON.stringify(turn.error) : null,
+							startedAt: turn.startedAt,
+							endedAt: turn.endedAt,
+						});
+						turnOrdinal++;
+						// Legacy messages-table dual-write — kept one release as a safety net for
+						// /sessions/:id/messages, /share/:token, and dump-sessions.ts.
 						ordinal = persistTurnSteps(sessionId, ordinal, turn);
 						if (pendingCompaction) {
 							createCompaction({

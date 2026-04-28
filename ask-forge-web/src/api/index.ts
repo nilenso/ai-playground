@@ -41,12 +41,14 @@ import {
 	getRepositoryByGitUrl,
 	getSession,
 	getShareLink,
+	getTurnsBySession,
 	recordCheckout,
 	updateSessionStatus,
 	updateSessionTitle,
 } from "../lib/db.ts";
 import { sandboxLogger, sessionLogger, startupLogger } from "../lib/logger.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
+import { dbMessagesToTurns, parseTurnRow } from "../lib/session-context.ts";
 import { summarizeTurn, type WrappedSession, wrapSession } from "../lib/session-logger.ts";
 import { getActiveRequest } from "../websocket.ts";
 
@@ -442,20 +444,28 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 			commitish = checkoutRow?.commit_id;
 		}
 
+		// Restore LLM context: prefer native turns from the turns table; for
+		// sessions created before that table existed, reconstruct best-effort
+		// turns from the legacy messages table.
+		const compaction = getLatestCompaction(sessionId);
+		const lastCompactionSummary = compaction?.summary;
+		const dbTurns = getTurnsBySession(sessionId);
+		const dbMessages = compaction ? getNonCompactedMessages(sessionId) : getMessagesBySession(sessionId);
+		const initialTurns =
+			dbTurns.length > 0
+				? dbTurns.map(parseTurnRow)
+				: dbMessagesToTurns(dbMessages, repoRow.git_url, commitish ?? "HEAD");
+
 		// Reconnect to the repository at the same commit
 		rawSession = await client.connect({
 			repo: { url: repoRow.git_url, commitish },
 			model: DEFAULT_MODEL,
 			maxIterations: DEFAULT_MAX_ITERATIONS,
+			initialTurns,
+			lastCompactionSummary,
 		});
 		ownsSession = true;
 		const session = wrapSession(rawSession, sessionId);
-
-		// TODO(phase 4): pass `initialTurns` + `lastCompactionSummary` to client.connect()
-		// so the LLM context is restored. Phase 3 leaves the megasthenes session empty —
-		// only DB-side message history survives across restore for now.
-		const compaction = getLatestCompaction(sessionId);
-		const dbMessages = compaction ? getNonCompactedMessages(sessionId) : getMessagesBySession(sessionId);
 
 		// Store the session in memory and mark as active — ownership transfers to the in-memory map
 		sessions.set(session.id, session);

@@ -639,6 +639,60 @@ export function getNonCompactedMessages(sessionId: string): DbMessage[] {
 		.all(sessionId);
 }
 
+// ─── Turn types and functions (megasthenes TurnResult persistence) ───────────
+
+export interface DbTurn {
+	session_id: string;
+	turn_id: string;
+	ordinal: number;
+	prompt: string;
+	steps_json: string;
+	usage_json: string;
+	metadata_json: string;
+	error_json: string | null;
+	started_at: number;
+	ended_at: number;
+	created_at: string;
+}
+
+export function createTurn(params: {
+	sessionId: string;
+	turnId: string;
+	ordinal: number;
+	prompt: string;
+	stepsJson: string;
+	usageJson: string;
+	metadataJson: string;
+	errorJson: string | null;
+	startedAt: number;
+	endedAt: number;
+}): void {
+	const db = getDb();
+	db.run(
+		`INSERT OR IGNORE INTO turns
+		 (session_id, turn_id, ordinal, prompt, steps_json, usage_json, metadata_json, error_json, started_at, ended_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		[
+			params.sessionId,
+			params.turnId,
+			params.ordinal,
+			params.prompt,
+			params.stepsJson,
+			params.usageJson,
+			params.metadataJson,
+			params.errorJson,
+			params.startedAt,
+			params.endedAt,
+			new Date().toISOString(),
+		],
+	);
+}
+
+export function getTurnsBySession(sessionId: string): DbTurn[] {
+	const db = getDb();
+	return db.query<DbTurn, [string]>("SELECT * FROM turns WHERE session_id = ? ORDER BY ordinal").all(sessionId);
+}
+
 // ─── Response annotation types and functions ─────────────────────────────────
 
 export interface DbResponseAnnotation {
