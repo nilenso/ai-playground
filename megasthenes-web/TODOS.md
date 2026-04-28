@@ -5,8 +5,8 @@
 - [x] Sandboxing (bwrap + seccomp + gVisor)
 - [ ] Session management
 - [ ] Evaluation and Feedback
-- [ ] Packaging ask-forge as a library
-      - Also extract ask-forge into separate repository
+- [ ] Packaging megasthenes as a library
+      - Also extract megasthenes into separate repository
 - [ ] Managing repositories
 - [ ] Trigger deployment from CI
 

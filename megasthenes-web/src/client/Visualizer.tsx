@@ -361,8 +361,8 @@ export function Visualizer() {
 			<header className="viz-header">
 				<div className="viz-header-left">
 					<h1 className="viz-title">
-						<span className="viz-logo-ask">ask</span>
-						<span className="viz-logo-forge">forge</span>
+						<span className="viz-logo-ask">mega</span>
+						<span className="viz-logo-forge">sthenes</span>
 						<span className="viz-title-suffix"> sessions</span>
 					</h1>
 				</div>

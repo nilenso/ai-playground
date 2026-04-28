@@ -230,7 +230,7 @@ function MainApp() {
 										repoName,
 										progressMessage: null,
 									});
-									localStorage.setItem("askforge_repo_url", repoUrl);
+									localStorage.setItem("megasthenes_repo_url", repoUrl);
 									setPhase("ask");
 									setMessages([]);
 									session.fetchSessionHistory();
@@ -590,7 +590,7 @@ function MainApp() {
 			// Clean up the URL
 			window.history.replaceState({}, "", window.location.pathname);
 		} else {
-			const savedUrl = localStorage.getItem("askforge_repo_url");
+			const savedUrl = localStorage.getItem("megasthenes_repo_url") ?? localStorage.getItem("askforge_repo_url");
 			if (savedUrl) setUrl(savedUrl);
 		}
 	}, [initialSessionId]);
@@ -707,8 +707,8 @@ function MainApp() {
 				<div className="app-main">
 					<div className="connect-content">
 						<h1 className="logo">
-							<span className="logo-ask">ask</span>
-							<span className="logo-forge">forge</span>
+							<span className="logo-ask">mega</span>
+							<span className="logo-forge">sthenes</span>
 						</h1>
 						<div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
 							<span className="spinner" />

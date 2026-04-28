@@ -84,6 +84,7 @@ export function useAuth({ connectionSessionId, onLogout }: UseAuthOptions) {
 		}
 
 		// Clear auth and cached state
+		localStorage.removeItem("megasthenes_repo_url");
 		localStorage.removeItem("askforge_repo_url");
 		await fetch("/api/auth/logout", { method: "POST" });
 		setAuth({ authenticated: false, username: null, avatarUrl: null, loading: false });

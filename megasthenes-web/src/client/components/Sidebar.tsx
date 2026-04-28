@@ -74,8 +74,8 @@ export function Sidebar({
 			<div className="sidebar-top">
 				{!sidebarCollapsed && (
 					<h1 className="sidebar-logo">
-						<span className="logo-ask">ask</span>
-						<span className="logo-forge">forge</span>
+						<span className="logo-ask">mega</span>
+						<span className="logo-forge">sthenes</span>
 					</h1>
 				)}
 				<button

@@ -11,10 +11,10 @@ tofu apply  # Creates droplet + DNS records
 ```
 
 This creates:
-- DigitalOcean droplet `ask-forge` (s-1vcpu-1gb, Docker image, blr1)
+- DigitalOcean droplet `megasthenes` (s-1vcpu-1gb, Docker image, blr1)
 - Firewall allowing SSH (22), HTTP (80), HTTPS (443)
 - DNS: `ask.nilenso.ai` → droplet IP
-- DNS: `ask-forge-visualizer.nilenso.ai` → droplet IP
+- DNS: `megasthenes-visualizer.nilenso.ai` → droplet IP
 
 ## 2. Setup Server
 
@@ -84,7 +84,7 @@ docker network inspect web
 
 # Test endpoints
 curl -I https://ask.nilenso.ai
-curl -I https://ask-forge-visualizer.nilenso.ai
+curl -I https://megasthenes-visualizer.nilenso.ai
 ```
 
 ## Files in this directory

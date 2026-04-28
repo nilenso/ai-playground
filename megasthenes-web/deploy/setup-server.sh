@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Setting up ask-forge-web server ==="
+echo "=== Setting up megasthenes-web server ==="
 
 # =============================================================================
 # Install gVisor (runsc) — required for sandbox container isolation
@@ -39,7 +39,7 @@ echo "runsc runtime verified ✓"
 # =============================================================================
 
 echo "Creating directories..."
-mkdir -p ~/gateway ~/ask-forge-web/data/sessions
+mkdir -p ~/gateway ~/megasthenes-web/data/sessions
 
 # =============================================================================
 # Setup gateway (Caddy for SSL termination)
@@ -73,11 +73,11 @@ EOF
 
 cat > Caddyfile << 'EOF'
 ask.nilenso.ai {
-    reverse_proxy ask-forge-web:3000
+    reverse_proxy megasthenes-web:3000
 }
 
-ask-forge-visualizer.nilenso.ai {
-    reverse_proxy ask-forge-web:3001
+megasthenes-visualizer.nilenso.ai {
+    reverse_proxy megasthenes-web:3001
 }
 EOF
 
@@ -86,11 +86,11 @@ echo "Starting gateway..."
 docker compose up -d
 
 # =============================================================================
-# Setup ask-forge-web
+# Setup megasthenes-web
 # =============================================================================
 
-echo "Setting up ask-forge-web..."
-cd ~/ask-forge-web
+echo "Setting up megasthenes-web..."
+cd ~/megasthenes-web
 
 cat > .env.example << 'EOF'
 OPENROUTER_API_KEY=your-openrouter-api-key
@@ -101,11 +101,11 @@ if [ ! -f .env ]; then
     cp .env.example .env
     echo ""
     echo "=== IMPORTANT ==="
-    echo "Edit ~/ask-forge-web/.env and set your OPENROUTER_API_KEY"
-    echo "Then run: cd ~/ask-forge-web && docker compose up -d"
+    echo "Edit ~/megasthenes-web/.env and set your OPENROUTER_API_KEY"
+    echo "Then run: cd ~/megasthenes-web && docker compose up -d"
 else
     echo ".env already exists, skipping..."
-    echo "Starting ask-forge-web..."
+    echo "Starting megasthenes-web..."
     docker compose up -d
 fi
 
@@ -116,4 +116,4 @@ echo "To verify:"
 echo "  docker ps"
 echo "  docker run --runtime=runsc --rm hello-world  # verify gVisor"
 echo "  curl -I https://ask.nilenso.ai"
-echo "  curl -I https://ask-forge-visualizer.nilenso.ai"
+echo "  curl -I https://megasthenes-visualizer.nilenso.ai"

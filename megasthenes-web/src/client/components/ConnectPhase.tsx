@@ -37,8 +37,8 @@ export function ConnectPhase({
 				<div className="app-main">
 					<div className="connect-content">
 						<h1 className="logo">
-							<span className="logo-ask">ask</span>
-							<span className="logo-forge">forge</span>
+							<span className="logo-ask">mega</span>
+							<span className="logo-forge">sthenes</span>
 						</h1>
 						<div className="auth-loading">
 							<span className="spinner" />
@@ -56,8 +56,8 @@ export function ConnectPhase({
 				<div className="app-main">
 					<div className="connect-content">
 						<h1 className="logo">
-							<span className="logo-ask">ask</span>
-							<span className="logo-forge">forge</span>
+							<span className="logo-ask">mega</span>
+							<span className="logo-forge">sthenes</span>
 						</h1>
 						{auth.error && <div className="error-message">{auth.error}</div>}
 						{bookmarkletError && <div className="error-message">{bookmarkletError}</div>}
@@ -69,7 +69,7 @@ export function ConnectPhase({
 						</button>
 						<p className="hint">Sign in to start exploring repositories</p>
 						<p className="data-notice">
-							All conversations are used for improving ask forge and may end up in a{" "}
+							All conversations are used for improving megasthenes and may end up in a{" "}
 							<a
 								href="https://huggingface.co/datasets/nilenso/ask-forge-eval-dataset"
 								target="_blank"
@@ -93,8 +93,8 @@ export function ConnectPhase({
 				<div className="app-main">
 					<div className="connect-content">
 						<h1 className="logo">
-							<span className="logo-ask">ask</span>
-							<span className="logo-forge">forge</span>
+							<span className="logo-ask">mega</span>
+							<span className="logo-forge">sthenes</span>
 						</h1>
 						<div className="waitlist-message">
 							<svg
@@ -184,7 +184,7 @@ export function ConnectPhase({
 
 					<p className="hint">Paste a GitHub, GitLab, or Bitbucket URL</p>
 					<p className="data-notice">
-						All conversations are used for improving ask forge and may end up in a{" "}
+						All conversations are used for improving megasthenes and may end up in a{" "}
 						<a
 							href="https://huggingface.co/datasets/nilenso/ask-forge-eval-dataset"
 							target="_blank"

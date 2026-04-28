@@ -129,7 +129,7 @@ export function SharedView({ token }: SharedViewProps) {
 					<h2>Session not found</h2>
 					<p>{error || "This share link may have been removed or is invalid."}</p>
 					<a href="/" className="shared-view-home-link">
-						Go to Ask Forge
+						Go to Megasthenes
 					</a>
 				</div>
 			</div>
@@ -141,8 +141,8 @@ export function SharedView({ token }: SharedViewProps) {
 			<div className="shared-view-header">
 				<div className="shared-view-header-left">
 					<a href="/" className="shared-view-logo">
-						<span className="logo-ask">ask</span>
-						<span className="logo-forge">forge</span>
+						<span className="logo-ask">mega</span>
+						<span className="logo-forge">sthenes</span>
 					</a>
 					<span className="shared-view-divider">/</span>
 					<span className="shared-view-title">{session.title || "Shared conversation"}</span>
