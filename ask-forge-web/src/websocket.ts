@@ -1,7 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import { sessions, sessionTimestamps } from "./api/index.ts";
 import { wsLogger } from "./lib/logger.ts";
-import { summarizeTurn } from "./lib/session-logger.ts";
+import { describeError, summarizeTurn } from "./lib/session-logger.ts";
 
 interface WebSocketData {
 	sessionId: string | null;
@@ -393,15 +393,25 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 			},
 		);
 	} catch (err) {
-		const errorMessage = err instanceof Error ? err.message : "Unknown error";
-		broadcastAndBuffer(sessionId, { type: "error", requestId, error: errorMessage });
-		finishBuffer();
-		wsLogger.error("Ask failed: session={sessionId}, request={requestId}, error={error} ({durationMs}ms)", {
-			sessionId,
+		const described = describeError(err);
+		broadcastAndBuffer(sessionId, {
+			type: "error",
 			requestId,
-			error: errorMessage,
-			durationMs: Date.now() - askStart,
+			error: described.message,
+			errorType: described.errorType,
+			retryability: described.retryability,
 		});
+		finishBuffer();
+		wsLogger.error(
+			"Ask failed: session={sessionId}, request={requestId}, error={error}, errorType={errorType} ({durationMs}ms)",
+			{
+				sessionId,
+				requestId,
+				error: described.message,
+				errorType: described.errorType ?? "unknown",
+				durationMs: Date.now() - askStart,
+			},
+		);
 	} finally {
 		activeRequests.delete(requestId);
 		requestToSession.delete(requestId);

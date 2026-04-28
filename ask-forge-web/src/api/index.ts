@@ -49,7 +49,7 @@ import {
 import { sandboxLogger, sessionLogger, startupLogger } from "../lib/logger.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
 import { dbMessagesToTurns, parseTurnRow } from "../lib/session-context.ts";
-import { summarizeTurn, type WrappedSession, wrapSession } from "../lib/session-logger.ts";
+import { describeError, summarizeTurn, type WrappedSession, wrapSession } from "../lib/session-logger.ts";
 import { getActiveRequest } from "../websocket.ts";
 
 // Git environment to prevent interactive prompts and SSH key loading
@@ -261,14 +261,18 @@ api.post("/connect", createApprovedAuthMiddleware(), async (c) => {
 					repositoryId: repository.id,
 				});
 			} catch (err) {
-				const message = err instanceof Error ? err.message : "Unknown error";
-				sessionLogger.error("Session connect failed for {repoUrl}: {error} (user={userId}, {durationMs}ms)", {
-					repoUrl: normalized,
-					error: message,
-					userId: payload.sub,
-					durationMs: Date.now() - connectStart,
-				});
-				send("error", { success: false, error: message });
+				const described = describeError(err);
+				sessionLogger.error(
+					"Session connect failed for {repoUrl}: {error} (errorType={errorType}, user={userId}, {durationMs}ms)",
+					{
+						repoUrl: normalized,
+						error: described.message,
+						errorType: described.errorType ?? "unknown",
+						userId: payload.sub,
+						durationMs: Date.now() - connectStart,
+					},
+				);
+				send("error", { success: false, ...described });
 			} finally {
 				if (ownsSession && rawSession) {
 					try {
@@ -354,8 +358,8 @@ api.post("/ask", createApprovedAuthMiddleware(), async (c) => {
 					send("done", { success: true, response, toolCalls });
 				}
 			} catch (err) {
-				const message = err instanceof Error ? err.message : "Unknown error";
-				send("error", { success: false, error: message });
+				const described = describeError(err);
+				send("error", { success: false, ...described });
 			} finally {
 				clearInterval(heartbeat);
 				closed = true;
@@ -499,13 +503,14 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 			activeRequest: activeReq,
 		});
 	} catch (err) {
-		const message = err instanceof Error ? err.message : "Unknown error";
-		sessionLogger.error("Session restore failed for {sessionId}: {error} ({durationMs}ms)", {
+		const described = describeError(err);
+		sessionLogger.error("Session restore failed for {sessionId}: {error} (errorType={errorType}, {durationMs}ms)", {
 			sessionId,
-			error: message,
+			error: described.message,
+			errorType: described.errorType ?? "unknown",
 			durationMs: Date.now() - restoreStart,
 		});
-		return c.json({ success: false, error: message }, 500);
+		return c.json({ success: false, ...described }, 500);
 	} finally {
 		if (ownsSession && rawSession) {
 			try {

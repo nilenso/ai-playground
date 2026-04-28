@@ -1,4 +1,13 @@
-import type { AskOptions, AskStream, Session, StreamEvent, TurnResult } from "@nilenso/megasthenes";
+import {
+	type AskOptions,
+	type AskStream,
+	type ErrorType,
+	MegasthenesError,
+	type Retryability,
+	type Session,
+	type StreamEvent,
+	type TurnResult,
+} from "@nilenso/megasthenes";
 import {
 	createCompaction,
 	createMessage,
@@ -21,6 +30,22 @@ export interface WrappedSession {
 	repo: Session["repo"];
 	ask(prompt: string, options?: AskOptions): AskStream;
 	close(): Promise<void>;
+}
+
+/**
+ * Lift a thrown value into the wire-format error envelope. When the error is
+ * a `MegasthenesError`, this surfaces `errorType` and `retryability` so the
+ * UI can render an actionable message instead of opaque prose.
+ */
+export function describeError(err: unknown): {
+	message: string;
+	errorType?: ErrorType;
+	retryability?: Retryability;
+} {
+	if (err instanceof MegasthenesError) {
+		return { message: err.message, errorType: err.errorType, retryability: err.retryability };
+	}
+	return { message: err instanceof Error ? err.message : "Unknown error" };
 }
 
 /**
