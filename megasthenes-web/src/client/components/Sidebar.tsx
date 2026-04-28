@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AuthState, SessionSummary } from "../types.ts";
 import { AdminWaitlistPanel } from "./AdminWaitlistPanel.tsx";
 
@@ -51,7 +51,7 @@ export function Sidebar({
 		if (bookmarkletRef.current) {
 			bookmarkletRef.current.setAttribute("href", BOOKMARKLET_CODE);
 		}
-	}, [sidebarCollapsed]);
+	}, []);
 
 	// Close profile menu and item menu on outside click
 	useEffect(() => {
@@ -107,6 +107,7 @@ export function Sidebar({
 						<div className="sidebar-empty">No sessions yet</div>
 					) : (
 						sessionHistory.map((s) => (
+							// biome-ignore lint/a11y/useSemanticElements: contains nested button; cannot be a real <button>
 							<div
 								key={s.id}
 								className="sidebar-item"
@@ -131,7 +132,6 @@ export function Sidebar({
 											if (e.key === "Escape") setRenamingSession(null);
 										}}
 										onBlur={() => handleRenameSession(s.id, renameValue)}
-										autoFocus
 										onClick={(e) => e.stopPropagation()}
 									/>
 								) : (
@@ -197,6 +197,7 @@ export function Sidebar({
 			)}
 			{!sidebarCollapsed && (
 				<div className="sidebar-bookmarklet">
+					{/* biome-ignore lint/a11y/useValidAnchor: bookmarklet must be an <a> with javascript: href set imperatively */}
 					<a ref={bookmarkletRef} href="#" className="bookmarklet-link" onClick={(e) => e.preventDefault()}>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
 							<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />

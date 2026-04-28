@@ -57,7 +57,7 @@ const FORGE_EXTRACTORS: Array<{
 		extract: (pathname) => {
 			// /user/repo/... -> [user, repo]
 			const match = pathname.match(/^\/([^/]+)\/([^/]+)/);
-			if (match && match[1] && match[2]) {
+			if (match?.[1] && match[2]) {
 				if (GITHUB_RESERVED.includes(match[1].toLowerCase())) return null;
 				return [match[1], match[2]];
 			}
@@ -72,9 +72,10 @@ const FORGE_EXTRACTORS: Array<{
 			const repoPath = pathname.split("/-/")[0];
 			const parts = repoPath?.split("/").filter(Boolean);
 			if (parts && parts.length >= 2) {
-				if (GITLAB_RESERVED.includes(parts[0]!.toLowerCase())) return null;
+				if (GITLAB_RESERVED.includes(parts[0]?.toLowerCase())) return null;
 				// Last part is repo, everything before is group/subgroup
-				const repo = parts.pop()!;
+				const repo = parts.pop();
+				if (!repo) return null;
 				const group = parts.join("/");
 				return [group, repo];
 			}
@@ -85,7 +86,7 @@ const FORGE_EXTRACTORS: Array<{
 		domain: "bitbucket.org",
 		extract: (pathname) => {
 			const match = pathname.match(/^\/([^/]+)\/([^/]+)/);
-			if (match && match[1] && match[2]) {
+			if (match?.[1] && match[2]) {
 				if (BITBUCKET_RESERVED.includes(match[1].toLowerCase())) return null;
 				return [match[1], match[2]];
 			}
@@ -96,7 +97,7 @@ const FORGE_EXTRACTORS: Array<{
 		domain: "codeberg.org",
 		extract: (pathname) => {
 			const match = pathname.match(/^\/([^/]+)\/([^/]+)/);
-			if (match && match[1] && match[2]) {
+			if (match?.[1] && match[2]) {
 				if (CODEBERG_RESERVED.includes(match[1].toLowerCase())) return null;
 				return [match[1], match[2]];
 			}
@@ -108,7 +109,7 @@ const FORGE_EXTRACTORS: Array<{
 		extract: (pathname) => {
 			// SourceHut: /~user/repo
 			const match = pathname.match(/^\/(~[^/]+)\/([^/]+)/);
-			if (match && match[1] && match[2]) {
+			if (match?.[1] && match[2]) {
 				return [match[1], match[2]];
 			}
 			return null;

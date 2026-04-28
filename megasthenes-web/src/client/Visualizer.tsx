@@ -459,18 +459,11 @@ export function Visualizer() {
 						{error && <div className="viz-error-banner">Error: {error}</div>}
 						{session?.error && <div className="viz-error-banner">Session Error: {session.error}</div>}
 						{session?.asks.map((ask, index) => (
-							<div
-								key={index}
+							<button
+								type="button"
+								key={`${ask.timestamp}-${index}`}
 								className={`viz-ask-container ${selectedAskIndex === index ? "selected" : ""}`}
 								onClick={() => selectAskForAnnotation(index)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.preventDefault();
-										selectAskForAnnotation(index);
-									}
-								}}
-								role="button"
-								tabIndex={0}
 							>
 								{/* User Question */}
 								<div className="viz-user-msg">
@@ -526,6 +519,7 @@ export function Visualizer() {
 																<div className="viz-tool-section-label">Response</div>
 																<pre
 																	className="viz-tool-code viz-tool-result hljs"
+																	// biome-ignore lint/security/noDangerouslySetInnerHtml: highlight.js output is escaped HTML
 																	dangerouslySetInnerHTML={{
 																		__html: highlightToolResult(tc.result),
 																	}}
@@ -558,6 +552,7 @@ export function Visualizer() {
 									) : (
 										<div
 											className="markdown-content"
+											// biome-ignore lint/security/noDangerouslySetInnerHtml: marked output for rendered LLM markdown
 											dangerouslySetInnerHTML={{
 												__html: markedWithLinks.parse(ask.response) as string,
 											}}
@@ -633,7 +628,7 @@ export function Visualizer() {
 										)}
 									</div>
 								</div>
-							</div>
+							</button>
 						))}
 						{session?.asks.length === 0 && <div className="viz-empty">No questions in this session</div>}
 					</div>

@@ -25,12 +25,14 @@ function getSessionIdFromUrl(): string | null {
 }
 
 export function App() {
-	// Handle /share/:token route
 	const shareToken = getShareToken();
 	if (shareToken) {
 		return <SharedView token={shareToken} />;
 	}
+	return <MainApp />;
+}
 
+function MainApp() {
 	const [url, setUrl] = useState("");
 	const [connection, setConnection] = useState<ConnectionState>({
 		status: "disconnected",
@@ -398,7 +400,7 @@ export function App() {
 		pendingMessageRef.current = null;
 		setIsAsking(false);
 		setProgress({ type: "idle" });
-	}, [wsRef, currentRequestIdRef, streaming, pendingMessageRef, setMessages, setIsAsking, setProgress]);
+	}, [wsRef, currentRequestIdRef, streaming, pendingMessageRef]);
 
 	const handleStartEdit = useCallback((messageId: string, currentContent: string) => {
 		setEditingMessageId(messageId);
@@ -516,7 +518,14 @@ export function App() {
 			// Redirect to home
 			window.history.replaceState({}, "", "/");
 		}
-	}, [initialSessionId, auth.authenticated, session.sessionHistory, session.historyLoading, connection.sessionId]);
+	}, [
+		initialSessionId,
+		auth.authenticated,
+		session.sessionHistory,
+		session.historyLoading,
+		connection.sessionId,
+		session.handleRestore,
+	]);
 
 	// Update URL when session changes (but not on initial load from permalink)
 	useEffect(() => {
@@ -596,7 +605,7 @@ export function App() {
 			setUrl(autoConnectUrl);
 			connectToRepo(autoConnectUrl);
 		}
-	}, [auth.authenticated, connection.status, session.fetchSessionHistory]);
+	}, [auth.authenticated, connection.status, connectToRepo]);
 
 	// Fetch build info on mount
 	useEffect(() => {
@@ -626,7 +635,9 @@ export function App() {
 		wasAskingRef.current = isAsking;
 	}, [isAsking, phase, session.fetchSessionHistory]);
 
-	// Auto-scroll to bottom when messages change (throttled)
+	// Auto-scroll to bottom when messages change (throttled).
+	// `messages` is the trigger; the body reads only refs.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: messages is the intended trigger
 	useEffect(() => {
 		if (!shouldAutoScrollRef.current) return;
 

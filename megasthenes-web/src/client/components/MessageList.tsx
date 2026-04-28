@@ -83,7 +83,6 @@ export function MessageList({
 										onChange={(e) => setEditValue(e.target.value)}
 										className="message-edit-textarea"
 										rows={4}
-										autoFocus
 										onKeyDown={(e) => {
 											if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
 												handleSaveEdit(msg.id);
@@ -113,6 +112,7 @@ export function MessageList({
 											<div
 												key={`${msg.id}-text-${idx}`}
 												className="markdown-content"
+												// biome-ignore lint/security/noDangerouslySetInnerHtml: marked output for rendered LLM markdown
 												dangerouslySetInnerHTML={{ __html: markedWithLinks.parse(block.content) as string }}
 											/>
 										) : null,
@@ -131,7 +131,10 @@ export function MessageList({
 														viewBox="0 0 24 24"
 														strokeWidth={1.5}
 														stroke="currentColor"
+														role="img"
+														aria-label="Copied"
 													>
+														<title>Copied</title>
 														<path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
 													</svg>
 												) : (
@@ -141,7 +144,10 @@ export function MessageList({
 														viewBox="0 0 24 24"
 														strokeWidth={1.5}
 														stroke="currentColor"
+														role="img"
+														aria-label="Copy"
 													>
+														<title>Copy</title>
 														<path
 															strokeLinecap="round"
 															strokeLinejoin="round"
@@ -167,7 +173,10 @@ export function MessageList({
 													viewBox="0 0 24 24"
 													strokeWidth={1.5}
 													stroke="currentColor"
+													role="img"
+													aria-label="Edit"
 												>
+													<title>Edit</title>
 													<path
 														strokeLinecap="round"
 														strokeLinejoin="round"
@@ -192,7 +201,10 @@ export function MessageList({
 													viewBox="0 0 24 24"
 													strokeWidth={1.5}
 													stroke="currentColor"
+													role="img"
+													aria-label="Resend"
 												>
+													<title>Resend</title>
 													<path
 														strokeLinecap="round"
 														strokeLinejoin="round"
@@ -210,6 +222,7 @@ export function MessageList({
 									<div
 										key={`${msg.id}-text-${idx}`}
 										className="markdown-content"
+										// biome-ignore lint/security/noDangerouslySetInnerHtml: marked output for rendered LLM markdown
 										dangerouslySetInnerHTML={{ __html: markedWithLinks.parse(block.content) as string }}
 									/>
 								) : (
@@ -241,7 +254,10 @@ export function MessageList({
 											viewBox="0 0 24 24"
 											strokeWidth={1.5}
 											stroke="currentColor"
+											role="img"
+											aria-label="Copied"
 										>
+											<title>Copied</title>
 											<path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
 										</svg>
 									) : (
@@ -251,7 +267,10 @@ export function MessageList({
 											viewBox="0 0 24 24"
 											strokeWidth={1.5}
 											stroke="currentColor"
+											role="img"
+											aria-label="Copy"
 										>
+											<title>Copy</title>
 											<path
 												strokeLinecap="round"
 												strokeLinejoin="round"
@@ -272,7 +291,10 @@ export function MessageList({
 										viewBox="0 0 24 24"
 										strokeWidth={1.5}
 										stroke="currentColor"
+										role="img"
+										aria-label="Thumbs up"
 									>
+										<title>Thumbs up</title>
 										<path
 											strokeLinecap="round"
 											strokeLinejoin="round"
@@ -292,7 +314,10 @@ export function MessageList({
 										viewBox="0 0 24 24"
 										strokeWidth={1.5}
 										stroke="currentColor"
+										role="img"
+										aria-label="Thumbs down"
 									>
+										<title>Thumbs down</title>
 										<path
 											strokeLinecap="round"
 											strokeLinejoin="round"

@@ -128,14 +128,15 @@ export function useWebSocket({
 
 					// Initialize streaming message if needed
 					if (!streamingMessageIdRef.current) {
-						streamingMessageIdRef.current = `assistant-${Date.now()}`;
+						const newId = `assistant-${Date.now()}`;
+						streamingMessageIdRef.current = newId;
 						streamingThinkingRef.current = "";
 						streamingBlocksRef.current = [];
 
 						setMessages((prev) => [
 							...prev,
 							{
-								id: streamingMessageIdRef.current!,
+								id: newId,
 								role: "assistant",
 								contentBlocks: [],
 								thinking: "",

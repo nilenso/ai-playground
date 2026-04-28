@@ -4,7 +4,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import { dirname, join } from "path";
+import { dirname, join } from "node:path";
 
 const SCRIPT_DIR = dirname(import.meta.path);
 const DB_PATH = Bun.argv[2] ?? join(SCRIPT_DIR, "..", "data", "megasthenes.db");
@@ -60,5 +60,5 @@ const header = [
 ];
 const lines = [toCsvRow(header), ...rows.map((row) => toCsvRow(header.map((col) => row[col])))];
 
-await Bun.write(OUTPUT_PATH, lines.join("\n") + "\n");
+await Bun.write(OUTPUT_PATH, `${lines.join("\n")}\n`);
 console.log(`Exported ${rows.length} rows to ${OUTPUT_PATH}`);

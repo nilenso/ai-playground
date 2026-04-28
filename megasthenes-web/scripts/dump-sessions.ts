@@ -30,11 +30,44 @@ if (!outputDir) {
 	process.exit(1);
 }
 
+type SessionRow = { id: string; repository_id: string; created_at: string };
+type RepositoryRow = { username_or_organization: string; repository_name: string };
+type MessageRow = {
+	id: string;
+	ordinal: number;
+	role: "user" | "assistant" | "tool";
+	content: string;
+	created_at: string;
+	tool_name?: string | null;
+	tool_arguments?: string | null;
+	tool_result?: string | null;
+};
+type CompactionRow = {
+	first_kept_ordinal: number;
+	created_at: string;
+	summary: string;
+	tokens_before?: number | null;
+	read_files?: string | null;
+	modified_files?: string | null;
+};
+type UsageRow = {
+	input_tokens?: number | null;
+	output_tokens?: number | null;
+	cache_read_tokens?: number | null;
+	cache_write_tokens?: number | null;
+	input_cost?: number | null;
+	output_cost?: number | null;
+	cache_read_cost?: number | null;
+	cache_write_cost?: number | null;
+	total_cost?: number | null;
+};
+type ContentBlock = { type: string; [key: string]: unknown };
+
 const db = new Database(DB_PATH, { readonly: true });
 
 mkdirSync(outputDir, { recursive: true });
 
-const sessions = db.query("SELECT * FROM sessions").all();
+const sessions = db.query("SELECT * FROM sessions").all() as SessionRow[];
 
 if (sessions.length === 0) {
 	console.log("No sessions found in database.");
@@ -48,15 +81,19 @@ function generateId(): string {
 	return randomUUID().slice(0, 8);
 }
 
-for (const session of sessions as any[]) {
-	const messages = db.query("SELECT * FROM messages WHERE session_id = ? ORDER BY ordinal ASC").all(session.id);
-	const repository = db.query("SELECT * FROM repositories WHERE id = ?").get(session.repository_id) as any;
+for (const session of sessions) {
+	const messages = db
+		.query("SELECT * FROM messages WHERE session_id = ? ORDER BY ordinal ASC")
+		.all(session.id) as MessageRow[];
+	const repository = db.query("SELECT * FROM repositories WHERE id = ?").get(session.repository_id) as
+		| RepositoryRow
+		| undefined;
 	const compactions = db
 		.query("SELECT * FROM compactions WHERE session_id = ? ORDER BY created_at ASC")
-		.all(session.id) as any[];
+		.all(session.id) as CompactionRow[];
 
 	// Build a map of ordinal -> compaction (compaction applies BEFORE messages at first_kept_ordinal)
-	const compactionByFirstKeptOrdinal = new Map<number, any>();
+	const compactionByFirstKeptOrdinal = new Map<number, CompactionRow>();
 	for (const c of compactions) {
 		compactionByFirstKeptOrdinal.set(c.first_kept_ordinal, c);
 	}
@@ -84,7 +121,7 @@ for (const session of sessions as any[]) {
 	const entryIdByOrdinal = new Map<number, string>();
 
 	// Convert each message to pi format SessionEntry
-	for (const msg of messages as any[]) {
+	for (const msg of messages) {
 		const entryId = generateId();
 		const msgTimestamp = new Date(msg.created_at).toISOString();
 
@@ -131,7 +168,7 @@ for (const session of sessions as any[]) {
 			parentId = entryId;
 		} else if (msg.role === "assistant") {
 			// Assistant message - content is already JSON array of content blocks
-			let content: any[];
+			let content: ContentBlock[];
 			try {
 				content = JSON.parse(msg.content);
 			} catch {
@@ -139,10 +176,10 @@ for (const session of sessions as any[]) {
 			}
 
 			// Get usage stats if available
-			const usage = db.query("SELECT * FROM usage_stats WHERE message_id = ?").get(msg.id) as any;
+			const usage = db.query("SELECT * FROM usage_stats WHERE message_id = ?").get(msg.id) as UsageRow | undefined;
 
 			// Determine stopReason based on whether there are tool calls
-			const hasToolCalls = content.some((block: any) => block.type === "toolCall");
+			const hasToolCalls = content.some((block) => block.type === "toolCall");
 			const stopReason = hasToolCalls ? "toolUse" : "stop";
 
 			const entry = {
@@ -212,7 +249,7 @@ for (const session of sessions as any[]) {
 	const filename = `${filenameTimestamp}_${session.id}.jsonl`;
 	const filepath = join(outputDir, filename);
 
-	writeFileSync(filepath, lines.join("\n") + "\n");
+	writeFileSync(filepath, `${lines.join("\n")}\n`);
 	console.log(`  ${filename} (${messages.length} messages)`);
 }
 

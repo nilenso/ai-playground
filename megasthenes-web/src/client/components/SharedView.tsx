@@ -184,6 +184,7 @@ export function SharedView({ token }: SharedViewProps) {
 								<div
 									key={`${msg.id}-text-${idx}`}
 									className="markdown-content"
+									// biome-ignore lint/security/noDangerouslySetInnerHtml: marked output for rendered LLM markdown
 									dangerouslySetInnerHTML={{ __html: markedWithLinks.parse(block.content) as string }}
 								/>
 							) : (
