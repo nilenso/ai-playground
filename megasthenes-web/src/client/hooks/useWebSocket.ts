@@ -384,7 +384,17 @@ export function useWebSocket({
 
 					if (streamingMessageIdRef.current) {
 						setMessages((prev) =>
-							prev.map((msg) => (msg.id === streamingMessageIdRef.current ? { ...msg, isStreaming: false } : msg)),
+							prev.map((msg) =>
+								msg.id === streamingMessageIdRef.current
+									? {
+											...msg,
+											isStreaming: false,
+											// Drop tool calls that were mid-stream when cancellation hit —
+											// they have no params and never ran.
+											contentBlocks: msg.contentBlocks.filter((b) => !(b.type === "tool_call" && !b.isComplete)),
+										}
+									: msg,
+							),
 						);
 					}
 
