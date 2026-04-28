@@ -21,6 +21,23 @@ export function parseTurnRow(row: DbTurn): TurnResult {
 }
 
 /**
+ * Replace every `tool_call.id` across all turns with a fresh UUID.
+ *
+ * Persisted step ids are iteration-local indices ("0", "1", …) that repeat
+ * across iterations and turns. They survive a live session because each
+ * Anthropic call only sees ids from a single iteration, but on restore the
+ * library serializes the full history into one request and Anthropic 400s
+ * with `tool_use ids must be unique`. Each tool_call step carries its own
+ * `output`, so there's no cross-step pairing key to preserve.
+ */
+export function remapToolCallIds(turns: TurnResult[]): TurnResult[] {
+	return turns.map((turn) => ({
+		...turn,
+		steps: turn.steps.map((step) => (step.type === "tool_call" ? { ...step, id: randomUUID() } : step)),
+	}));
+}
+
+/**
  * Best-effort reconstruction of `TurnResult[]` from rows of the legacy
  * `messages` table. Used only for sessions created before the `turns`
  * table existed (Phase 4 migration).

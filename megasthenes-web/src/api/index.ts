@@ -48,7 +48,7 @@ import {
 } from "../lib/db.ts";
 import { sandboxLogger, sessionLogger, startupLogger } from "../lib/logger.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
-import { dbMessagesToTurns, parseTurnRow } from "../lib/session-context.ts";
+import { dbMessagesToTurns, parseTurnRow, remapToolCallIds } from "../lib/session-context.ts";
 import { describeError, summarizeTurn, type WrappedSession, wrapSession } from "../lib/session-logger.ts";
 import { getActiveRequest } from "../websocket.ts";
 
@@ -455,10 +455,11 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 		const lastCompactionSummary = compaction?.summary;
 		const dbTurns = getTurnsBySession(sessionId);
 		const dbMessages = compaction ? getNonCompactedMessages(sessionId) : getMessagesBySession(sessionId);
-		const initialTurns =
+		const initialTurns = remapToolCallIds(
 			dbTurns.length > 0
 				? dbTurns.map(parseTurnRow)
-				: dbMessagesToTurns(dbMessages, repoRow.git_url, commitish ?? "HEAD");
+				: dbMessagesToTurns(dbMessages, repoRow.git_url, commitish ?? "HEAD"),
+		);
 
 		// Reconnect to the repository at the same commit
 		rawSession = await client.connect({
