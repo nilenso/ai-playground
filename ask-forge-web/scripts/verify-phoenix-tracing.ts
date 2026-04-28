@@ -1,7 +1,7 @@
 /**
  * Verification script for Arize Phoenix tracing integration.
  *
- * Connects to a repo via ask-forge, asks a question, then checks Phoenix
+ * Connects to a repo via megasthenes, asks a question, then checks Phoenix
  * for all 5 requirements:
  *   1. Root trace has both question and final answer
  *   2. Tool call spans show results
@@ -18,13 +18,17 @@
  *   bun run scripts/verify-phoenix-tracing.ts
  */
 
-// Tracing MUST be imported before ask-forge
+// Tracing MUST be imported before megasthenes so the OTel TracerProvider is
+// registered globally before the library calls trace.getTracer().
 import "../src/lib/tracing.ts";
 
 import { Client } from "@nilenso/megasthenes";
 
 const PHOENIX_BASE = process.env.PHOENIX_COLLECTOR_ENDPOINT?.replace("/v1/traces", "") ?? "http://localhost:6006";
-const REPO_URL = "https://github.com/nilenso/ask-forge";
+const REPO_URL = process.env.VERIFY_REPO_URL ?? "https://github.com/nilenso/megasthenes";
+const MODEL_PROVIDER = process.env.MEGASTHENES_MODEL_PROVIDER ?? "openrouter";
+const MODEL_ID = process.env.MEGASTHENES_MODEL_ID ?? "anthropic/claude-sonnet-4.6";
+const MAX_ITERATIONS = Number.parseInt(process.env.MEGASTHENES_MAX_ITERATIONS ?? "20", 10) || 20;
 
 // ─── Phoenix GraphQL helpers ──────────────────────────────────────────────────
 
@@ -135,16 +139,30 @@ console.log(`Phoenix reachable — trace count before: ${beforeCount}\n`);
 // Ask a question (forces tool use so we can verify tool spans)
 console.log(`Connecting to ${REPO_URL}...`);
 const client = new Client();
-const session = await client.connect(REPO_URL, {}, () => process.stdout.write("."));
+const session = await client.connect(
+	{
+		repo: { url: REPO_URL },
+		model: { provider: MODEL_PROVIDER, id: MODEL_ID },
+		maxIterations: MAX_ITERATIONS,
+	},
+	() => process.stdout.write("."),
+);
 console.log(" connected.\n");
 
-const question = "What is the main entry point of this project? Answer in one sentence.";
-console.log(`Asking: "${question}"\n`);
-await session.ask(question, {
-	onProgress: (event) => {
-		if (event.type === "text") process.stdout.write(event.text);
-	},
-});
+try {
+	const question = "What is the main entry point of this project? Answer in one sentence.";
+	console.log(`Asking: "${question}"\n`);
+	const askStream = session.ask(question);
+	for await (const event of askStream) {
+		if (event.type === "text_delta") process.stdout.write(event.delta);
+	}
+	await askStream.result();
+} finally {
+	// Close before flushing — the root OTel "ask" span only ends in close().
+	// Skipping this drops the entire trace tree (BatchSpanProcessor never exports it).
+	await session.close();
+}
+
 console.log("\n\nWaiting for traces to flush...");
 await new Promise((resolve) => setTimeout(resolve, 5000));
 
