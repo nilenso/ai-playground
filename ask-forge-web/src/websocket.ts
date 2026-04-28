@@ -1,8 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import { sessions, sessionTimestamps } from "./api/index.ts";
-import { forceCompact } from "./lib/compaction.ts";
-import { createCompaction, getLatestCompaction } from "./lib/db.ts";
 import { wsLogger } from "./lib/logger.ts";
+import { summarizeTurn } from "./lib/session-logger.ts";
 
 interface WebSocketData {
 	sessionId: string | null;
@@ -22,11 +21,19 @@ const activeRequests = new Map<string, AbortController>();
 const requestToSession = new Map<string, string>();
 
 // Buffer for streaming output per session - allows resuming after page refresh
+type WireEvent = {
+	type: string;
+	requestId: string;
+	data?: unknown;
+	error?: string;
+	errorType?: string;
+	retryability?: string;
+};
 interface StreamBuffer {
 	requestId: string;
 	sessionId: string;
 	question: string;
-	events: Array<{ type: string; requestId: string; data?: unknown; error?: string }>;
+	events: WireEvent[];
 	completed: boolean;
 	completedAt?: number;
 }
@@ -189,10 +196,7 @@ export const websocketHandler = {
 };
 
 // Broadcast to all connections for a session and buffer the event
-function broadcastAndBuffer(
-	sessionId: string,
-	event: { type: string; requestId: string; data?: unknown; error?: string },
-) {
+function broadcastAndBuffer(sessionId: string, event: WireEvent) {
 	// Buffer the event
 	const buffer = streamBuffers.get(sessionId);
 	if (buffer && !buffer.completed) {
@@ -271,101 +275,18 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 		return;
 	}
 
-	// Handle /compact command
+	// /compact was a force-compact slash command. Phase 5 dropped it: the new
+	// library handles compaction automatically and offers no public force API.
+	// Reject any /compact attempts so users get a clear error instead of silently
+	// asking the model to do something with literal "/compact" as the prompt.
 	if (question.startsWith("/compact")) {
-		const customInstructions = question.slice("/compact".length).trim() || undefined;
-
-		// Initialize stream buffer
-		streamBuffers.set(sessionId, {
-			requestId,
-			sessionId,
-			question,
-			events: [],
-			completed: false,
-		});
-
-		broadcastAndBuffer(sessionId, { type: "progress", requestId, data: { type: "thinking" } });
-
-		const compactStart = Date.now();
-		try {
-			const currentMessages = session.getMessages();
-			const previousCompaction = getLatestCompaction(sessionId);
-			const compactionResult = await forceCompact(currentMessages, previousCompaction?.summary, customInstructions);
-
-			if (compactionResult.wasCompacted && compactionResult.summary) {
-				// Replace session messages with compacted version
-				session.replaceMessages(compactionResult.messages);
-
-				// Persist compaction to database
-				createCompaction({
-					sessionId,
-					summary: compactionResult.summary,
-					firstKeptOrdinal: compactionResult.firstKeptOrdinal,
-					tokensBefore: compactionResult.tokensBefore,
-					tokensAfter: compactionResult.tokensAfter,
-					readFiles: compactionResult.readFiles,
-					modifiedFiles: compactionResult.modifiedFiles,
-				});
-
-				// Send compaction notification
-				broadcastAndBuffer(sessionId, {
-					type: "progress",
-					requestId,
-					data: {
-						type: "compaction",
-						tokensBefore: compactionResult.tokensBefore,
-						tokensAfter: compactionResult.tokensAfter,
-						messagesSummarized: currentMessages.length - compactionResult.messages.length,
-					},
-				});
-
-				// Send done with compaction result
-				const doneEvent = {
-					type: "done",
-					requestId,
-					data: {
-						success: true,
-						response: `✅ Context compacted: ${compactionResult.tokensBefore.toLocaleString()} → ${compactionResult.tokensAfter.toLocaleString()} tokens (summarized ${currentMessages.length - compactionResult.messages.length} messages)`,
-						toolCalls: [],
-					},
-				};
-				broadcastAndBuffer(sessionId, doneEvent);
-
-				wsLogger.info("Force compact done: session={sessionId}, {tokensBefore}→{tokensAfter} tokens ({durationMs}ms)", {
-					sessionId,
-					tokensBefore: compactionResult.tokensBefore,
-					tokensAfter: compactionResult.tokensAfter,
-					messagesSummarized: currentMessages.length - compactionResult.messages.length,
-					durationMs: Date.now() - compactStart,
-				});
-			} else {
-				const doneEvent = {
-					type: "done",
-					requestId,
-					data: {
-						success: true,
-						response: "ℹ️ Nothing to compact - conversation is too short.",
-						toolCalls: [],
-					},
-				};
-				broadcastAndBuffer(sessionId, doneEvent);
-				wsLogger.info("Force compact skipped (too short): session={sessionId}", { sessionId });
-			}
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : "Unknown error";
-			broadcastAndBuffer(sessionId, { type: "error", requestId, error: `Compaction failed: ${errorMessage}` });
-			wsLogger.error("Force compact failed: session={sessionId}, error={error} ({durationMs}ms)", {
-				sessionId,
-				error: errorMessage,
-				durationMs: Date.now() - compactStart,
-			});
-		} finally {
-			const buffer = streamBuffers.get(sessionId);
-			if (buffer) {
-				buffer.completed = true;
-				buffer.completedAt = Date.now();
-			}
-		}
+		ws.send(
+			JSON.stringify({
+				type: "error",
+				requestId,
+				error: "/compact is no longer supported — compaction now runs automatically when context fills.",
+			}),
+		);
 		return;
 	}
 
@@ -388,7 +309,7 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 	// Update session timestamp
 	sessionTimestamps.set(sessionId, Date.now());
 
-	// Send initial thinking state with requestId
+	// Send initial thinking state so the UI sees activity before the first stream event arrives
 	broadcastAndBuffer(sessionId, { type: "progress", requestId, data: { type: "thinking" } });
 
 	const askStart = Date.now();
@@ -398,72 +319,83 @@ async function handleAsk(ws: ServerWebSocket<WebSocketData>, requestId: string, 
 		questionPreview: question.length > 120 ? `${question.slice(0, 117)}...` : question,
 	});
 
-	try {
-		const result = await session.ask(question, {
-			onProgress: (event) => {
-				// Check if cancelled
-				if (abortController.signal.aborted) return;
-				broadcastAndBuffer(sessionId, { type: "progress", requestId, data: event });
-			},
-		});
-
-		// Check if cancelled before sending result
-		if (abortController.signal.aborted) {
-			wsLogger.info("Ask aborted after completion: session={sessionId}, request={requestId}", {
-				sessionId,
-				requestId,
-			});
-			return;
-		}
-
-		const doneEvent = {
-			type: "done",
-			requestId,
-			data: {
-				success: true,
-				response: result.response,
-				toolCalls: result.toolCalls,
-			},
-		};
-		broadcastAndBuffer(sessionId, doneEvent);
-
-		// Mark buffer as completed
+	const finishBuffer = () => {
 		const buffer = streamBuffers.get(sessionId);
 		if (buffer) {
 			buffer.completed = true;
 			buffer.completedAt = Date.now();
 		}
+	};
+
+	const askStream = session.ask(question, { signal: abortController.signal });
+	let toolCallCount = 0;
+	let responseLength = 0;
+	try {
+		for await (const event of askStream) {
+			if (event.type === "tool_use_end") toolCallCount++;
+			if (event.type === "text") responseLength += event.text.length;
+			if (event.type === "error") {
+				// Don't double-up on cancel: the cancel handler already sent {type: 'cancelled'}.
+				if (event.errorType === "aborted" && abortController.signal.aborted) continue;
+				broadcastAndBuffer(sessionId, {
+					type: "error",
+					requestId,
+					error: event.message,
+					errorType: event.errorType,
+					retryability: event.retryability,
+				});
+				continue;
+			}
+			broadcastAndBuffer(sessionId, { type: "progress", requestId, data: event });
+		}
+
+		const turn = await askStream.result();
+
+		if (turn.error) {
+			finishBuffer();
+			if (turn.error.errorType === "aborted" && abortController.signal.aborted) {
+				wsLogger.info("Ask cancelled: session={sessionId}, request={requestId} ({durationMs}ms)", {
+					sessionId,
+					requestId,
+					durationMs: Date.now() - askStart,
+				});
+				return;
+			}
+			// Terminal error event was already forwarded inside the loop.
+			wsLogger.warn(
+				"Ask ended with error: session={sessionId}, request={requestId}, errorType={errorType} ({durationMs}ms)",
+				{
+					sessionId,
+					requestId,
+					errorType: turn.error.errorType,
+					durationMs: Date.now() - askStart,
+				},
+			);
+			return;
+		}
+
+		const { response, toolCalls } = summarizeTurn(turn);
+		broadcastAndBuffer(sessionId, {
+			type: "done",
+			requestId,
+			data: { success: true, response, toolCalls },
+		});
+		finishBuffer();
 
 		wsLogger.info(
 			"Ask completed: session={sessionId}, request={requestId}, toolCalls={toolCallCount}, {durationMs}ms",
 			{
 				sessionId,
 				requestId,
-				toolCallCount: result.toolCalls?.length ?? 0,
-				responseLength: result.response.length,
+				toolCallCount,
+				responseLength,
 				durationMs: Date.now() - askStart,
 			},
 		);
 	} catch (err) {
-		if (abortController.signal.aborted) {
-			wsLogger.info("Ask cancelled: session={sessionId}, request={requestId} ({durationMs}ms)", {
-				sessionId,
-				requestId,
-				durationMs: Date.now() - askStart,
-			});
-			return;
-		}
 		const errorMessage = err instanceof Error ? err.message : "Unknown error";
-		const errorEvent = { type: "error", requestId, error: errorMessage };
-		broadcastAndBuffer(sessionId, errorEvent);
-
-		// Mark buffer as completed (with error)
-		const buffer = streamBuffers.get(sessionId);
-		if (buffer) {
-			buffer.completed = true;
-			buffer.completedAt = Date.now();
-		}
-
+		broadcastAndBuffer(sessionId, { type: "error", requestId, error: errorMessage });
+		finishBuffer();
 		wsLogger.error("Ask failed: session={sessionId}, request={requestId}, error={error} ({durationMs}ms)", {
 			sessionId,
 			requestId,

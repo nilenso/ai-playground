@@ -144,32 +144,61 @@ export function useWebSocket({
 						]);
 					}
 
+					// Megasthenes StreamEvent shapes: turn_start, iteration_start,
+					// thinking_delta, thinking, thinking_summary_delta, thinking_summary,
+					// text_delta, text, tool_use_start, tool_use_delta, tool_use_end,
+					// tool_result, compaction, error, turn_end. Plus a server-emitted
+					// {type: "thinking"} sentinel that arrives before the stream starts.
 					if (data.type === "compaction") {
+						const summarized =
+							typeof data.firstKeptOrdinal === "number" && data.firstKeptOrdinal > 0
+								? data.firstKeptOrdinal
+								: undefined;
 						setProgress({
 							type: "compaction",
 							tokensBefore: data.tokensBefore,
 							tokensAfter: data.tokensAfter,
-							messagesSummarized: data.messagesSummarized,
+							messagesSummarized: summarized,
 						});
 					} else if (data.type === "thinking") {
-						setProgress({ type: "thinking" });
+						// Library emits this either as a status hint (no fields beyond `type`)
+						// or as the full thinking block at iteration end (with `text`).
+						if (typeof data.text === "string") {
+							streamingThinkingRef.current = data.text;
+							updateStreamingUI();
+						}
+						setProgress((prev) => ({ ...prev, type: "thinking" }));
 					} else if (data.type === "thinking_delta") {
 						streamingThinkingRef.current += data.delta;
+						setProgress((prev) => ({ ...prev, type: "thinking" }));
+						updateStreamingUI();
+					} else if (data.type === "thinking_summary" || data.type === "thinking_summary_delta") {
+						// Treat thinking summaries the same as regular thinking for display.
+						if (data.type === "thinking_summary" && typeof data.text === "string") {
+							streamingThinkingRef.current = data.text;
+						} else if (typeof data.delta === "string") {
+							streamingThinkingRef.current += data.delta;
+						}
 						setProgress((prev) => ({ ...prev, type: "thinking" }));
 						updateStreamingUI();
 					} else if (data.type === "text_delta") {
 						textBufferRef.current += data.delta;
 						setProgress((prev) => ({ ...prev, type: "responding" }));
 						startReleaseLoop();
-					} else if (data.type === "tool_start") {
+					} else if (data.type === "text") {
+						// Full text block; if we've been streaming deltas, the buffer plus
+						// any committed content already covers it — nothing to do beyond
+						// updating progress state.
+						setProgress((prev) => ({ ...prev, type: "responding" }));
+					} else if (data.type === "tool_use_start") {
 						flushTextBuffer();
 						streamingBlocksRef.current = [
 							...streamingBlocksRef.current,
-							{ type: "tool_call", name: data.name, arguments: data.arguments || {}, isComplete: false },
+							{ type: "tool_call", name: data.name, arguments: {}, isComplete: false },
 						];
 						updateStreamingUI();
-						setProgress({ type: "tool", toolName: data.name, toolArgs: data.arguments });
-					} else if (data.type === "tool_end") {
+						setProgress({ type: "tool", toolName: data.name });
+					} else if (data.type === "tool_use_end") {
 						flushTextBuffer();
 						const blocks = streamingBlocksRef.current;
 						for (let i = blocks.length - 1; i >= 0; i--) {
@@ -177,7 +206,7 @@ export function useWebSocket({
 							if (block && block.type === "tool_call" && block.name === data.name && !block.isComplete) {
 								blocks[i] = {
 									...block,
-									arguments: data.arguments || block.arguments,
+									arguments: data.params || block.arguments,
 									isComplete: true,
 								};
 								break;
@@ -185,10 +214,14 @@ export function useWebSocket({
 						}
 						streamingBlocksRef.current = [...blocks];
 						updateStreamingUI();
+						setProgress({ type: "tool", toolName: data.name, toolArgs: data.params });
+					} else if (data.type === "tool_result") {
+						// Tool finished executing — back to a "thinking" state while the model
+						// processes the result for the next iteration.
 						setProgress({ type: "thinking" });
-					} else if (data.type === "responding") {
-						setProgress({ type: "responding" });
 					}
+					// turn_start, iteration_start, turn_end are bookkeeping events; the
+					// server-emitted `done` message provides the user-visible completion.
 				} else if (message.type === "done") {
 					stopReleaseLoop();
 					flushTextBuffer();

@@ -1,54 +1,119 @@
-import type { Message } from "@mariozechner/pi-ai";
-import type { AskOptions, AskResult, Session } from "@nilenso/megasthenes";
-import { maybeCompact } from "./compaction.ts";
+import type { AskOptions, AskStream, Session, StreamEvent, TurnResult } from "@nilenso/megasthenes";
 import {
 	createCompaction,
 	createMessage,
-	getLatestCompaction,
 	getMessagesBySession,
 	getSession,
 	updateSessionStatus,
 	updateSessionTitle,
 } from "./db.ts";
-import { compactionLogger } from "./logger.ts";
+import { sessionLogger } from "./logger.ts";
 
-function persistMessage(sessionId: string, ordinal: number, msg: Message): void {
-	switch (msg.role) {
-		case "user": {
-			const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-			createMessage({ sessionId, role: "user", ordinal, content });
-			break;
-		}
-		case "assistant": {
-			// Serialize the full content array as JSON to preserve all tool calls and thinking blocks
-			const content = JSON.stringify(msg.content);
-			createMessage({ sessionId, role: "assistant", ordinal, content });
-			break;
-		}
-		case "toolResult": {
-			const contentText = msg.content.map((c) => ("text" in c ? c.text : "")).join("");
-			createMessage({
-				sessionId,
-				role: "tool",
-				ordinal,
-				content: contentText,
-				toolName: msg.toolName,
-				toolArguments: msg.toolCallId,
-				toolResult: contentText,
-			});
-			break;
-		}
-	}
+/**
+ * Public surface of a wrapped session. We intentionally don't claim to be a
+ * full `Session` because megasthenes' `Session` exposes turn introspection
+ * (`getTurns`, `getTurn`, `getCompactionSummary`) the wrapper doesn't proxy.
+ */
+export interface WrappedSession {
+	id: string;
+	repo: Session["repo"];
+	ask(prompt: string, options?: AskOptions): AskStream;
+	close(): Promise<void>;
 }
 
-export function wrapSession(session: Session, sessionId: string): Session {
+/**
+ * Reduce a `TurnResult` to the legacy `{ response, toolCalls }` shape used
+ * by the wire-format `done` event. Concatenates all assistant text and
+ * surfaces tool calls with their resolved params.
+ */
+export function summarizeTurn(turn: TurnResult): {
+	response: string;
+	toolCalls: Array<{ name: string; arguments: Record<string, unknown> }>;
+} {
+	let response = "";
+	const toolCalls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+	for (const step of turn.steps) {
+		if (step.type === "text") response += step.text;
+		else if (step.type === "tool_call") toolCalls.push({ name: step.name, arguments: step.params });
+	}
+	return { response, toolCalls };
+}
+
+/**
+ * Materialize a `TurnResult` into rows of the legacy `messages` table.
+ *
+ * Each `iteration_start` step opens a fresh assistant message; thinking,
+ * text, and tool-call blocks accumulate inside it; tool-call output becomes
+ * a separate `tool` row that follows the assistant row.
+ *
+ * Phase 4 will replace this with native turns-table storage.
+ */
+function persistTurnSteps(sessionId: string, startOrdinal: number, turn: TurnResult): number {
+	let ordinal = startOrdinal;
+	let pendingAssistantBlocks: Array<Record<string, unknown>> = [];
+
+	const flushAssistant = () => {
+		if (pendingAssistantBlocks.length === 0) return;
+		createMessage({
+			sessionId,
+			role: "assistant",
+			ordinal,
+			content: JSON.stringify(pendingAssistantBlocks),
+		});
+		ordinal++;
+		pendingAssistantBlocks = [];
+	};
+
+	for (const step of turn.steps) {
+		switch (step.type) {
+			case "iteration_start":
+				flushAssistant();
+				break;
+			case "thinking":
+			case "thinking_summary":
+				pendingAssistantBlocks.push({ type: "thinking", thinking: step.text });
+				break;
+			case "text":
+				pendingAssistantBlocks.push({ type: "text", text: step.text });
+				break;
+			case "tool_call":
+				pendingAssistantBlocks.push({
+					type: "toolCall",
+					toolCallId: step.id,
+					name: step.name,
+					arguments: step.params,
+				});
+				flushAssistant();
+				createMessage({
+					sessionId,
+					role: "tool",
+					ordinal,
+					content: step.output,
+					toolName: step.name,
+					toolArguments: step.id,
+					toolResult: step.output,
+				});
+				ordinal++;
+				break;
+			// compaction and error steps are surfaced via separate channels
+			case "compaction":
+			case "error":
+				break;
+		}
+	}
+	flushAssistant();
+
+	return ordinal;
+}
+
+export function wrapSession(session: Session, sessionId: string): WrappedSession {
 	const existingSession = getSession(sessionId);
 	let hasTitle = !!existingSession?.title;
-	const dbMessages = getMessagesBySession(sessionId);
-	let ordinal = dbMessages.length;
+	let ordinal = getMessagesBySession(sessionId).length;
 
-	// Backfill title from first user message if missing
-	if (!hasTitle && dbMessages.length > 0) {
+	// Backfill title from first user message if missing (e.g., shared/restored sessions)
+	if (!hasTitle) {
+		const dbMessages = getMessagesBySession(sessionId);
 		const firstUserMsg = dbMessages.find((m) => m.role === "user");
 		if (firstUserMsg?.content) {
 			const title = firstUserMsg.content.length > 80 ? `${firstUserMsg.content.slice(0, 77)}...` : firstUserMsg.content;
@@ -57,113 +122,67 @@ export function wrapSession(session: Session, sessionId: string): Session {
 		}
 	}
 
-	const persistMessages = () => {
-		const messages: Message[] = session.getMessages();
-		// Persist only new messages (from ordinal onward)
-		for (let i = ordinal; i < messages.length; i++) {
-			persistMessage(sessionId, i, messages[i]);
-		}
-		ordinal = messages.length;
-	};
-
-	const wrapped = {
+	return {
 		id: sessionId,
 		repo: session.repo,
 
-		async ask(question: string, options?: AskOptions): Promise<AskResult> {
-			// Persist user message immediately so it's available if user switches away
-			createMessage({ sessionId, role: "user", ordinal, content: question });
+		ask(prompt: string, options?: AskOptions): AskStream {
+			// Persist user prompt up front so it's visible if the user navigates away mid-turn
+			createMessage({ sessionId, role: "user", ordinal, content: prompt });
 			ordinal++;
 
-			// Auto-set session title from first question (skip if already titled, e.g. restored sessions)
 			if (!hasTitle) {
-				const title = question.length > 80 ? `${question.slice(0, 77)}...` : question;
+				const title = prompt.length > 80 ? `${prompt.slice(0, 77)}...` : prompt;
 				updateSessionTitle(sessionId, title);
 				hasTitle = true;
 			}
 
-			// Check for compaction before asking (context might be too large)
-			// Include the new question in the token estimate since it will be added to context
-			try {
-				const currentMessages = session.getMessages();
-				const newQuestionMessage: Message = { role: "user", content: question, timestamp: Date.now() };
-				const messagesWithQuestion = [...currentMessages, newQuestionMessage];
+			const innerStream = session.ask(prompt, options);
+			let pendingCompaction: (StreamEvent & { type: "compaction" }) | undefined;
 
-				const previousCompaction = getLatestCompaction(sessionId);
-				const compactionResult = await maybeCompact(messagesWithQuestion, previousCompaction?.summary);
-
-				if (compactionResult.wasCompacted && compactionResult.summary) {
-					// Replace session messages with compacted version
-					session.replaceMessages(compactionResult.messages);
-
-					// Persist compaction to database
-					createCompaction({
-						sessionId,
-						summary: compactionResult.summary,
-						firstKeptOrdinal: compactionResult.firstKeptOrdinal,
-						tokensBefore: compactionResult.tokensBefore,
-						tokensAfter: compactionResult.tokensAfter,
-						readFiles: compactionResult.readFiles,
-						modifiedFiles: compactionResult.modifiedFiles,
-					});
-
-					// Notify UI about compaction via progress callback
-					options?.onProgress?.({
-						type: "compaction" as never,
-						tokensBefore: compactionResult.tokensBefore,
-						tokensAfter: compactionResult.tokensAfter,
-						messagesSummarized: messagesWithQuestion.length - compactionResult.messages.length,
-					} as never);
-
-					compactionLogger.info(
-						"Auto-compacted session {sessionId}: {tokensBefore}→{tokensAfter} tokens, summarized {messagesSummarized} messages",
-						{
+			async function* iterate(): AsyncGenerator<StreamEvent> {
+				try {
+					for await (const event of innerStream) {
+						if (event.type === "compaction") {
+							pendingCompaction = event;
+						}
+						yield event;
+					}
+				} finally {
+					try {
+						const turn = await innerStream.result();
+						ordinal = persistTurnSteps(sessionId, ordinal, turn);
+						if (pendingCompaction) {
+							createCompaction({
+								sessionId,
+								summary: pendingCompaction.summary,
+								firstKeptOrdinal: pendingCompaction.firstKeptOrdinal,
+								tokensBefore: pendingCompaction.tokensBefore,
+								tokensAfter: pendingCompaction.tokensAfter,
+								readFiles: pendingCompaction.readFiles,
+								modifiedFiles: pendingCompaction.modifiedFiles,
+							});
+						}
+						if (turn.error) {
+							updateSessionStatus(sessionId, "error");
+						}
+					} catch (sideErr) {
+						sessionLogger.error("Failed to persist turn for session {sessionId}: {error}", {
 							sessionId,
-							tokensBefore: compactionResult.tokensBefore,
-							tokensAfter: compactionResult.tokensAfter,
-							messagesSummarized: messagesWithQuestion.length - compactionResult.messages.length,
-						},
-					);
+							error: sideErr instanceof Error ? sideErr.message : String(sideErr),
+						});
+					}
 				}
-			} catch (compactionError) {
-				// Compaction failed - mark session as error and terminate
-				compactionLogger.error("Compaction failed for session {sessionId}: {error}", {
-					sessionId,
-					error: compactionError instanceof Error ? compactionError.message : String(compactionError),
-				});
-				updateSessionStatus(sessionId, "error");
-				const errorMessage = compactionError instanceof Error ? compactionError.message : "Unknown compaction error";
-				throw new Error(`Compaction failed: ${errorMessage}. Session terminated due to context overflow risk.`);
 			}
 
-			try {
-				const result = await session.ask(question, options);
-
-				if (result.response.startsWith("[ERROR:")) {
-					updateSessionStatus(sessionId, "error");
-				}
-
-				return result;
-			} catch (err) {
-				updateSessionStatus(sessionId, "error");
-				throw err;
-			} finally {
-				persistMessages();
-			}
+			return {
+				[Symbol.asyncIterator]: iterate,
+				result: () => innerStream.result(),
+			};
 		},
 
-		replaceMessages(messages: Parameters<Session["replaceMessages"]>[0]) {
-			session.replaceMessages(messages);
-		},
-
-		getMessages() {
-			return session.getMessages();
-		},
-
-		close() {
-			session.close();
+		close(): Promise<void> {
+			return session.close();
 		},
 	};
-
-	return wrapped;
 }

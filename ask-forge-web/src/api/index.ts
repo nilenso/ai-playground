@@ -30,7 +30,6 @@ sandboxLogger.info("Sandbox mode: {mode}", {
 import { createApprovedAuthMiddleware, getUserFromContext } from "../lib/auth.ts";
 import {
 	createSession as createDbSession,
-	createMessage,
 	createShareLink,
 	deleteSession,
 	deleteShareLink,
@@ -48,8 +47,7 @@ import {
 } from "../lib/db.ts";
 import { sandboxLogger, sessionLogger, startupLogger } from "../lib/logger.ts";
 import { normalizeGitUrl } from "../lib/normalize-url.ts";
-import { buildSessionContext } from "../lib/session-context.ts";
-import { wrapSession } from "../lib/session-logger.ts";
+import { summarizeTurn, type WrappedSession, wrapSession } from "../lib/session-logger.ts";
 import { getActiveRequest } from "../websocket.ts";
 
 // Git environment to prevent interactive prompts and SSH key loading
@@ -63,7 +61,7 @@ const GIT_ENV: Record<string, string> = {
 };
 
 // In-memory session store (exported for WebSocket handler)
-export const sessions = new Map<string, Session>();
+export const sessions = new Map<string, WrappedSession>();
 
 // Clean up sessions idle for more than 10 minutes (no connect/restore/ask activity)
 const SESSION_TTL = 10 * 60 * 1000;
@@ -332,18 +330,27 @@ api.post("/ask", createApprovedAuthMiddleware(), async (c) => {
 				send("heartbeat", { ts: Date.now() });
 			}, 15000);
 
+			const askStream = session.ask(question);
 			try {
-				const result = await session.ask(question, {
-					onProgress: (event) => {
-						send("progress", event);
-					},
-				});
-
-				send("done", {
-					success: true,
-					response: result.response,
-					toolCalls: result.toolCalls,
-				});
+				for await (const event of askStream) {
+					if (event.type === "error") {
+						send("error", {
+							success: false,
+							error: event.message,
+							errorType: event.errorType,
+							retryability: event.retryability,
+						});
+						continue;
+					}
+					send("progress", event);
+				}
+				const turn = await askStream.result();
+				if (turn.error) {
+					// The terminal error event was already forwarded above; nothing else to send.
+				} else {
+					const { response, toolCalls } = summarizeTurn(turn);
+					send("done", { success: true, response, toolCalls });
+				}
 			} catch (err) {
 				const message = err instanceof Error ? err.message : "Unknown error";
 				send("error", { success: false, error: message });
@@ -398,7 +405,7 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 			commitish: existingSession.repo.commitish,
 			summary: repoRow?.summary,
 			repositoryId: repoRow?.id,
-			messageCount: existingSession.getMessages().length,
+			messageCount: getMessagesBySession(sessionId).length,
 			activeRequest: activeReq,
 		});
 	}
@@ -444,14 +451,11 @@ api.post("/restore", createApprovedAuthMiddleware(), async (c) => {
 		ownsSession = true;
 		const session = wrapSession(rawSession, sessionId);
 
-		// Load messages from DB and restore them, considering compaction
+		// TODO(phase 4): pass `initialTurns` + `lastCompactionSummary` to client.connect()
+		// so the LLM context is restored. Phase 3 leaves the megasthenes session empty —
+		// only DB-side message history survives across restore for now.
 		const compaction = getLatestCompaction(sessionId);
 		const dbMessages = compaction ? getNonCompactedMessages(sessionId) : getMessagesBySession(sessionId);
-
-		if (dbMessages.length > 0 || compaction) {
-			const messages = buildSessionContext(dbMessages, compaction);
-			session.replaceMessages(messages);
-		}
 
 		// Store the session in memory and mark as active — ownership transfers to the in-memory map
 		sessions.set(session.id, session);
@@ -638,27 +642,8 @@ api.post("/sessions/:id/share", createApprovedAuthMiddleware(), (c) => {
 		}
 	}
 
-	// Ensure messages are persisted from in-memory session
-	if (memSession) {
-		const existingMessages = getMessagesBySession(sessionId);
-		if (existingMessages.length === 0) {
-			const msgs = memSession.getMessages();
-			for (let i = 0; i < msgs.length; i++) {
-				const msg = msgs[i];
-				if (msg.role === "user") {
-					const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-					createMessage({ sessionId, role: "user", ordinal: i, content });
-				} else if (msg.role === "assistant") {
-					const content = JSON.stringify(msg.content);
-					createMessage({ sessionId, role: "assistant", ordinal: i, content });
-				} else if (msg.role === "toolResult") {
-					const contentText = msg.content.map((ct: { text?: string }) => ct.text ?? "").join("");
-					createMessage({ sessionId, role: "tool", ordinal: i, content: contentText, toolName: msg.toolName });
-				}
-			}
-		}
-	}
-
+	// wrapSession.ask() persists user/assistant/tool rows after every turn,
+	// so DB state is always up-to-date by the time a user creates a share link.
 	const shareLink = createShareLink(sessionId, payload.sub);
 	const shareUrl = `/share/${shareLink.share_token}`;
 
