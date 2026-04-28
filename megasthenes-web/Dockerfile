@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy package files and registry config
 COPY package.json bun.lock .npmrc ./
 
-# Install dependencies (pulls @nilenso/ask-forge from JSR)
+# Install dependencies (pulls @nilenso/megasthenes from JSR)
 RUN bun install
 
 # Copy source files
@@ -58,7 +58,7 @@ RUN addgroup -g 1001 appgroup && \
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV VISUALIZER_PORT=3001
-ENV DATABASE_PATH=/app/data/ask-forge.db
+ENV DATABASE_PATH=/app/data/megasthenes.db
 
 EXPOSE 3000 3001
 
@@ -68,7 +68,7 @@ COPY --chmod=755 <<'EOF' /app/entrypoint.sh
 set -e
 
 echo "Running database migrations..."
-litem8 up --db "${DATABASE_PATH:-/app/data/ask-forge.db}" --migrations /app/migrations
+litem8 up --db "${DATABASE_PATH:-/app/data/megasthenes.db}" --migrations /app/migrations
 
 echo "Starting visualizer server on port ${VISUALIZER_PORT:-3001}..."
 PORT="${VISUALIZER_PORT:-3001}" bun run src/visualizer-server.ts &

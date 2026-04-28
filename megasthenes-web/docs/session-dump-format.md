@@ -2,7 +2,7 @@
 
 ## Session Dump Script (`scripts/dump-sessions.ts`)
 
-The dump script exports ask-forge-web sessions to pi-compatible JSONL files that can be loaded by pi's `SessionManager.open()`.
+The dump script exports megasthenes-web sessions to pi-compatible JSONL files that can be loaded by pi's `SessionManager.open()`.
 
 ### Format Compatibility
 
@@ -14,7 +14,7 @@ The output matches pi's session format (version 3):
 
 ### Known Differences
 
-Due to data not being tracked in ask-forge-web's database, the following cannot be included:
+Due to data not being tracked in megasthenes-web's database, the following cannot be included:
 
 1. **No `model_change` entries** - Pi sessions start with a `model_change` entry; we don't track model changes per-session
 2. **No `thinking_level_change` entries** - Pi tracks thinking level; we don't store this

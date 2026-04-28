@@ -10,7 +10,7 @@ import { authLogger } from "./logger.ts";
 
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || "";
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || "";
-const MAILGUN_FROM = `AskForge <noreply@${MAILGUN_DOMAIN}>`;
+const MAILGUN_FROM = `Megasthenes <noreply@${MAILGUN_DOMAIN}>`;
 
 export function isEmailConfigured(): boolean {
 	return !!(MAILGUN_API_KEY && MAILGUN_DOMAIN);
@@ -77,29 +77,29 @@ export async function sendApprovalEmail(params: { to: string; username: string; 
 
 	const text = `Hi ${username},
 
-Great news — your AskForge account has been approved! You can now sign in and start exploring repositories.
+Great news — your Megasthenes account has been approved! You can now sign in and start exploring repositories.
 
 ${appUrl}
 
-Happy forging!
-— The AskForge team`;
+Happy exploring!
+— The Megasthenes team`;
 
 	const html = `
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 0;">
   <h2 style="color: #0a2540; margin: 0 0 16px;">You're in! 🎉</h2>
   <p style="color: #425466; font-size: 15px; line-height: 1.6; margin: 0 0 16px;">
-    Hi <strong>${safeUsername}</strong>, your AskForge account has been approved.
+    Hi <strong>${safeUsername}</strong>, your Megasthenes account has been approved.
     You can now sign in and start exploring repositories.
   </p>
   <a href="${safeAppUrl}" style="display: inline-block; background: #ec4899; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 6px; font-weight: 500; font-size: 14px;">
-    Open AskForge
+    Open Megasthenes
   </a>
   <p style="color: #8898aa; font-size: 13px; margin: 24px 0 0;">
-    Happy forging!<br/>— The AskForge team
+    Happy exploring!<br/>— The Megasthenes team
   </p>
 </div>`.trim();
 
-	return sendEmail({ to, subject: "Your AskForge account is approved!", text, html });
+	return sendEmail({ to, subject: "Your Megasthenes account is approved!", text, html });
 }
 
 /**
@@ -118,22 +118,22 @@ export async function sendWaitlistNotificationEmail(params: {
 
 	const text = `Hi ${adminUsername},
 
-${newUsername} just signed up for AskForge and is on the waitlist.
+${newUsername} just signed up for Megasthenes and is on the waitlist.
 
 You can approve or disapprove them at ${appUrl}
 
-— AskForge`;
+— Megasthenes`;
 
 	const html = `
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 0;">
   <h2 style="color: #0a2540; margin: 0 0 16px;">New waitlist signup</h2>
   <p style="color: #425466; font-size: 15px; line-height: 1.6; margin: 0 0 16px;">
-    Hi <strong>${safeAdmin}</strong>, <strong>${safeNewUser}</strong> just signed up for AskForge and is waiting for approval.
+    Hi <strong>${safeAdmin}</strong>, <strong>${safeNewUser}</strong> just signed up for Megasthenes and is waiting for approval.
   </p>
   <a href="${safeAppUrl}" style="display: inline-block; background: #ec4899; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 6px; font-weight: 500; font-size: 14px;">
     Review waitlist
   </a>
 </div>`.trim();
 
-	return sendEmail({ to, subject: `AskForge: ${newUsername} is waiting for approval`, text, html });
+	return sendEmail({ to, subject: `Megasthenes: ${newUsername} is waiting for approval`, text, html });
 }

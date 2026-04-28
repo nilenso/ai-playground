@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Dump all sessions from the ask-forge-web database into pi-compatible JSONL files.
+ * Dump all sessions from the megasthenes-web database into pi-compatible JSONL files.
  *
  * Usage:
  *   bun scripts/dump-sessions.ts <output-dir>
@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const DB_PATH = process.env.DB_PATH || "./data/ask-forge.db";
+const DB_PATH = process.env.DB_PATH || "./data/megasthenes.db";
 const outputDir = process.argv[2];
 
 // Current pi session format version

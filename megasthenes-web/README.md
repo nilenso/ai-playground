@@ -1,4 +1,4 @@
-# ask-forge-web
+# megasthenes-web
 
 Web interface for asking questions about git repositories.
 
@@ -36,7 +36,7 @@ Create migrations in the `migrations/` directory:
 podman-compose up migrate
 ```
 
-This will run all pending migrations against `data/ask-forge.db`.
+This will run all pending migrations against `data/megasthenes.db`.
 
 ### Rules
 
@@ -64,14 +64,14 @@ services:
     volumes:
       - ./migrations:/migrations:ro
       - ./data:/data
-    command: up --db /data/ask-forge.db --migrations /migrations
+    command: up --db /data/megasthenes.db --migrations /migrations
 ```
 
 The app will only start after migrations complete successfully.
 
 ## Session Visualizer
 
-A tool for visualizing ask-forge sessions stored in the SQLite database.
+A tool for visualizing megasthenes sessions stored in the SQLite database.
 
 ```bash
 bun run dev:visualizer
@@ -86,7 +86,7 @@ The visualizer runs on port 3001 and provides:
 
 ## Tracing (Arize Phoenix)
 
-ask-forge emits OpenTelemetry traces for LLM calls, tool executions, and agentic loops. [Arize Phoenix](https://github.com/Arize-ai/phoenix) is the observability backend.
+megasthenes emits OpenTelemetry traces for LLM calls, tool executions, and agentic loops. [Arize Phoenix](https://github.com/Arize-ai/phoenix) is the observability backend.
 
 ### Setup
 
@@ -105,7 +105,7 @@ ask-forge emits OpenTelemetry traces for LLM calls, tool executions, and agentic
 
 3. Open http://localhost:6006 and log in with `admin@localhost` / `admin`.
 
-Traces are routed to the `ask-forge` project automatically.
+Traces are routed to the `megasthenes-web` project automatically.
 
 ### Verify tracing
 
@@ -144,17 +144,17 @@ The app is deployed to `ask.nilenso.ai` via GitHub Actions.
 
 ### CI/CD Pipeline
 
-On push to `main` (when `ask-forge-web/` or `ask-forge/` changes):
-1. **Build**: Docker image is built and pushed to `ghcr.io/nilenso/ask-forge-web`
+On push to `main` (when `megasthenes-web/` changes):
+1. **Build**: Docker image is built and pushed to `ghcr.io/nilenso/megasthenes-web`
 2. **Deploy**: Image is pulled and restarted on the production server
 
-See `.github/workflows/ask-forge-web-docker.yml` for the workflow.
+See `.github/workflows/megasthenes-web-docker.yml` for the workflow.
 
 ### Manual Deployment
 
 ```bash
 ssh root@ask.nilenso.ai
-cd ~/ask-forge-web
+cd ~/megasthenes-web
 docker compose pull
 docker compose up -d
 ```

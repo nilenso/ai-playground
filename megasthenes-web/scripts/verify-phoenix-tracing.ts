@@ -46,7 +46,7 @@ async function gql(query: string, variables?: Record<string, unknown>): Promise<
 	return res.json() as Promise<Record<string, unknown>>;
 }
 
-const PROJECT_NAME = "ask-forge";
+const PROJECT_NAME = "megasthenes-web";
 
 async function getProjectNode<T>(fields: string): Promise<T | undefined> {
 	const data = (await gql(`{ projects { edges { node { name ${fields} } } } }`)) as {

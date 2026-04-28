@@ -7,7 +7,7 @@ import { Database } from "bun:sqlite";
 import { dirname, join } from "path";
 
 const SCRIPT_DIR = dirname(import.meta.path);
-const DB_PATH = Bun.argv[2] ?? join(SCRIPT_DIR, "..", "data", "ask-forge.db");
+const DB_PATH = Bun.argv[2] ?? join(SCRIPT_DIR, "..", "data", "megasthenes.db");
 const OUTPUT_PATH = join(SCRIPT_DIR, "..", "data", "annotations_export.csv");
 
 function csvEscape(value: unknown): string {

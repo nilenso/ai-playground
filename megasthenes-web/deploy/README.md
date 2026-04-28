@@ -1,4 +1,4 @@
-# ask-forge-web Deployment
+# megasthenes-web Deployment
 
 ## 1. Provision Infrastructure
 
@@ -53,13 +53,13 @@ The sandbox provides defense-in-depth isolation:
 Copy files from this directory to the server:
 
 ```bash
-scp docker-compose.yml .env.example root@ask.nilenso.ai:~/ask-forge-web/
+scp docker-compose.yml .env.example root@ask.nilenso.ai:~/megasthenes-web/
 ```
 
 On the server:
 
 ```bash
-cd ~/ask-forge-web
+cd ~/megasthenes-web
 
 # Create .env
 cp .env.example .env
@@ -77,7 +77,7 @@ docker ps
 
 # Check logs
 docker logs gateway
-docker logs ask-forge-web
+docker logs megasthenes-web
 
 # Check web network
 docker network inspect web
@@ -97,7 +97,7 @@ curl -I https://ask-forge-visualizer.nilenso.ai
 
 ```bash
 ssh root@ask.nilenso.ai
-cd ~/ask-forge-web
+cd ~/megasthenes-web
 docker compose pull
 docker compose up -d
 ```

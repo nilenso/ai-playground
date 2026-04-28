@@ -1,9 +1,9 @@
 /**
- * OpenTelemetry SDK bootstrap for ask-forge-web.
+ * OpenTelemetry SDK bootstrap for megasthenes-web.
  *
  * MUST be imported before any other module that uses @opentelemetry/api
- * (i.e., before ask-forge is loaded) so the TracerProvider is
- * registered globally before ask-forge's tracing.ts calls trace.getTracer().
+ * (i.e., before megasthenes is loaded) so the TracerProvider is
+ * registered globally before megasthenes' tracing.ts calls trace.getTracer().
  *
  * Backend: Arize Phoenix (opt-in via PHOENIX_COLLECTOR_ENDPOINT env var).
  * If not configured, tracing is a no-op.
@@ -17,7 +17,7 @@ import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────
 
-/** GenAI event names emitted by ask-forge's tracing module. */
+/** GenAI event names emitted by megasthenes' tracing module. */
 const GENAI_EVENT = {
 	INPUT_MESSAGES: "gen_ai.input.messages",
 	OUTPUT_MESSAGES: "gen_ai.output.messages",
@@ -56,7 +56,7 @@ const OI_ATTR = {
 
 /**
  * Extracts a plain-text answer from a JSON content blocks array.
- * ask-forge serializes output as `[{"type":"text","text":"..."},...]`.
+ * megasthenes serializes output as `[{"type":"text","text":"..."},...]`.
  */
 function extractTextFromContentBlocks(json: string): string {
 	try {
@@ -301,7 +301,7 @@ if (phoenixProcessor) {
 	const { NodeSDK } = await import("@opentelemetry/sdk-node");
 	const { resourceFromAttributes } = await import("@opentelemetry/resources");
 	const sdk = new NodeSDK({
-		resource: resourceFromAttributes({ "openinference.project.name": "ask-forge" }),
+		resource: resourceFromAttributes({ "openinference.project.name": "megasthenes-web" }),
 		spanProcessors: [phoenixProcessor],
 	});
 	sdk.start();

@@ -3,7 +3,7 @@ services:
   # Security: bwrap (filesystem/PID) + seccomp (network blocking) + gVisor (syscall)
   sandbox:
     build:
-      context: ../ask-forge/sandbox  # Relative to ~/ask-forge-web/ on server
+      context: ../megasthenes/sandbox  # Relative to ~/megasthenes-web/ on server
       dockerfile: Containerfile
     runtime: runsc  # gVisor required - handles bwrap namespace creation
     cap_drop:
@@ -34,12 +34,12 @@ services:
     restart: unless-stopped
 
   web:
-    image: ghcr.io/nilenso/ask-forge-web:latest
-    container_name: ask-forge-web
+    image: ghcr.io/nilenso/megasthenes-web:latest
+    container_name: megasthenes-web
     environment:
       - PORT=3000
       - VISUALIZER_PORT=3001
-      - DATABASE_PATH=/app/data/ask-forge.db
+      - DATABASE_PATH=/app/data/megasthenes.db
       - SESSION_DIR=/app/data/sessions
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - SANDBOX_URL=http://sandbox:8080

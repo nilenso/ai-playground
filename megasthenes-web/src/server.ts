@@ -1,5 +1,5 @@
 // Tracing MUST be imported first — registers the OTel TracerProvider
-// before ask-forge's tracing module calls trace.getTracer().
+// before megasthenes' tracing module calls trace.getTracer().
 import "./lib/tracing.ts";
 
 import { honoLogger } from "@logtape/hono";
@@ -35,7 +35,7 @@ const app = new Hono();
 app.use(
 	"/api/*",
 	honoLogger({
-		category: ["ask-forge-web", "http"],
+		category: ["megasthenes-web", "http"],
 	}),
 );
 

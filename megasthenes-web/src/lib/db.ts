@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-const DB_PATH = process.env.DB_PATH || "./data/ask-forge.db";
+const DB_PATH = process.env.DB_PATH || "./data/megasthenes.db";
 
 // Lazy initialization of database connection
 let db: Database | null = null;

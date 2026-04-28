@@ -5,7 +5,7 @@ services:
     volumes:
       - ./migrations:/migrations:ro
       - ./data:/data
-    command: up --db /data/ask-forge.db --migrations /migrations
+    command: up --db /data/megasthenes.db --migrations /migrations
 
   # ── Phoenix (observability) ──────────────────────────────────────────────
   phoenix:
