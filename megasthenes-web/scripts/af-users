@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# af-users — manage ask-forge admin users
+# af-users — manage megasthenes admin users
 #
 # Usage:
 #   af-users list                     List all users
@@ -8,16 +8,16 @@
 #   af-users remove-admin <username>  Revoke admin from a user
 #
 # Environment:
-#   DB_PATH   Path to the SQLite database (default: ./data/ask-forge.db)
+#   DB_PATH   Path to the SQLite database (default: ./data/megasthenes.db)
 #
 
 set -euo pipefail
 
-DB="${DB_PATH:-./data/ask-forge.db}"
+DB="${DB_PATH:-./data/megasthenes.db}"
 
 if [ ! -f "$DB" ]; then
     echo "error: database not found at $DB" >&2
-    echo "Set DB_PATH or run from the ask-forge-web project root." >&2
+    echo "Set DB_PATH or run from the megasthenes-web project root." >&2
     exit 1
 fi
 

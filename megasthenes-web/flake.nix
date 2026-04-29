@@ -1,5 +1,5 @@
 {
-  description = "ask-forge-web development environment";
+  description = "megasthenes-web development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -22,7 +22,7 @@
           ];
 
           shellHook = ''
-            echo "ask-forge-web dev shell"
+            echo "megasthenes-web dev shell"
             echo "  bun $(bun --version)"
             echo "  sqlite3 $(sqlite3 --version | cut -d' ' -f1)"
             echo "  podman-compose available"

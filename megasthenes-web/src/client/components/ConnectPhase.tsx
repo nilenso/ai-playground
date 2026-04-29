@@ -71,7 +71,7 @@ export function ConnectPhase({
 						<p className="data-notice">
 							All conversations are used for improving megasthenes and may end up in a{" "}
 							<a
-								href="https://huggingface.co/datasets/nilenso/ask-forge-eval-dataset"
+								href="https://huggingface.co/datasets/nilenso/megasthenes-eval-dataset"
 								target="_blank"
 								rel="noopener noreferrer"
 							>
@@ -186,7 +186,7 @@ export function ConnectPhase({
 					<p className="data-notice">
 						All conversations are used for improving megasthenes and may end up in a{" "}
 						<a
-							href="https://huggingface.co/datasets/nilenso/ask-forge-eval-dataset"
+							href="https://huggingface.co/datasets/nilenso/megasthenes-eval-dataset"
 							target="_blank"
 							rel="noopener noreferrer"
 						>
