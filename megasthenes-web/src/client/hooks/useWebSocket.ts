@@ -1,0 +1,536 @@
+import { useCallback, useEffect, useRef } from "react";
+import type { ContentBlock, Message, ProgressState } from "../types.ts";
+
+interface UseWebSocketOptions {
+	streaming: {
+		streamingMessageIdRef: React.MutableRefObject<string | null>;
+		streamingThinkingRef: React.MutableRefObject<string>;
+		streamingBlocksRef: React.MutableRefObject<ContentBlock[]>;
+		textBufferRef: React.MutableRefObject<string>;
+		releaseIntervalRef: React.MutableRefObject<number | null>;
+		updateStreamingUI: () => void;
+		startReleaseLoop: () => void;
+		stopReleaseLoop: () => void;
+		flushTextBuffer: () => void;
+	};
+	setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+	setIsAsking: React.Dispatch<React.SetStateAction<boolean>>;
+	setProgress: React.Dispatch<React.SetStateAction<ProgressState>>;
+	phaseRef: React.MutableRefObject<string>;
+	chatTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
+}
+
+export function useWebSocket({
+	streaming,
+	setMessages,
+	setIsAsking,
+	setProgress,
+	phaseRef,
+	chatTextareaRef,
+}: UseWebSocketOptions) {
+	const wsRef = useRef<WebSocket | null>(null);
+	const reconnectAttemptRef = useRef(0);
+	const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const pendingMessageRef = useRef<{ requestId: string; sessionId: string; question: string } | null>(null);
+	const currentRequestIdRef = useRef<string | null>(null);
+	const requestToSessionRef = useRef<Map<string, string>>(new Map());
+	const sessionRequestRef = useRef<Map<string, string>>(new Map());
+	const restoreAttemptedRef = useRef<string | null>(null);
+	const isResumingRef = useRef(false);
+
+	const {
+		streamingMessageIdRef,
+		streamingThinkingRef,
+		streamingBlocksRef,
+		textBufferRef,
+		updateStreamingUI,
+		startReleaseLoop,
+		stopReleaseLoop,
+		flushTextBuffer,
+	} = streaming;
+
+	// Generate unique request ID
+	const generateRequestId = useCallback(() => {
+		return `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+	}, []);
+
+	// WebSocket message handler
+	const handleWsMessage = useCallback(
+		(event: MessageEvent) => {
+			try {
+				const message = JSON.parse(event.data);
+
+				// Handle resume-related messages
+				if (message.type === "resume_start") {
+					// Server is replaying buffered events - set up state
+					currentRequestIdRef.current = message.requestId;
+					isResumingRef.current = true;
+					setIsAsking(!message.completed);
+					if (!message.completed) {
+						setProgress({ type: "thinking" });
+					}
+					return;
+				}
+
+				if (message.type === "resume_complete") {
+					// Resume finished - streaming was already done, finalize the message
+					isResumingRef.current = false;
+					// Finalize the streaming message
+					if (streamingMessageIdRef.current) {
+						setMessages((prev) =>
+							prev.map((msg) => (msg.id === streamingMessageIdRef.current ? { ...msg, isStreaming: false } : msg)),
+						);
+					}
+					streamingMessageIdRef.current = null;
+					streamingThinkingRef.current = "";
+					streamingBlocksRef.current = [];
+					textBufferRef.current = "";
+					setIsAsking(false);
+					setProgress({ type: "idle" });
+					return;
+				}
+
+				if (message.type === "resume_caught_up") {
+					// Buffer replay done, but streaming still in progress
+					// Switch back to normal mode - new events will be processed normally
+					isResumingRef.current = false;
+					return;
+				}
+
+				if (message.type === "resume_none") {
+					// No active request to resume
+					isResumingRef.current = false;
+					return;
+				}
+
+				// Ignore messages for background sessions (server persists to DB anyway)
+				if (message.requestId && message.requestId !== currentRequestIdRef.current) {
+					const msgSessionId = requestToSessionRef.current.get(message.requestId);
+					// If this is a "done", "error", or "cancelled" message, clean up tracking for the background request
+					if (message.type === "done" || message.type === "error" || message.type === "cancelled") {
+						if (msgSessionId) {
+							const tracked = sessionRequestRef.current.get(msgSessionId);
+							if (tracked === message.requestId) {
+								sessionRequestRef.current.delete(msgSessionId);
+							}
+						}
+						requestToSessionRef.current.delete(message.requestId);
+					}
+					return;
+				}
+
+				if (message.type === "pong") {
+					return;
+				}
+
+				if (message.type === "progress") {
+					const data = message.data;
+
+					// Initialize streaming message if needed
+					if (!streamingMessageIdRef.current) {
+						const newId = `assistant-${Date.now()}`;
+						streamingMessageIdRef.current = newId;
+						streamingThinkingRef.current = "";
+						streamingBlocksRef.current = [];
+
+						setMessages((prev) => [
+							...prev,
+							{
+								id: newId,
+								role: "assistant",
+								contentBlocks: [],
+								thinking: "",
+								isStreaming: true,
+							},
+						]);
+					}
+
+					// Megasthenes StreamEvent shapes: turn_start, iteration_start,
+					// thinking_delta, thinking, thinking_summary_delta, thinking_summary,
+					// text_delta, text, tool_use_start, tool_use_delta, tool_use_end,
+					// tool_result, compaction, error, turn_end. Plus a server-emitted
+					// {type: "thinking"} sentinel that arrives before the stream starts.
+					if (data.type === "compaction") {
+						const summarized =
+							typeof data.firstKeptOrdinal === "number" && data.firstKeptOrdinal > 0
+								? data.firstKeptOrdinal
+								: undefined;
+						setProgress({
+							type: "compaction",
+							tokensBefore: data.tokensBefore,
+							tokensAfter: data.tokensAfter,
+							messagesSummarized: summarized,
+						});
+					} else if (data.type === "thinking") {
+						// Library emits this either as a status hint (no fields beyond `type`)
+						// or as the full thinking block at iteration end (with `text`).
+						if (typeof data.text === "string") {
+							streamingThinkingRef.current = data.text;
+							updateStreamingUI();
+						}
+						setProgress((prev) => ({ ...prev, type: "thinking" }));
+					} else if (data.type === "thinking_delta") {
+						streamingThinkingRef.current += data.delta;
+						setProgress((prev) => ({ ...prev, type: "thinking" }));
+						updateStreamingUI();
+					} else if (data.type === "thinking_summary" || data.type === "thinking_summary_delta") {
+						// Treat thinking summaries the same as regular thinking for display.
+						if (data.type === "thinking_summary" && typeof data.text === "string") {
+							streamingThinkingRef.current = data.text;
+						} else if (typeof data.delta === "string") {
+							streamingThinkingRef.current += data.delta;
+						}
+						setProgress((prev) => ({ ...prev, type: "thinking" }));
+						updateStreamingUI();
+					} else if (data.type === "text_delta") {
+						textBufferRef.current += data.delta;
+						setProgress((prev) => ({ ...prev, type: "responding" }));
+						startReleaseLoop();
+					} else if (data.type === "text") {
+						// Full text block; if we've been streaming deltas, the buffer plus
+						// any committed content already covers it — nothing to do beyond
+						// updating progress state.
+						setProgress((prev) => ({ ...prev, type: "responding" }));
+					} else if (data.type === "tool_use_start") {
+						flushTextBuffer();
+						streamingBlocksRef.current = [
+							...streamingBlocksRef.current,
+							{ type: "tool_call", name: data.name, arguments: {}, isComplete: false },
+						];
+						updateStreamingUI();
+						setProgress({ type: "tool", toolName: data.name });
+					} else if (data.type === "tool_use_end") {
+						flushTextBuffer();
+						const blocks = streamingBlocksRef.current;
+						for (let i = blocks.length - 1; i >= 0; i--) {
+							const block = blocks[i];
+							if (block && block.type === "tool_call" && block.name === data.name && !block.isComplete) {
+								blocks[i] = {
+									...block,
+									arguments: data.params || block.arguments,
+									isComplete: true,
+								};
+								break;
+							}
+						}
+						streamingBlocksRef.current = [...blocks];
+						updateStreamingUI();
+						setProgress({ type: "tool", toolName: data.name, toolArgs: data.params });
+					} else if (data.type === "tool_result") {
+						// Tool finished executing — back to a "thinking" state while the model
+						// processes the result for the next iteration.
+						setProgress({ type: "thinking" });
+					}
+					// turn_start, iteration_start, turn_end are bookkeeping events; the
+					// server-emitted `done` message provides the user-visible completion.
+				} else if (message.type === "done") {
+					stopReleaseLoop();
+					flushTextBuffer();
+
+					const data = message.data;
+
+					if (data.success) {
+						const finalBlocks: ContentBlock[] = [];
+						if (data.response) {
+							finalBlocks.push({ type: "text", content: data.response });
+						}
+						if (data.toolCalls && Array.isArray(data.toolCalls)) {
+							for (const tc of data.toolCalls) {
+								finalBlocks.push({ type: "tool_call", name: tc.name, arguments: tc.arguments, isComplete: true });
+							}
+						}
+
+						if (streamingMessageIdRef.current) {
+							const blocksToUse = streamingBlocksRef.current.length > 0 ? streamingBlocksRef.current : finalBlocks;
+							setMessages((prev) =>
+								prev.map((msg) =>
+									msg.id === streamingMessageIdRef.current
+										? { ...msg, contentBlocks: blocksToUse, isStreaming: false }
+										: msg,
+								),
+							);
+						} else {
+							setMessages((prev) => [
+								...prev,
+								{ id: `assistant-${Date.now()}`, role: "assistant", contentBlocks: finalBlocks },
+							]);
+						}
+					} else {
+						if (streamingMessageIdRef.current) {
+							setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
+						}
+						setMessages((prev) => [
+							...prev,
+							{
+								id: `error-${Date.now()}`,
+								role: "assistant",
+								contentBlocks: [{ type: "text", content: `Error: ${data.error || "Failed to get response"}` }],
+							},
+						]);
+					}
+
+					// During resume, don't reset streaming state - wait for resume_complete
+					if (isResumingRef.current) {
+						return;
+					}
+
+					// Reset streaming state
+					streamingMessageIdRef.current = null;
+					streamingThinkingRef.current = "";
+					streamingBlocksRef.current = [];
+					textBufferRef.current = "";
+
+					// Clean up tracking maps
+					if (message.requestId) {
+						const sid = requestToSessionRef.current.get(message.requestId);
+						if (sid) {
+							const tracked = sessionRequestRef.current.get(sid);
+							if (tracked === message.requestId) sessionRequestRef.current.delete(sid);
+						}
+						requestToSessionRef.current.delete(message.requestId);
+					}
+
+					currentRequestIdRef.current = null;
+					pendingMessageRef.current = null;
+					setIsAsking(false);
+					setProgress({ type: "idle" });
+					if (phaseRef.current === "chat") {
+						chatTextareaRef.current?.focus();
+					}
+				} else if (message.type === "error") {
+					stopReleaseLoop();
+
+					// Auto-restore expired sessions transparently
+					const isSessionExpired = message.error === "Session not found or expired";
+					const pending = pendingMessageRef.current;
+					const alreadyRetried = restoreAttemptedRef.current === pending?.requestId;
+
+					if (isSessionExpired && pending && !alreadyRetried) {
+						restoreAttemptedRef.current = pending.requestId;
+
+						// Clean up any partial streaming UI
+						if (streamingMessageIdRef.current) {
+							setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
+						}
+						streamingMessageIdRef.current = null;
+						streamingThinkingRef.current = "";
+						streamingBlocksRef.current = [];
+						textBufferRef.current = "";
+
+						// Attempt to restore the session, then retry the ask
+						fetch("/api/restore", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ sessionId: pending.sessionId }),
+						})
+							.then((res) => {
+								if (res.ok && wsRef.current?.readyState === WebSocket.OPEN) {
+									wsRef.current.send(JSON.stringify({ type: "ask", ...pending }));
+								} else {
+									throw new Error("Restore failed");
+								}
+							})
+							.catch(() => {
+								// Restore failed — show the original error
+								setMessages((prev) => [
+									...prev,
+									{
+										id: `error-${Date.now()}`,
+										role: "assistant",
+										contentBlocks: [{ type: "text", content: `Error: ${message.error || "Failed to get response"}` }],
+									},
+								]);
+								currentRequestIdRef.current = null;
+								pendingMessageRef.current = null;
+								setIsAsking(false);
+								setProgress({ type: "idle" });
+							});
+						// Don't reset pending/isAsking yet — we're retrying
+					} else {
+						if (streamingMessageIdRef.current) {
+							setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessageIdRef.current));
+						}
+						setMessages((prev) => [
+							...prev,
+							{
+								id: `error-${Date.now()}`,
+								role: "assistant",
+								contentBlocks: [{ type: "text", content: `Error: ${message.error || "Failed to get response"}` }],
+							},
+						]);
+
+						streamingMessageIdRef.current = null;
+						streamingThinkingRef.current = "";
+						streamingBlocksRef.current = [];
+						textBufferRef.current = "";
+
+						if (message.requestId) {
+							const sid = requestToSessionRef.current.get(message.requestId);
+							if (sid) {
+								const tracked = sessionRequestRef.current.get(sid);
+								if (tracked === message.requestId) sessionRequestRef.current.delete(sid);
+							}
+							requestToSessionRef.current.delete(message.requestId);
+						}
+
+						currentRequestIdRef.current = null;
+						pendingMessageRef.current = null;
+						setIsAsking(false);
+						setProgress({ type: "idle" });
+					}
+				} else if (message.type === "cancelled") {
+					stopReleaseLoop();
+					flushTextBuffer();
+
+					if (streamingMessageIdRef.current) {
+						setMessages((prev) =>
+							prev.map((msg) =>
+								msg.id === streamingMessageIdRef.current
+									? {
+											...msg,
+											isStreaming: false,
+											// Drop tool calls that were mid-stream when cancellation hit —
+											// they have no params and never ran.
+											contentBlocks: msg.contentBlocks.filter((b) => !(b.type === "tool_call" && !b.isComplete)),
+										}
+									: msg,
+							),
+						);
+					}
+
+					streamingMessageIdRef.current = null;
+					streamingThinkingRef.current = "";
+					streamingBlocksRef.current = [];
+					textBufferRef.current = "";
+
+					if (message.requestId) {
+						const sid = requestToSessionRef.current.get(message.requestId);
+						if (sid) {
+							const tracked = sessionRequestRef.current.get(sid);
+							if (tracked === message.requestId) sessionRequestRef.current.delete(sid);
+						}
+						requestToSessionRef.current.delete(message.requestId);
+					}
+
+					currentRequestIdRef.current = null;
+					pendingMessageRef.current = null;
+					setIsAsking(false);
+					setProgress({ type: "idle" });
+				}
+			} catch {
+				// Ignore JSON parse errors
+			}
+		},
+		[
+			setMessages,
+			setIsAsking,
+			setProgress,
+			phaseRef,
+			chatTextareaRef,
+			streamingMessageIdRef,
+			streamingThinkingRef,
+			streamingBlocksRef,
+			textBufferRef,
+			updateStreamingUI,
+			startReleaseLoop,
+			stopReleaseLoop,
+			flushTextBuffer,
+		],
+	);
+
+	// Create/reconnect WebSocket with exponential backoff
+	const connectWebSocket = useCallback(() => {
+		if (wsRef.current?.readyState === WebSocket.OPEN) {
+			return;
+		}
+
+		if (reconnectTimeoutRef.current) {
+			clearTimeout(reconnectTimeoutRef.current);
+			reconnectTimeoutRef.current = null;
+		}
+
+		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+		const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+		wsRef.current = ws;
+
+		ws.onopen = () => {
+			reconnectAttemptRef.current = 0;
+
+			if (pendingMessageRef.current) {
+				ws.send(JSON.stringify({ type: "ask", ...pendingMessageRef.current }));
+			}
+		};
+
+		ws.onmessage = handleWsMessage;
+
+		ws.onerror = () => {};
+
+		ws.onclose = () => {
+			wsRef.current = null;
+
+			if (pendingMessageRef.current && reconnectAttemptRef.current < 5) {
+				const delay = Math.min(1000 * 2 ** reconnectAttemptRef.current, 30000);
+				reconnectAttemptRef.current++;
+				reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
+			} else if (pendingMessageRef.current) {
+				setMessages((prev) => [
+					...prev,
+					{
+						id: `error-${Date.now()}`,
+						role: "assistant",
+						contentBlocks: [{ type: "text", content: "Error: Connection lost. Please try again." }],
+					},
+				]);
+				currentRequestIdRef.current = null;
+				pendingMessageRef.current = null;
+				setIsAsking(false);
+				setProgress({ type: "idle" });
+			}
+		};
+	}, [handleWsMessage, setMessages, setIsAsking, setProgress]);
+
+	// Cleanup on unmount
+	useEffect(() => {
+		return () => {
+			if (reconnectTimeoutRef.current) {
+				clearTimeout(reconnectTimeoutRef.current);
+			}
+			if (streaming.releaseIntervalRef.current !== null) {
+				clearInterval(streaming.releaseIntervalRef.current);
+			}
+			if (wsRef.current) {
+				wsRef.current.close();
+			}
+		};
+	}, [streaming.releaseIntervalRef]);
+
+	// Resume streaming for a session (after page refresh)
+	const resumeStreaming = useCallback(
+		(sessionId: string) => {
+			connectWebSocket();
+
+			// Wait for connection to be ready, then send resume request
+			const checkAndSend = () => {
+				if (wsRef.current?.readyState === WebSocket.OPEN) {
+					wsRef.current.send(JSON.stringify({ type: "resume", sessionId }));
+				} else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+					setTimeout(checkAndSend, 50);
+				}
+			};
+			checkAndSend();
+		},
+		[connectWebSocket],
+	);
+
+	return {
+		wsRef,
+		currentRequestIdRef,
+		requestToSessionRef,
+		sessionRequestRef,
+		pendingMessageRef,
+		reconnectTimeoutRef,
+		connectWebSocket,
+		generateRequestId,
+		resumeStreaming,
+	};
+}

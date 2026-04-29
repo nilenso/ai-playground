@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A polyglot AI/ML experimentation monorepo using **Bun** runtime and **TypeScript** throughout. Contains:
 
-- **ask-forge-web** - Web UI and server wrapping the [ask-forge](https://github.com/nilenso/ask-forge) library
+- **megasthenes-web** - Web UI and server wrapping the [megasthenes](https://github.com/nilenso/megasthenes) library
 - **fivetwo** - Long-term memory/project tracking system for AI coding agents
 - **lenso2** - Real-time voice/video meeting assistant using Google Gemini API
 
@@ -14,7 +14,7 @@ A polyglot AI/ML experimentation monorepo using **Bun** runtime and **TypeScript
 
 All projects use Bun. Run commands from each project's directory.
 
-### ask-forge-web
+### megasthenes-web
 ```bash
 bun install
 podman-compose up migrate  # Run database migrations (required before first run)
@@ -55,14 +55,14 @@ bun run tunnel       # Expose via Cloudflare Tunnel (for HTTPS/WebRTC)
 
 **SQLite with Migrations:** Database schemas live in `migrations/` directories. Use litem8 for versioning.
 
-**WebSocket for Real-time:** ask-forge-web streams LLM responses over WebSocket; lenso2 uses WebSocket for real-time transcription. Use Bun's native WebSocket support (not `ws` library).
+**WebSocket for Real-time:** megasthenes-web streams LLM responses over WebSocket; lenso2 uses WebSocket for real-time transcription. Use Bun's native WebSocket support (not `ws` library).
 
-**LLM Agent Pattern (ask-forge):** Uses pi-ai framework for agentic loops with tool-use. Max tool iterations configurable (default: 20). System prompts define agent behavior.
+**LLM Agent Pattern (megasthenes):** Uses pi-ai framework for agentic loops with tool-use. Max tool iterations configurable (default: 20). System prompts define agent behavior.
 
 **Dual Interfaces (fivetwo):** Supports both React web frontend and Terminal UI (TUI) for the same backend.
 
 ### External Dependencies
-ask-forge-web depends on the [ask-forge](https://github.com/nilenso/ask-forge) library, published to JSR as `@nilenso/ask-forge`. Updates to ask-forge require bumping the dependency version in ask-forge-web.
+megasthenes-web depends on the [megasthenes](https://github.com/nilenso/megasthenes) library, published to JSR as `@nilenso/megasthenes`. Updates to megasthenes require bumping the dependency version in megasthenes-web.
 
 ## Code Quality
 
@@ -77,7 +77,7 @@ Biome configuration (all projects):
 
 Projects load environment variables from `.env` files automatically. Required variables vary by project (API keys, database paths, ports).
 
-## UI Design Conventions (ask-forge-web)
+## UI Design Conventions (megasthenes-web)
 
 - **All icons should be pink** (`var(--accent-pink)` / `#ec4899`). This applies to sidebar icons, dropdown menu icons, action buttons, and any other icon elements throughout the UI.
 
@@ -89,7 +89,7 @@ Projects load environment variables from `.env` files automatically. Required va
 
 ## JSR Packages in Docker
 
-When using JSR packages (like `@nilenso/ask-forge`) in Docker builds:
+When using JSR packages (like `@nilenso/megasthenes`) in Docker builds:
 - The `.npmrc` file must be copied **before** `bun install`
 - It configures the JSR npm bridge: `@jsr:registry=https://npm.jsr.io`
 - Without this, bun looks at npmjs.org and fails with 404

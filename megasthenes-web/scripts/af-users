@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+#
+# af-users — manage megasthenes admin users
+#
+# Usage:
+#   af-users list                     List all users
+#   af-users set-admin <username>     Grant admin to a user
+#   af-users remove-admin <username>  Revoke admin from a user
+#
+# Environment:
+#   DB_PATH   Path to the SQLite database (default: ./data/megasthenes.db)
+#
+
+set -euo pipefail
+
+DB="${DB_PATH:-./data/megasthenes.db}"
+
+if [ ! -f "$DB" ]; then
+    echo "error: database not found at $DB" >&2
+    echo "Set DB_PATH or run from the megasthenes-web project root." >&2
+    exit 1
+fi
+
+# Validate a GitHub username (alphanumeric + hyphens only)
+validate_username() {
+    local username="$1"
+    if [[ ! "$username" =~ ^[a-zA-Z0-9-]+$ ]]; then
+        echo "error: invalid username '$username' (expected GitHub format: alphanumeric and hyphens)" >&2
+        exit 1
+    fi
+}
+
+# Run a query with a username parameter safely (username is pre-validated)
+sql_user() {
+    local username="$1" query="$2"
+    validate_username "$username"
+    sqlite3 "$DB" <<EOF
+.param set :name '$username'
+$query
+EOF
+}
+
+# Verify a username exists; exit 1 if not
+require_user() {
+    local username="$1"
+    validate_username "$username"
+    local count
+    count=$(sql_user "$username" \
+        "SELECT COUNT(*) FROM users WHERE username = :name COLLATE NOCASE;")
+    if [ "$count" = "0" ]; then
+        echo "error: user '$username' not found" >&2
+        exit 1
+    fi
+}
+
+usage() {
+    echo "Usage: af-users <command> [args]"
+    echo ""
+    echo "Commands:"
+    echo "  list                     List all users"
+    echo "  set-admin <username>     Grant admin to a user"
+    echo "  remove-admin <username>  Revoke admin from a user"
+    exit 1
+}
+
+cmd_list() {
+    sqlite3 -header -column "$DB" \
+        "SELECT id, username, display_name, email, status, CASE is_admin WHEN 1 THEN 'yes' ELSE '' END AS admin, created_at FROM users ORDER BY created_at;"
+}
+
+cmd_set_admin() {
+    local username="${1:?Usage: af-users set-admin <username>}"
+    require_user "$username"
+
+    sql_user "$username" \
+        "UPDATE users SET is_admin = 1, updated_at = datetime('now') WHERE username = :name COLLATE NOCASE;"
+    echo "Granted admin to '$username'."
+}
+
+cmd_remove_admin() {
+    local username="${1:?Usage: af-users remove-admin <username>}"
+    require_user "$username"
+
+    sql_user "$username" \
+        "UPDATE users SET is_admin = 0, updated_at = datetime('now') WHERE username = :name COLLATE NOCASE;"
+    echo "Revoked admin from '$username'."
+}
+
+# --- main ---
+
+case "${1:-}" in
+    list)          cmd_list ;;
+    set-admin)     cmd_set_admin "${2:-}" ;;
+    remove-admin)  cmd_remove_admin "${2:-}" ;;
+    *)             usage ;;
+esac
