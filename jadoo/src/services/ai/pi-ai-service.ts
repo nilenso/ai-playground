@@ -8,6 +8,8 @@ import {
 	type Context,
 	completeSimple,
 	getModel,
+	getModels,
+	getProviders,
 	type KnownProvider,
 	type Model,
 	type Static,
@@ -30,6 +32,35 @@ function mapStopReason(reason: AssistantMessage["stopReason"]): AICompletionResp
 	}
 }
 
+function resolveModel(config: AIConfig): Model<Api> {
+	const provider = config.provider as KnownProvider;
+	const knownProviders = getProviders();
+
+	if (!knownProviders.includes(provider)) {
+		throw new Error(
+			`Unknown AI provider "${config.provider}". Known providers: ${knownProviders.slice(0, 10).join(", ")}${knownProviders.length > 10 ? ", ..." : ""}`,
+		);
+	}
+
+	const model = getModel(provider, config.model as never) as Model<Api> | undefined;
+	if (model) return model;
+
+	const providerModels = getModels(provider).map((candidate) => candidate.id);
+	const searchTerms = config.model
+		.toLowerCase()
+		.split(/[/:_-]+/)
+		.filter((term) => term.length >= 3);
+	const suggestions = providerModels
+		.filter((candidate) => {
+			const lowerCandidate = candidate.toLowerCase();
+			return searchTerms.some((term) => lowerCandidate.includes(term));
+		})
+		.slice(0, 5);
+	const exampleModels = (suggestions.length > 0 ? suggestions : providerModels.slice(0, 5)).join(", ");
+
+	throw new Error(`Unknown AI model "${config.model}" for provider "${config.provider}". Try one of: ${exampleModels}`);
+}
+
 export class PiAIService implements AIService {
 	// pi-ai Model generic requires exact literal types that can't be known at runtime
 	private model: Model<Api>;
@@ -37,8 +68,7 @@ export class PiAIService implements AIService {
 
 	constructor(config: AIConfig) {
 		this.config = config;
-		// The generics require literal string types — we cast because config is dynamic.
-		this.model = getModel(config.provider as KnownProvider, config.model as never);
+		this.model = resolveModel(config);
 	}
 
 	async complete(request: AICompletionRequest): Promise<AICompletionResponse> {
