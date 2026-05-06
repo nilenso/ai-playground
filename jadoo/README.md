@@ -5,6 +5,7 @@ Extensible Slack bot framework with AI, Google Calendar, and Harvest integration
 ## Setup
 
 ```bash
+just develop          # or: nix develop 'path:.'
 bun install
 cp .env.example .env  # fill in your values
 ```
@@ -35,6 +36,14 @@ Migration files live in `migrations/` as plain SQL, named `<number>_<name>.sql`.
 bun run dev    # with hot reload
 bun run start  # production
 ```
+
+Optional debug logging:
+
+```bash
+LEAVE_DEBUG_LOG_ALL_MESSAGES=true bun run dev
+```
+
+When enabled, the leave plugin logs every Slack message it sees with whether it matched as an OOO/leave message.
 
 ## Test
 

@@ -37,6 +37,7 @@
  *   [env]
  *   SLACK_LEAVE_CHANNEL_ID = "CMVPEEWCQ"
  *   TRIGGER_KEYWORDS = "leave,ooo,wfh,sick,vacation,pto,day off"
+ *   LEAVE_DEBUG_LOG_ALL_MESSAGES = "true"
  */
 
 import { existsSync, readFileSync } from "node:fs";
