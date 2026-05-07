@@ -83,6 +83,9 @@ describe("processTick — create_leave", () => {
 		expect(calendar.createdEvents).toHaveLength(1);
 		expect(calendar.createdEvents[0].summary).toContain("Alice");
 		expect(calendar.createdEvents[0].summary).toContain("vacation");
+		expect(calendar.createdEvents[0].allDay).toBe(true);
+		expect(calendar.createdEvents[0].start.toISOString().slice(0, 10)).toBe("2026-04-01");
+		expect(calendar.createdEvents[0].end.toISOString().slice(0, 10)).toBe("2026-04-02");
 
 		// Harvest entry created
 		expect(harvest.createdEntries).toHaveLength(1);
@@ -257,6 +260,8 @@ describe("processTick — create_leave", () => {
 		expect(getPendingActionById(db, a1.id)?.status).toBe("completed");
 		expect(getPendingActionById(db, a2.id)?.status).toBe("completed");
 		expect(calendar.createdEvents).toHaveLength(2);
+		expect(calendar.createdEvents[0].allDay).toBe(true);
+		expect(calendar.createdEvents[1].allDay).toBeFalsy();
 		expect(harvest.createdEntries).toHaveLength(2);
 	});
 });

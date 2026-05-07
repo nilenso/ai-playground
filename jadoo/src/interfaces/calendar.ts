@@ -9,6 +9,7 @@ export interface CalendarEvent {
 	description?: string;
 	start: Date;
 	end: Date;
+	allDay?: boolean;
 	attendees?: string[];
 	location?: string;
 }
@@ -18,6 +19,7 @@ export interface CreateEventRequest {
 	description?: string;
 	start: Date;
 	end: Date;
+	allDay?: boolean;
 	attendees?: string[];
 	location?: string;
 }

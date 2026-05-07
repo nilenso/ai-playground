@@ -95,6 +95,7 @@ export class MockCalendarService implements CalendarService {
 			description: request.description,
 			start: request.start,
 			end: request.end,
+			allDay: request.allDay,
 			attendees: request.attendees,
 			location: request.location,
 		};

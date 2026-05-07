@@ -278,20 +278,26 @@ export class BackgroundWorker {
 			let stage: LeaveProcessingFailure["stage"] = "calendar";
 			try {
 				// Sync to Calendar
+				const isFullDayLeave = payload.leaveType === "full";
 				const start = new Date(`${date}T00:00:00`);
-				const end = new Date(`${date}T23:59:59`);
+				const end = isFullDayLeave ? new Date(`${date}T00:00:00`) : new Date(`${date}T23:59:59`);
+				if (isFullDayLeave) {
+					end.setDate(end.getDate() + 1);
+				}
 				logWorker("creating calendar event", {
 					actionId: action.id,
 					recordId: record.id,
 					date,
 					start: start.toISOString(),
 					end: end.toISOString(),
+					allDay: isFullDayLeave,
 				});
 				const calEvent = await this.calendar.createEvent({
 					summary: `${user.slack_display_name} — ${payload.category} (${payload.leaveType})`,
 					description: payload.reason,
 					start,
 					end,
+					allDay: isFullDayLeave,
 				});
 				logWorker("calendar event created", {
 					actionId: action.id,
