@@ -12,12 +12,14 @@ import type {
 } from "../../interfaces/calendar.js";
 
 function toCalendarEvent(event: calendar_v3.Schema$Event): CalendarEvent {
+	const allDay = Boolean(event.start?.date && !event.start?.dateTime);
 	return {
 		id: event.id ?? "",
 		summary: event.summary ?? "",
 		description: event.description ?? undefined,
 		start: new Date(event.start?.dateTime ?? event.start?.date ?? ""),
 		end: new Date(event.end?.dateTime ?? event.end?.date ?? ""),
+		allDay,
 		attendees: event.attendees?.map((a) => a.email ?? "").filter(Boolean),
 		location: event.location ?? undefined,
 	};
@@ -59,8 +61,12 @@ export class GCalService implements CalendarService {
 			requestBody: {
 				summary: request.summary,
 				description: request.description,
-				start: { dateTime: request.start.toISOString() },
-				end: { dateTime: request.end.toISOString() },
+				start: request.allDay
+					? { date: request.start.toISOString().slice(0, 10) }
+					: { dateTime: request.start.toISOString() },
+				end: request.allDay
+					? { date: request.end.toISOString().slice(0, 10) }
+					: { dateTime: request.end.toISOString() },
 				attendees: request.attendees?.map((email) => ({ email })),
 				location: request.location,
 			},
