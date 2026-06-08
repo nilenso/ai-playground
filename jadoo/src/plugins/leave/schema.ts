@@ -2,9 +2,19 @@ import { Type } from "@sinclair/typebox";
 
 export const LeaveDateSchema = Type.Object({
 	date: Type.String({ description: "The date of the leave in YYYY-MM-DD format" }),
-	type: Type.Union([Type.Literal("full"), Type.Literal("half_am"), Type.Literal("half_pm")], {
-		description: "Whether the leave is for a full day, morning half, or afternoon half",
+	type: Type.Union([Type.Literal("full"), Type.Literal("half_am"), Type.Literal("half_pm"), Type.Literal("specific")], {
+		description: "Whether the leave is for a full day, morning half, afternoon half, or a time-specific interval",
 	}),
+	start_time: Type.Optional(
+		Type.String({
+			description: "Start time in 24-hour HH:MM format when the leave is time-specific",
+		}),
+	),
+	end_time: Type.Optional(
+		Type.String({
+			description: "End time in 24-hour HH:MM format when the leave is time-specific",
+		}),
+	),
 	category: Type.Union([Type.Literal("vacation"), Type.Literal("sick")], {
 		description: "The category of the leave",
 	}),

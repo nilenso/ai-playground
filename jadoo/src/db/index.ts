@@ -2,6 +2,7 @@ export type { DatabaseOptions } from "./database.js";
 export { openDatabase, runMigrations } from "./database.js";
 export {
 	createLeaveRecord,
+	getCancelableLeaveRecordsByUser,
 	getLeaveRecordById,
 	getLeaveRecordsByPendingAction,
 	getLeaveRecordsByStatus,
