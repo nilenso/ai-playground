@@ -11,6 +11,8 @@ export function createLeaveRecord(
 		userId: number;
 		date: string;
 		leaveType?: string;
+		startTime?: string | null;
+		endTime?: string | null;
 		leaveCategory?: string;
 		slackMessageTs?: string | null;
 		slackChannelId?: string | null;
@@ -19,12 +21,26 @@ export function createLeaveRecord(
 ): DbLeaveRecord {
 	const now = new Date().toISOString();
 	db.run(
-		`INSERT INTO leave_records (user_id, date, leave_type, leave_category, slack_message_ts, slack_channel_id, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO leave_records (
+			user_id,
+			date,
+			leave_type,
+			start_time,
+			end_time,
+			leave_category,
+			slack_message_ts,
+			slack_channel_id,
+			status,
+			created_at,
+			updated_at
+		)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		[
 			params.userId,
 			params.date,
 			params.leaveType ?? "full",
+			params.startTime ?? null,
+			params.endTime ?? null,
 			params.leaveCategory ?? "vacation",
 			params.slackMessageTs ?? null,
 			params.slackChannelId ?? null,
@@ -44,6 +60,8 @@ export function upsertLeaveRecord(
 		userId: number;
 		date: string;
 		leaveType?: string;
+		startTime?: string | null;
+		endTime?: string | null;
 		leaveCategory?: string;
 		slackMessageTs?: string | null;
 		slackChannelId?: string | null;
@@ -52,10 +70,24 @@ export function upsertLeaveRecord(
 ): DbLeaveRecord {
 	const now = new Date().toISOString();
 	const _result = db.run(
-		`INSERT INTO leave_records (user_id, date, leave_type, leave_category, slack_message_ts, slack_channel_id, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO leave_records (
+			user_id,
+			date,
+			leave_type,
+			start_time,
+			end_time,
+			leave_category,
+			slack_message_ts,
+			slack_channel_id,
+			status,
+			created_at,
+			updated_at
+		)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id, date) DO UPDATE SET
 		   leave_type = excluded.leave_type,
+		   start_time = excluded.start_time,
+		   end_time = excluded.end_time,
 		   leave_category = excluded.leave_category,
 		   status = excluded.status,
 		   error_message = NULL,
@@ -64,6 +96,8 @@ export function upsertLeaveRecord(
 			params.userId,
 			params.date,
 			params.leaveType ?? "full",
+			params.startTime ?? null,
+			params.endTime ?? null,
 			params.leaveCategory ?? "vacation",
 			params.slackMessageTs ?? null,
 			params.slackChannelId ?? null,
@@ -154,4 +188,21 @@ export function getLeaveRecordsByPendingAction(db: Database, userId: number, dat
 			`SELECT * FROM leave_records WHERE user_id = ? AND date IN (${placeholders}) ORDER BY date`,
 		)
 		.all(userId, ...dates);
+}
+
+export function getCancelableLeaveRecordsByUser(
+	db: Database,
+	userId: number,
+	pivotDate: string,
+	limit: number = 5,
+): DbLeaveRecord[] {
+	return db
+		.query<DbLeaveRecord, [number, string, number]>(
+			`SELECT * FROM leave_records
+			 WHERE user_id = ?
+			 AND status IN ('confirmed', 'completed')
+			 ORDER BY CASE WHEN date >= ? THEN 0 ELSE 1 END, date ASC
+			 LIMIT ?`,
+		)
+		.all(userId, pivotDate, limit);
 }

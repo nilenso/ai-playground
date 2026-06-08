@@ -125,6 +125,69 @@ describe("processTick — create_leave", () => {
 		expect(getLeaveRecordsByStatus(db, "completed")).toHaveLength(3);
 	});
 
+	it("creates time-specific leave as a timed calendar event and logs exact Harvest hours when longer than 2 hours", async () => {
+		const action = createPendingAction(db, {
+			userId: user.id,
+			actionType: "create_leave",
+			payload: {
+				dates: ["2026-04-01"],
+				leaveType: "specific",
+				startTime: "10:00",
+				endTime: "12:30",
+				category: "vacation",
+				reason: "Doctor appointment",
+			},
+			slackChannelId: "C1",
+			expiresAt: futureExpiry(),
+		});
+		updatePendingActionBotMessageTs(db, action.id, "bot-msg-specific");
+		updatePendingActionStatus(db, action.id, "confirmed");
+
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		await worker.processTick();
+
+		expect(getPendingActionById(db, action.id)?.status).toBe("completed");
+		expect(calendar.createdEvents).toHaveLength(1);
+		expect(calendar.createdEvents[0].allDay).toBe(false);
+		expect(calendar.createdEvents[0].summary).toContain("Time specific");
+		expect(calendar.createdEvents[0].start.toISOString()).toBe("2026-04-01T04:30:00.000Z");
+		expect(calendar.createdEvents[0].end.toISOString()).toBe("2026-04-01T07:00:00.000Z");
+		expect(harvest.createdEntries).toHaveLength(1);
+		expect(harvest.createdEntries[0].hours).toBe(2.5);
+		expect(harvest.createdEntries[0].notes).toContain("10:00-12:30");
+	});
+
+	it("does not create a Harvest entry for time-specific leave of 2 hours or less", async () => {
+		const action = createPendingAction(db, {
+			userId: user.id,
+			actionType: "create_leave",
+			payload: {
+				dates: ["2026-04-01"],
+				leaveType: "specific",
+				startTime: "10:00",
+				endTime: "12:00",
+				category: "vacation",
+				reason: "Bank work",
+			},
+			slackChannelId: "C1",
+			expiresAt: futureExpiry(),
+		});
+		updatePendingActionBotMessageTs(db, action.id, "bot-msg-short-specific");
+		updatePendingActionStatus(db, action.id, "confirmed");
+
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		await worker.processTick();
+
+		expect(getPendingActionById(db, action.id)?.status).toBe("completed");
+		expect(calendar.createdEvents).toHaveLength(1);
+		expect(calendar.createdEvents[0].allDay).toBe(false);
+		expect(harvest.createdEntries).toHaveLength(0);
+
+		const records = getLeaveRecordsByStatus(db, "completed");
+		expect(records).toHaveLength(1);
+		expect(records[0].harvest_entry_id).toBeNull();
+	});
+
 	it("skips Harvest when user has no harvest_user_id", async () => {
 		const noHarvestUser = createUser(db, {
 			slackUserId: "U_BOB",
@@ -261,7 +324,8 @@ describe("processTick — create_leave", () => {
 		expect(getPendingActionById(db, a2.id)?.status).toBe("completed");
 		expect(calendar.createdEvents).toHaveLength(2);
 		expect(calendar.createdEvents[0].allDay).toBe(true);
-		expect(calendar.createdEvents[1].allDay).toBeFalsy();
+		expect(calendar.createdEvents[1].allDay).toBe(true);
+		expect(calendar.createdEvents[1].summary).toContain("Half day (AM)");
 		expect(harvest.createdEntries).toHaveLength(2);
 	});
 });

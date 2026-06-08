@@ -4,17 +4,83 @@ import type { LeaveDateSchema } from "./schema.js";
 
 type LeaveDate = Static<typeof LeaveDateSchema>;
 
-function formatLeaveDate(ld: LeaveDate): string {
-	const date = new Date(`${ld.date}T12:00:00Z`); // use noon to avoid tz issues
-	const dateStr = date.toLocaleDateString("en-US", {
+export interface InteractiveOption {
+	text: string;
+	value: string;
+	actionId: string;
+	style?: "primary" | "danger";
+}
+
+function formatCalendarDate(dateText: string): string {
+	const date = new Date(`${dateText}T12:00:00Z`);
+	return date.toLocaleDateString("en-US", {
 		weekday: "short",
 		month: "short",
 		day: "numeric",
 		year: "numeric",
 	});
-	const typeStr = ld.type === "full" ? "Full day" : ld.type === "half_am" ? "First half" : "Second half";
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+	const result: T[][] = [];
+	for (let i = 0; i < items.length; i += size) {
+		result.push(items.slice(i, i + size));
+	}
+	return result;
+}
+
+export function buildInteractiveChoiceBlocks(text: string, options: InteractiveOption[]): Block[] {
+	const blocks: Block[] = [
+		{
+			type: "section",
+			text: {
+				type: "mrkdwn",
+				text,
+			},
+		},
+	];
+
+	for (const optionGroup of chunk(options, 5)) {
+		blocks.push({
+			type: "actions",
+			elements: optionGroup.map((option) => ({
+				type: "button",
+				text: {
+					type: "plain_text",
+					text: option.text,
+					emoji: true,
+				},
+				value: option.value,
+				action_id: option.actionId,
+				...(option.style ? { style: option.style } : {}),
+			})),
+		});
+	}
+
+	return blocks;
+}
+
+function formatLeaveDate(ld: LeaveDate): string {
+	const typeStr =
+		ld.type === "full"
+			? "Full day"
+			: ld.type === "half_am"
+				? "First half"
+				: ld.type === "half_pm"
+					? "Second half"
+					: `Time specific (${ld.start_time ?? "?"}-${ld.end_time ?? "?"})`;
 	const categoryStr = ld.category.charAt(0).toUpperCase() + ld.category.slice(1);
-	return `• ${dateStr} — ${typeStr} (${categoryStr})`;
+	return `• ${formatCalendarDate(ld.date)} — ${typeStr} (${categoryStr})`;
+}
+
+export function formatLeaveDateLabel(dateText: string): string {
+	return formatCalendarDate(dateText);
+}
+
+export function formatLeaveDateRangeLabel(dates: string[]): string {
+	if (dates.length === 0) return "No dates";
+	if (dates.length === 1) return formatLeaveDateLabel(dates[0]);
+	return `${formatLeaveDateLabel(dates[0])} → ${formatLeaveDateLabel(dates[dates.length - 1])}`;
 }
 
 export function buildConfirmationBlocks(dates: LeaveDate[], actionId: string, hasConflict: boolean = false): Block[] {
@@ -60,16 +126,15 @@ export function buildConfirmationBlocks(dates: LeaveDate[], actionId: string, ha
 	];
 }
 
-export function buildCancellationClarificationBlocks(): Block[] {
-	return [
-		{
-			type: "section",
-			text: {
-				type: "mrkdwn",
-				text: '🔄 Which leave dates would you like to cancel?\n\nPlease reply in this thread with the specific dates, e.g., "cancel my leave on Jan 3" or "cancel Jan 3-5"',
-			},
-		},
-	];
+export function buildLeaveOptionsBlocks(options: InteractiveOption[]): Block[] {
+	return buildInteractiveChoiceBlocks(
+		"🧭 I couldn't turn that into a final leave action automatically. Choose one of the options below.",
+		options,
+	);
+}
+
+export function buildCancellationSelectionBlocks(options: InteractiveOption[]): Block[] {
+	return buildInteractiveChoiceBlocks("🔄 Select a leave entry to cancel.", options);
 }
 
 export function buildCancellationConfirmationBlocks(dates: LeaveDate[], actionId: string): Block[] {

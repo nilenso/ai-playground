@@ -16,8 +16,17 @@ const HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 const FULL_DAY_HOURS = 8.0;
 const HALF_DAY_HOURS = 4.0;
 
-function getHours(leaveType: LeaveType): number {
-	return leaveType === "full" ? FULL_DAY_HOURS : HALF_DAY_HOURS;
+function getHours(request: CreateTimeEntryRequest): number {
+	if (request.hours !== undefined) {
+		return request.hours;
+	}
+	if (request.leaveType === "full") {
+		return FULL_DAY_HOURS;
+	}
+	if (request.leaveType === "half_am" || request.leaveType === "half_pm") {
+		return HALF_DAY_HOURS;
+	}
+	throw new Error("Time-specific leave requires explicit hours for Harvest sync");
 }
 
 function getTaskId(category: LeaveCategory, config: HarvestConfig): number {
@@ -28,7 +37,8 @@ function buildNotes(leaveType: LeaveType, category: LeaveCategory): string {
 	const categoryLabel = category === "sick" ? "Sick" : "Vacation";
 	if (leaveType === "full") return `Leave (${categoryLabel})`;
 	if (leaveType === "half_am") return `Leave - Morning (${categoryLabel})`;
-	return `Leave - Afternoon (${categoryLabel})`;
+	if (leaveType === "half_pm") return `Leave - Afternoon (${categoryLabel})`;
+	return `Leave - Time specific (${categoryLabel})`;
 }
 
 export class HarvestAPIService implements HarvestService {
@@ -46,7 +56,7 @@ export class HarvestAPIService implements HarvestService {
 	}
 
 	async createTimeEntry(request: CreateTimeEntryRequest): Promise<number> {
-		const hours = getHours(request.leaveType);
+		const hours = getHours(request);
 		const taskId = getTaskId(request.category, this.config);
 		const notes = request.notes ?? buildNotes(request.leaveType, request.category);
 

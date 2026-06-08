@@ -123,14 +123,18 @@ describe("Leave Records", () => {
 		const record = createLeaveRecord(db, {
 			userId,
 			date: "2026-03-16",
-			leaveType: "full",
+			leaveType: "specific",
+			startTime: "10:00",
+			endTime: "12:30",
 			leaveCategory: "vacation",
 		});
 
 		expect(record.id).toBeGreaterThan(0);
 		expect(record.user_id).toBe(userId);
 		expect(record.date).toBe("2026-03-16");
-		expect(record.leave_type).toBe("full");
+		expect(record.leave_type).toBe("specific");
+		expect(record.start_time).toBe("10:00");
+		expect(record.end_time).toBe("12:30");
 		expect(record.leave_category).toBe("vacation");
 		expect(record.status).toBe("pending");
 	});
@@ -146,11 +150,15 @@ describe("Leave Records", () => {
 		const upserted = upsertLeaveRecord(db, {
 			userId,
 			date: "2026-03-16",
-			leaveType: "half_am",
+			leaveType: "specific",
+			startTime: "09:00",
+			endTime: "11:00",
 			leaveCategory: "sick",
 		});
 
-		expect(upserted.leave_type).toBe("half_am");
+		expect(upserted.leave_type).toBe("specific");
+		expect(upserted.start_time).toBe("09:00");
+		expect(upserted.end_time).toBe("11:00");
 		expect(upserted.leave_category).toBe("sick");
 		expect(upserted.status).toBe("confirmed");
 	});
@@ -380,10 +388,11 @@ describe("Migrations", () => {
 		const applied = db
 			.query<{ name: string; hash: string }, []>("SELECT name, hash FROM schema_migrations ORDER BY name")
 			.all();
-		expect(applied.length).toBeGreaterThanOrEqual(3);
+		expect(applied.length).toBeGreaterThanOrEqual(4);
 		expect(applied[0].name).toBe("001_create_users.sql");
 		expect(applied[1].name).toBe("002_create_leave_records.sql");
 		expect(applied[2].name).toBe("003_create_pending_actions.sql");
+		expect(applied[3].name).toBe("004_add_leave_record_time_fields.sql");
 		// Hashes should be non-empty SHA256
 		expect(applied[0].hash.length).toBe(64);
 	});
@@ -392,6 +401,6 @@ describe("Migrations", () => {
 		// Run migrations again — should be a no-op
 		runMigrations(db, "./migrations");
 		const applied = db.query<{ name: string }, []>("SELECT name FROM schema_migrations").all();
-		expect(applied).toHaveLength(3);
+		expect(applied).toHaveLength(4);
 	});
 });

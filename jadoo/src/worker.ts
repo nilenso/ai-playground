@@ -33,7 +33,9 @@ import type { SlackService } from "./interfaces/slack.js";
 /** The JSON payload stored in pending_actions for create_leave. */
 export interface CreateLeavePayload {
 	dates: string[]; // YYYY-MM-DD
-	leaveType: string; // 'full' | 'half_am' | 'half_pm'
+	leaveType: string; // 'full' | 'half_am' | 'half_pm' | 'specific'
+	startTime?: string;
+	endTime?: string;
 	category: string; // 'vacation' | 'sick'
 	reason?: string;
 }
@@ -70,6 +72,160 @@ function logWorker(message: string, details?: Record<string, unknown>): void {
 
 function logWorkerError(message: string, details?: Record<string, unknown>): void {
 	console.error(`[worker] ${message}${details ? ` ${JSON.stringify(details)}` : ""}`);
+}
+
+function normalizeLeaveType(leaveType: string): LeaveType {
+	if (leaveType === "half_am" || leaveType === "half_pm" || leaveType === "specific") {
+		return leaveType;
+	}
+	return "full";
+}
+
+function formatLeaveTypeLabel(leaveType: string, startTime?: string, endTime?: string): string {
+	switch (normalizeLeaveType(leaveType)) {
+		case "full":
+			return "Full day";
+		case "half_am":
+			return "Half day (AM)";
+		case "half_pm":
+			return "Half day (PM)";
+		case "specific":
+			return startTime && endTime ? `Time specific (${startTime}-${endTime})` : "Time specific";
+	}
+}
+
+function buildCalendarSummary(displayName: string, payload: CreateLeavePayload): string {
+	const leaveLabel = formatLeaveTypeLabel(payload.leaveType, payload.startTime, payload.endTime);
+	return `${displayName} — ${payload.category} (${leaveLabel})`;
+}
+
+function buildCalendarDescription(payload: CreateLeavePayload): string | undefined {
+	const parts = [
+		`Type: ${formatLeaveTypeLabel(payload.leaveType, payload.startTime, payload.endTime)}`,
+		payload.reason ? `Reason: ${payload.reason}` : null,
+	].filter(Boolean);
+	return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
+function buildHarvestNotes(payload: CreateLeavePayload): string {
+	const categoryLabel = payload.category === "sick" ? "Sick" : "Vacation";
+	const leaveLabel = formatLeaveTypeLabel(payload.leaveType, payload.startTime, payload.endTime);
+	const base = `Leave - ${leaveLabel} (${categoryLabel})`;
+	return payload.reason ? `${base} — ${payload.reason}` : base;
+}
+
+function getAllDayWindow(date: string): { start: Date; end: Date; allDay: true } {
+	const start = new Date(`${date}T00:00:00.000Z`);
+	const end = new Date(`${date}T00:00:00.000Z`);
+	end.setUTCDate(end.getUTCDate() + 1);
+	return { start, end, allDay: true };
+}
+
+function parseTimeParts(time: string): { hours: number; minutes: number } {
+	const match = /^(\d{2}):(\d{2})$/.exec(time);
+	if (!match) {
+		throw new Error(`Invalid time format: ${time}. Expected HH:MM`);
+	}
+	const hours = Number.parseInt(match[1], 10);
+	const minutes = Number.parseInt(match[2], 10);
+	if (hours > 23 || minutes > 59) {
+		throw new Error(`Invalid time value: ${time}. Expected HH:MM`);
+	}
+	return { hours, minutes };
+}
+
+function getTimeZoneParts(
+	date: Date,
+	timeZone: string,
+): {
+	year: number;
+	month: number;
+	day: number;
+	hour: number;
+	minute: number;
+	second: number;
+} {
+	const parts = new Intl.DateTimeFormat("en-CA", {
+		timeZone,
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+		hourCycle: "h23",
+	}).formatToParts(date);
+	const values = Object.fromEntries(
+		parts.filter((part) => part.type !== "literal").map((part) => [part.type, Number.parseInt(part.value, 10)]),
+	) as Record<string, number>;
+	return {
+		year: values.year,
+		month: values.month,
+		day: values.day,
+		hour: values.hour,
+		minute: values.minute,
+		second: values.second,
+	};
+}
+
+function zonedTimeToUtc(date: string, time: string, timeZone: string): Date {
+	const [year, month, day] = date.split("-").map((value) => Number.parseInt(value, 10));
+	const { hours, minutes } = parseTimeParts(time);
+	const targetUtc = Date.UTC(year, month - 1, day, hours, minutes, 0);
+	let guess = targetUtc;
+
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const actual = getTimeZoneParts(new Date(guess), timeZone);
+		const actualUtc = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute, actual.second);
+		const diff = actualUtc - targetUtc;
+		if (diff === 0) {
+			break;
+		}
+		guess -= diff;
+	}
+
+	return new Date(guess);
+}
+
+function getSpecificLeaveHours(payload: CreateLeavePayload): number | undefined {
+	if (normalizeLeaveType(payload.leaveType) !== "specific" || !payload.startTime || !payload.endTime) {
+		return undefined;
+	}
+	const { hours: startHours, minutes: startMinutes } = parseTimeParts(payload.startTime);
+	const { hours: endHours, minutes: endMinutes } = parseTimeParts(payload.endTime);
+	const startTotalMinutes = startHours * 60 + startMinutes;
+	const endTotalMinutes = endHours * 60 + endMinutes;
+	if (endTotalMinutes <= startTotalMinutes) {
+		throw new Error(
+			`End time must be after start time for time-specific leave (${payload.startTime}-${payload.endTime})`,
+		);
+	}
+	return Math.round(((endTotalMinutes - startTotalMinutes) / 60) * 100) / 100;
+}
+
+function shouldSyncSpecificLeaveToHarvest(hours: number | undefined, leaveType: string): boolean {
+	return normalizeLeaveType(leaveType) !== "specific" || hours === undefined || hours > 2;
+}
+
+function getCalendarWindow(
+	date: string,
+	payload: CreateLeavePayload,
+	timeZone: string,
+): { start: Date; end: Date; allDay: boolean } {
+	if (normalizeLeaveType(payload.leaveType) !== "specific") {
+		return getAllDayWindow(date);
+	}
+	if (!payload.startTime || !payload.endTime) {
+		throw new Error("Time-specific leave requires both startTime and endTime");
+	}
+	const start = zonedTimeToUtc(date, payload.startTime, timeZone);
+	const end = zonedTimeToUtc(date, payload.endTime, timeZone);
+	if (end <= start) {
+		throw new Error(
+			`End time must be after start time for time-specific leave (${payload.startTime}-${payload.endTime})`,
+		);
+	}
+	return { start, end, allDay: false };
 }
 
 // ─── Worker ─────────────────────────────────────────────
@@ -254,6 +410,8 @@ export class BackgroundWorker {
 				userDbId: user.id,
 				date,
 				leaveType: payload.leaveType,
+				startTime: payload.startTime ?? null,
+				endTime: payload.endTime ?? null,
 				category: payload.category,
 			});
 
@@ -262,6 +420,8 @@ export class BackgroundWorker {
 				userId: user.id,
 				date,
 				leaveType: payload.leaveType,
+				startTime: payload.startTime ?? null,
+				endTime: payload.endTime ?? null,
 				leaveCategory: payload.category,
 				slackMessageTs: action.slack_message_ts,
 				slackChannelId: action.slack_channel_id,
@@ -278,26 +438,21 @@ export class BackgroundWorker {
 			let stage: LeaveProcessingFailure["stage"] = "calendar";
 			try {
 				// Sync to Calendar
-				const isFullDayLeave = payload.leaveType === "full";
-				const start = new Date(`${date}T00:00:00`);
-				const end = isFullDayLeave ? new Date(`${date}T00:00:00`) : new Date(`${date}T23:59:59`);
-				if (isFullDayLeave) {
-					end.setDate(end.getDate() + 1);
-				}
+				const { start, end, allDay } = getCalendarWindow(date, payload, user.slack_timezone);
 				logWorker("creating calendar event", {
 					actionId: action.id,
 					recordId: record.id,
 					date,
 					start: start.toISOString(),
 					end: end.toISOString(),
-					allDay: isFullDayLeave,
+					allDay,
 				});
 				const calEvent = await this.calendar.createEvent({
-					summary: `${user.slack_display_name} — ${payload.category} (${payload.leaveType})`,
-					description: payload.reason,
+					summary: buildCalendarSummary(user.slack_display_name, payload),
+					description: buildCalendarDescription(payload),
 					start,
 					end,
-					allDay: isFullDayLeave,
+					allDay,
 				});
 				logWorker("calendar event created", {
 					actionId: action.id,
@@ -308,29 +463,43 @@ export class BackgroundWorker {
 
 				// Sync to Harvest (only if user has a Harvest mapping)
 				let harvestEntryId: number | null = null;
+				const hours = getSpecificLeaveHours(payload);
 				if (user.harvest_user_id) {
-					stage = "harvest";
-					logWorker("creating harvest time entry", {
-						actionId: action.id,
-						recordId: record.id,
-						date,
-						harvestUserId: user.harvest_user_id,
-						leaveType: payload.leaveType,
-						category: payload.category,
-					});
-					harvestEntryId = await this.harvest.createTimeEntry({
-						harvestUserId: user.harvest_user_id,
-						date,
-						leaveType: payload.leaveType as LeaveType,
-						category: payload.category as LeaveCategory,
-						notes: payload.reason,
-					});
-					logWorker("harvest time entry created", {
-						actionId: action.id,
-						recordId: record.id,
-						date,
-						harvestEntryId,
-					});
+					if (shouldSyncSpecificLeaveToHarvest(hours, payload.leaveType)) {
+						stage = "harvest";
+						logWorker("creating harvest time entry", {
+							actionId: action.id,
+							recordId: record.id,
+							date,
+							harvestUserId: user.harvest_user_id,
+							leaveType: payload.leaveType,
+							hours: hours ?? null,
+							category: payload.category,
+						});
+						harvestEntryId = await this.harvest.createTimeEntry({
+							harvestUserId: user.harvest_user_id,
+							date,
+							leaveType: normalizeLeaveType(payload.leaveType),
+							category: payload.category as LeaveCategory,
+							hours,
+							notes: buildHarvestNotes(payload),
+						});
+						logWorker("harvest time entry created", {
+							actionId: action.id,
+							recordId: record.id,
+							date,
+							harvestEntryId,
+						});
+					} else {
+						logWorker("skipping harvest sync because time-specific leave is 2 hours or less", {
+							actionId: action.id,
+							recordId: record.id,
+							date,
+							harvestUserId: user.harvest_user_id,
+							leaveType: payload.leaveType,
+							hours,
+						});
+					}
 				} else {
 					logWorker("skipping harvest sync because user has no harvest mapping", {
 						actionId: action.id,
@@ -573,21 +742,23 @@ export class BackgroundWorker {
 		}
 
 		const dateList = payload.dates.join(", ");
+		const leaveLabel = formatLeaveTypeLabel(payload.leaveType, payload.startTime, payload.endTime);
 		logWorker("sending completion notification", {
 			actionId: action.id,
 			channelId: channel,
 			botMessageTs: ts,
 			dateList,
+			leaveLabel,
 		});
 		try {
 			await this.slack.updateMessage(channel, ts, {
-				text: `✅ Leave synced: ${dateList} (${payload.category}, ${payload.leaveType})`,
+				text: `✅ Leave synced: ${dateList} (${payload.category}, ${leaveLabel})`,
 				blocks: [
 					{
 						type: "section",
 						text: {
 							type: "mrkdwn",
-							text: `✅ *Leave synced*\n📅 ${dateList}\n📋 ${payload.category} (${payload.leaveType})`,
+							text: `✅ *Leave synced*\n📅 ${dateList}\n📋 ${payload.category} (${leaveLabel})`,
 						},
 					},
 				],
@@ -637,6 +808,7 @@ export class BackgroundWorker {
 			...uniqueFailures,
 		].join("\n");
 
+		const failureDetails = uniqueFailures.length ? `\n\n${uniqueFailures.join("\n")}` : "";
 		logWorker("sending failure notification", {
 			actionId: action.id,
 			channelId: channel,
@@ -652,7 +824,7 @@ export class BackgroundWorker {
 						type: "section",
 						text: {
 							type: "mrkdwn",
-							text: `❌ *Leave processing failed*\n${summary}\nPlease try again or contact an admin.${uniqueFailures.length ? `\n\n${uniqueFailures.join("\n")}` : ""}`,
+							text: `❌ *Leave processing failed*\n${summary}\nPlease try again or contact an admin.${failureDetails}`,
 						},
 					},
 				],

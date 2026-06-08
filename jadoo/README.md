@@ -127,7 +127,8 @@ The `SlackService` interface is explicitly Slack-specific (not a generic "messag
 SQLite via `bun:sqlite`. Three tables:
 
 - **users** — Slack ↔ Harvest ↔ email mapping, timezone
-- **leave_records** — date, type (full/half), category (vacation/sick), sync status, calendar/harvest IDs
+- **leave_records** — date, type (full/half/time-specific), optional start/end time,
+  category (vacation/sick), sync status, calendar/harvest IDs
 - **pending_actions** — confirmation flow state machine with expiry, JSON payload, thread context
 
 Typed repository functions in `src/db/` — no ORM, plain SQL queries with TypeScript interfaces.

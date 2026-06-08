@@ -19,7 +19,9 @@ export interface DbLeaveRecord {
 	id: number;
 	user_id: number;
 	date: string; // YYYY-MM-DD
-	leave_type: string; // 'full' | 'half_am' | 'half_pm'
+	leave_type: string; // 'full' | 'half_am' | 'half_pm' | 'specific'
+	start_time: string | null; // HH:MM for time-specific leave
+	end_time: string | null; // HH:MM for time-specific leave
 	leave_category: string; // 'vacation' | 'sick'
 	slack_message_ts: string | null;
 	slack_channel_id: string | null;

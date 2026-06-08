@@ -3,7 +3,7 @@
  * Abstracts over the Harvest API for leave time entry management.
  */
 
-export type LeaveType = "full" | "half_am" | "half_pm";
+export type LeaveType = "full" | "half_am" | "half_pm" | "specific";
 export type LeaveCategory = "vacation" | "sick";
 
 export interface HarvestTimeEntry {
@@ -22,6 +22,7 @@ export interface CreateTimeEntryRequest {
 	date: string; // YYYY-MM-DD
 	leaveType: LeaveType;
 	category: LeaveCategory;
+	hours?: number;
 	notes?: string;
 }
 
