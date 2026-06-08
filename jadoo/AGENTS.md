@@ -30,3 +30,4 @@ If you change migrations, parsing, worker logic, or Slack interaction flows, mak
 
 - Prefer Slack Block Kit buttons for ambiguous leave flows rather than asking users for open-ended follow-up text.
 - Keep worker, parser schema, persistence, and tests aligned when adding new leave types or payload fields.
+- Do not edit already-applied migration files to update comments or documentation. Document schema behavior in `README.md` or `docs/leave-data-model.md`, and use a new migration for real schema changes.

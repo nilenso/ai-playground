@@ -129,6 +129,7 @@ SQLite via `bun:sqlite`. Three tables:
 - **users** — Slack ↔ Harvest ↔ email mapping, timezone
 - **leave_records** — date, type (full/half/time-specific), optional start/end time,
   category (vacation/sick), sync status, calendar/harvest IDs
+  - See `docs/leave-data-model.md` for the canonical leave-type documentation.
 - **pending_actions** — confirmation flow state machine with expiry, JSON payload, thread context
 
 Typed repository functions in `src/db/` — no ORM, plain SQL queries with TypeScript interfaces.

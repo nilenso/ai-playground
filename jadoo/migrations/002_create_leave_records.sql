@@ -1,5 +1,5 @@
 -- Leave records: one row per user per leave day
--- leave_type: 'full' | 'half_am' | 'half_pm' | 'specific'
+-- leave_type: 'full' | 'half_am' | 'half_pm'
 -- leave_category: 'vacation' | 'sick'
 -- status: 'pending' | 'confirmed' | 'completed' | 'failed' | 'cancelled'
 CREATE TABLE leave_records (
