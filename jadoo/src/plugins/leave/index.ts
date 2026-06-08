@@ -170,7 +170,10 @@ function formatMinutesAsTime(totalMinutes: number): string {
 	return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
-function buildSpecificLeaveTimeRanges(startTime?: string, endTime?: string): Array<{ startTime: string; endTime: string }> {
+function buildSpecificLeaveTimeRanges(
+	startTime?: string,
+	endTime?: string,
+): Array<{ startTime: string; endTime: string }> {
 	const options: Array<{ startTime: string; endTime: string }> = [];
 	const durations = [120, 180, 240];
 
