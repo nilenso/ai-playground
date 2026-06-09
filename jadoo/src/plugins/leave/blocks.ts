@@ -40,6 +40,13 @@ export function buildInteractiveChoiceBlocks(text: string, options: InteractiveO
 		},
 	];
 
+	const actionIdCounts = new Map<string, number>();
+	const uniquifyActionId = (actionId: string): string => {
+		const count = (actionIdCounts.get(actionId) ?? 0) + 1;
+		actionIdCounts.set(actionId, count);
+		return count === 1 ? actionId : `${actionId}_${count}`;
+	};
+
 	for (const optionGroup of chunk(options, 5)) {
 		blocks.push({
 			type: "actions",
@@ -51,7 +58,7 @@ export function buildInteractiveChoiceBlocks(text: string, options: InteractiveO
 					emoji: true,
 				},
 				value: option.value,
-				action_id: option.actionId,
+				action_id: uniquifyActionId(option.actionId),
 				...(option.style ? { style: option.style } : {}),
 			})),
 		});

@@ -4,6 +4,7 @@ import type { PluginConfig, PluginConfigSchema } from "../../config/plugin-confi
 import { getCancelableLeaveRecordsByUser, getLeaveRecordsByUserAndDates } from "../../db/leave-records.js";
 import {
 	createPendingAction,
+	getPendingActionById,
 	getPendingActionsForThread,
 	updatePendingActionBotMessageTs,
 	updatePendingActionStatus,
@@ -884,7 +885,7 @@ ${threadContext ? `Previous thread context:\n${threadContext}` : ""}`;
 			return null;
 		});
 
-		ctx.slack.onAction(/^leave_select_create_option$/, async (event) => {
+		ctx.slack.onAction(/^leave_select_create_option(?:_\d+)?$/, async (event) => {
 			const payload = decodeSelectionPayload(event.value);
 			if (payload?.kind !== "create") {
 				logLeave("received invalid leave create selection payload", {
@@ -931,7 +932,7 @@ ${threadContext ? `Previous thread context:\n${threadContext}` : ""}`;
 			});
 		});
 
-		ctx.slack.onAction(/^leave_select_cancel_option$/, async (event) => {
+		ctx.slack.onAction(/^leave_select_cancel_option(?:_\d+)?$/, async (event) => {
 			const payload = decodeSelectionPayload(event.value);
 			if (payload?.kind !== "cancel") {
 				logLeave("received invalid leave cancel selection payload", {
@@ -1056,6 +1057,53 @@ ${threadContext ? `Previous thread context:\n${threadContext}` : ""}`;
 				],
 			});
 			logLeave("cancellation action marked confirmed", {
+				actionId,
+				channelId: event.channelId,
+				messageTs: event.messageTs,
+			});
+		});
+
+		ctx.slack.onAction(/^leave_undo$/, async (event) => {
+			const actionId = event.value;
+			const action = getPendingActionById(this.db, actionId);
+			const isExpired = action ? new Date(action.expires_at).getTime() <= Date.now() : false;
+			const payload = action ? (JSON.parse(action.payload) as { source?: string }) : null;
+			if (
+				action?.action_type !== "cancel_leave" ||
+				action.status !== "pending" ||
+				payload?.source !== "undo" ||
+				isExpired
+			) {
+				logLeave("undo click ignored because the undo action is no longer available", {
+					actionId,
+					userId: event.userId,
+					channelId: event.channelId,
+					messageTs: event.messageTs,
+					actionFound: Boolean(action),
+					actionStatus: action?.status,
+					isExpired,
+				});
+				return;
+			}
+
+			logLeave("leave undo clicked", {
+				actionId,
+				userId: event.userId,
+				channelId: event.channelId,
+				messageTs: event.messageTs,
+				threadTs: event.threadTs ?? null,
+			});
+			updatePendingActionStatus(this.db, actionId, "confirmed");
+			await ctx.slack.updateMessage(event.channelId, event.messageTs, {
+				text: "⏳ Undoing your leave...",
+				blocks: [
+					{
+						type: "section",
+						text: { type: "mrkdwn", text: "⏳ *Undoing your leave...*" },
+					},
+				],
+			});
+			logLeave("undo action marked confirmed", {
 				actionId,
 				channelId: event.channelId,
 				messageTs: event.messageTs,

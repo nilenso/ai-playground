@@ -2,7 +2,9 @@ import type { Database } from "bun:sqlite";
 import { beforeEach, describe, expect, it } from "bun:test";
 import {
 	createLeaveRecord,
+	createPendingAction,
 	createUser,
+	getPendingActionById,
 	getPendingActionsByStatus,
 	openDatabase,
 	runMigrations,
@@ -73,14 +75,15 @@ describe("LeavePlugin", () => {
 		expect(slack.postedMessages).toHaveLength(1);
 
 		const buttons = getActionButtons(slack.postedMessages[0]);
-		expect(buttons.some((button) => button.action_id === "leave_select_create_option")).toBe(true);
+		expect(buttons.some((button) => button.action_id?.startsWith("leave_select_create_option"))).toBe(true);
 		expect(buttons.some((button) => button.action_id === "leave_dismiss_option")).toBe(true);
+		expect(new Set(buttons.map((button) => button.action_id)).size).toBe(buttons.length);
 
-		const createButton = buttons.find((button) => button.action_id === "leave_select_create_option");
+		const createButton = buttons.find((button) => button.action_id?.startsWith("leave_select_create_option"));
 		expect(createButton?.value).toBeTruthy();
 
 		await slack.simulateAction({
-			actionId: "leave_select_create_option",
+			actionId: createButton?.action_id ?? "leave_select_create_option",
 			value: createButton?.value ?? "",
 			userId: "U_NEENA",
 			channelId: "C_LEAVE",
@@ -133,14 +136,15 @@ describe("LeavePlugin", () => {
 		expect(slack.postedMessages).toHaveLength(1);
 
 		const buttons = getActionButtons(slack.postedMessages[0]);
-		expect(buttons.some((button) => button.action_id === "leave_select_create_option")).toBe(true);
+		expect(buttons.some((button) => button.action_id?.startsWith("leave_select_create_option"))).toBe(true);
 		expect(buttons.some((button) => button.action_id === "leave_dismiss_option")).toBe(true);
+		expect(new Set(buttons.map((button) => button.action_id)).size).toBe(buttons.length);
 
-		const createButton = buttons.find((button) => button.action_id === "leave_select_create_option");
+		const createButton = buttons.find((button) => button.action_id?.startsWith("leave_select_create_option"));
 		expect(createButton?.value).toContain('"endTime"');
 
 		await slack.simulateAction({
-			actionId: "leave_select_create_option",
+			actionId: createButton?.action_id ?? "leave_select_create_option",
 			value: createButton?.value ?? "",
 			userId: "U_NEENA",
 			channelId: "C_LEAVE",
@@ -196,14 +200,15 @@ describe("LeavePlugin", () => {
 		expect(slack.postedMessages).toHaveLength(1);
 
 		const buttons = getActionButtons(slack.postedMessages[0]);
-		expect(buttons.some((button) => button.action_id === "leave_select_cancel_option")).toBe(true);
+		expect(buttons.some((button) => button.action_id?.startsWith("leave_select_cancel_option"))).toBe(true);
 		expect(buttons.some((button) => button.action_id === "leave_dismiss_option")).toBe(true);
+		expect(new Set(buttons.map((button) => button.action_id)).size).toBe(buttons.length);
 
-		const cancelButton = buttons.find((button) => button.action_id === "leave_select_cancel_option");
+		const cancelButton = buttons.find((button) => button.action_id?.startsWith("leave_select_cancel_option"));
 		expect(cancelButton?.value).toBeTruthy();
 
 		await slack.simulateAction({
-			actionId: "leave_select_cancel_option",
+			actionId: cancelButton?.action_id ?? "leave_select_cancel_option",
 			value: cancelButton?.value ?? "",
 			userId: "U_NEENA",
 			channelId: "C_LEAVE",
@@ -218,5 +223,44 @@ describe("LeavePlugin", () => {
 			return ((block as { elements?: unknown[] }).elements ?? []) as Array<{ action_id?: string }>;
 		});
 		expect(updatedButtons.some((button) => button.action_id === "leave_confirm_cancel")).toBe(true);
+	});
+
+	it("confirms undo actions from the success message", async () => {
+		const user = createUser(db, {
+			slackUserId: "U_NEENA",
+			slackDisplayName: "neena",
+			email: "neena@example.com",
+			slackTimezone: "Asia/Kolkata",
+		});
+		const undoAction = createPendingAction(db, {
+			userId: user.id,
+			actionType: "cancel_leave",
+			payload: {
+				dates: ["2026-06-12"],
+				source: "undo",
+				leaveType: "full",
+				category: "vacation",
+			},
+			slackChannelId: "C_LEAVE",
+			slackMessageTs: "msg-3",
+			slackThreadTs: "msg-3",
+			expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+		});
+
+		const plugin = new LeavePlugin(db);
+		await plugin.init(ctx, { channelId: "C_LEAVE", keywords: "leave,cancel" });
+
+		await slack.simulateAction({
+			actionId: "leave_undo",
+			value: undoAction.id,
+			userId: "U_NEENA",
+			channelId: "C_LEAVE",
+			messageTs: "bot-msg-undo",
+			threadTs: "msg-3",
+		});
+
+		expect(getPendingActionById(db, undoAction.id)?.status).toBe("confirmed");
+		expect(slack.updatedMessages).toHaveLength(1);
+		expect(slack.updatedMessages[0].options.text).toContain("Undoing your leave");
 	});
 });

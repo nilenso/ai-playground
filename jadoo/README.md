@@ -131,6 +131,7 @@ SQLite via `bun:sqlite`. Three tables:
   category (vacation/sick), sync status, calendar/harvest IDs
   - See `docs/leave-data-model.md` for the canonical leave-type documentation.
 - **pending_actions** — confirmation flow state machine with expiry, JSON payload, thread context
+  - also used for temporary post-sync undo actions (currently 1 hour)
 
 Typed repository functions in `src/db/` — no ORM, plain SQL queries with TypeScript interfaces.
 

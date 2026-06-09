@@ -5,6 +5,7 @@ import {
 	createUser,
 	getLeaveRecordsByStatus,
 	getPendingActionById,
+	getPendingActionsByStatus,
 	openDatabase,
 	runMigrations,
 	updateLeaveRecordStatus,
@@ -99,10 +100,21 @@ describe("processTick — create_leave", () => {
 		expect(records[0].calendar_event_id).toBe("mock-1");
 		expect(records[0].harvest_entry_id).toBe(1000);
 
-		// Slack message updated with success
+		// Slack message updated with success + undo button
 		expect(slack.updatedMessages).toHaveLength(1);
 		expect(slack.updatedMessages[0].options.text).toContain("✅");
 		expect(slack.updatedMessages[0].options.text).toContain("2026-04-01");
+		const blocks = slack.updatedMessages[0].options.blocks ?? [];
+		const buttons = blocks.flatMap((block) => {
+			if ((block as { type?: string }).type !== "actions") return [];
+			return ((block as { elements?: unknown[] }).elements ?? []) as Array<{ action_id?: string; value?: string }>;
+		});
+		expect(buttons.some((button) => button.action_id === "leave_undo")).toBe(true);
+
+		const pending = getPendingActionsByStatus(db, "pending");
+		expect(pending).toHaveLength(1);
+		expect(pending[0].action_type).toBe("cancel_leave");
+		expect(pending[0].payload).toContain('"source":"undo"');
 	});
 
 	it("handles multiple dates in a single action", async () => {
@@ -479,6 +491,36 @@ describe("expiryTick", () => {
 
 		expect(getPendingActionById(db, action.id)?.status).toBe("expired");
 		expect(slack.updatedMessages).toHaveLength(0);
+	});
+
+	it("removes the undo button after the undo window expires", async () => {
+		const action = createPendingAction(db, {
+			userId: user.id,
+			actionType: "cancel_leave",
+			payload: {
+				dates: ["2026-04-01"],
+				source: "undo",
+				leaveType: "full",
+				category: "vacation",
+			},
+			slackChannelId: "C1",
+			slackMessageTs: "msg-undo-1",
+			expiresAt: pastExpiry(),
+		});
+		updatePendingActionBotMessageTs(db, action.id, "bot-msg-undo-1");
+
+		worker = new BackgroundWorker(deps(), { processIntervalMs: 999999, expiryIntervalMs: 999999 });
+		await worker.expiryTick();
+
+		expect(getPendingActionById(db, action.id)?.status).toBe("expired");
+		expect(slack.updatedMessages).toHaveLength(1);
+		expect(slack.updatedMessages[0].options.text).toContain("✅ Leave synced");
+		const blocks = slack.updatedMessages[0].options.blocks ?? [];
+		const buttons = blocks.flatMap((block) => {
+			if ((block as { type?: string }).type !== "actions") return [];
+			return ((block as { elements?: unknown[] }).elements ?? []) as Array<{ action_id?: string }>;
+		});
+		expect(buttons).toHaveLength(0);
 	});
 });
 
