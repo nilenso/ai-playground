@@ -16,10 +16,12 @@
 import type { Database } from "bun:sqlite";
 import {
 	claimConfirmedActions,
+	createPendingAction,
 	expirePendingActions,
 	getUserById,
 	incrementLeaveRecordRetry,
 	updateLeaveRecordStatus,
+	updatePendingActionBotMessageTs,
 	updatePendingActionStatus,
 	upsertLeaveRecord,
 } from "./db/index.js";
@@ -43,6 +45,11 @@ export interface CreateLeavePayload {
 /** The JSON payload stored in pending_actions for cancel_leave. */
 export interface CancelLeavePayload {
 	dates: string[]; // YYYY-MM-DD
+	source?: "undo";
+	leaveType?: string;
+	startTime?: string;
+	endTime?: string;
+	category?: string;
 }
 
 interface LeaveProcessingFailure {
@@ -65,6 +72,7 @@ export interface WorkerConfig {
 const DEFAULT_PROCESS_INTERVAL = 5_000;
 const DEFAULT_EXPIRY_INTERVAL = 30_000;
 const DEFAULT_MAX_RETRIES = 3;
+const UNDO_EXPIRY_MS = 60 * 60 * 1000;
 
 function logWorker(message: string, details?: Record<string, unknown>): void {
 	console.log(`[worker] ${message}${details ? ` ${JSON.stringify(details)}` : ""}`);
@@ -112,6 +120,59 @@ function buildHarvestNotes(payload: CreateLeavePayload): string {
 	const leaveLabel = formatLeaveTypeLabel(payload.leaveType, payload.startTime, payload.endTime);
 	const base = `Leave - ${leaveLabel} (${categoryLabel})`;
 	return payload.reason ? `${base} — ${payload.reason}` : base;
+}
+
+function getUndoExpiry(): string {
+	return new Date(Date.now() + UNDO_EXPIRY_MS).toISOString();
+}
+
+function buildCompletedNotificationText(payload: CreateLeavePayload): string {
+	const dateList = payload.dates.join(", ");
+	const leaveLabel = formatLeaveTypeLabel(payload.leaveType, payload.startTime, payload.endTime);
+	return `✅ Leave synced: ${dateList} (${payload.category}, ${leaveLabel})`;
+}
+
+function buildCompletedNotificationBlocks(
+	payload: CreateLeavePayload,
+	options?: { undoActionId?: string; undoExpired?: boolean },
+) {
+	const dateList = payload.dates.join(", ");
+	const leaveLabel = formatLeaveTypeLabel(payload.leaveType, payload.startTime, payload.endTime);
+	const undoLine = options?.undoActionId
+		? "\n\n↩️ Undo is available for the next hour."
+		: options?.undoExpired
+			? "\n\n⌛ Undo is no longer available."
+			: "";
+	const blocks: Array<Record<string, unknown>> = [
+		{
+			type: "section",
+			text: {
+				type: "mrkdwn",
+				text: `✅ *Leave synced*\n📅 ${dateList}\n📋 ${payload.category} (${leaveLabel})${undoLine}`,
+			},
+		},
+	];
+
+	if (options?.undoActionId) {
+		blocks.push({
+			type: "actions",
+			elements: [
+				{
+					type: "button",
+					text: {
+						type: "plain_text",
+						text: "↩ Undo (1 hour)",
+						emoji: true,
+					},
+					value: options.undoActionId,
+					action_id: "leave_undo",
+					style: "danger",
+				},
+			],
+		});
+	}
+
+	return blocks;
 }
 
 function getAllDayWindow(date: string): { start: Date; end: Date; allDay: true } {
@@ -743,25 +804,42 @@ export class BackgroundWorker {
 
 		const dateList = payload.dates.join(", ");
 		const leaveLabel = formatLeaveTypeLabel(payload.leaveType, payload.startTime, payload.endTime);
+		const undoAction = createPendingAction(this.db, {
+			userId: action.user_id,
+			actionType: "cancel_leave",
+			payload: {
+				dates: payload.dates,
+				source: "undo",
+				leaveType: payload.leaveType,
+				startTime: payload.startTime,
+				endTime: payload.endTime,
+				category: payload.category,
+			},
+			slackMessageTs: action.slack_message_ts,
+			slackChannelId: channel,
+			slackThreadTs: action.slack_thread_ts,
+			expiresAt: getUndoExpiry(),
+		});
+		updatePendingActionBotMessageTs(this.db, undoAction.id, ts);
+		logWorker("created undo action for completed leave", {
+			actionId: action.id,
+			undoActionId: undoAction.id,
+			channelId: channel,
+			botMessageTs: ts,
+			expiresAt: undoAction.expires_at,
+		});
 		logWorker("sending completion notification", {
 			actionId: action.id,
 			channelId: channel,
 			botMessageTs: ts,
 			dateList,
 			leaveLabel,
+			undoActionId: undoAction.id,
 		});
 		try {
 			await this.slack.updateMessage(channel, ts, {
-				text: `✅ Leave synced: ${dateList} (${payload.category}, ${leaveLabel})`,
-				blocks: [
-					{
-						type: "section",
-						text: {
-							type: "mrkdwn",
-							text: `✅ *Leave synced*\n📅 ${dateList}\n📋 ${payload.category} (${leaveLabel})`,
-						},
-					},
-				],
+				text: buildCompletedNotificationText(payload),
+				blocks: buildCompletedNotificationBlocks(payload, { undoActionId: undoAction.id }),
 			});
 		} catch (err) {
 			console.error(`[worker] failed to update Slack message for action ${action.id}: ${err}`);
@@ -847,19 +925,24 @@ export class BackgroundWorker {
 		}
 
 		const dateList = payload.dates.join(", ");
+		const isUndo = payload.source === "undo";
 		logWorker("sending cancellation notification", {
 			actionId: action.id,
 			channelId: channel,
 			botMessageTs: ts,
 			dateList,
+			isUndo,
 		});
 		try {
 			await this.slack.updateMessage(channel, ts, {
-				text: `🗑️ Leave cancelled: ${dateList}`,
+				text: isUndo ? `↩️ Leave undone: ${dateList}` : `🗑️ Leave cancelled: ${dateList}`,
 				blocks: [
 					{
 						type: "section",
-						text: { type: "mrkdwn", text: `🗑️ *Leave cancelled*\n📅 ${dateList}` },
+						text: {
+							type: "mrkdwn",
+							text: isUndo ? `↩️ *Leave undone*\n📅 ${dateList}` : `🗑️ *Leave cancelled*\n📅 ${dateList}`,
+						},
 					},
 				],
 			});
@@ -877,6 +960,33 @@ export class BackgroundWorker {
 				channelId: channel,
 				botMessageTs: ts,
 			});
+			return;
+		}
+
+		const cancelPayload =
+			action.action_type === "cancel_leave" ? (JSON.parse(action.payload) as CancelLeavePayload) : null;
+		if (cancelPayload?.source === "undo") {
+			const completedPayload: CreateLeavePayload = {
+				dates: cancelPayload.dates,
+				leaveType: cancelPayload.leaveType ?? "full",
+				startTime: cancelPayload.startTime,
+				endTime: cancelPayload.endTime,
+				category: cancelPayload.category ?? "vacation",
+			};
+			logWorker("sending undo-expired notification", {
+				actionId: action.id,
+				channelId: channel,
+				botMessageTs: ts,
+				dates: cancelPayload.dates,
+			});
+			try {
+				await this.slack.updateMessage(channel, ts, {
+					text: buildCompletedNotificationText(completedPayload),
+					blocks: buildCompletedNotificationBlocks(completedPayload, { undoExpired: true }),
+				});
+			} catch (err) {
+				console.error(`[worker] failed to update Slack message for expired action ${action.id}: ${err}`);
+			}
 			return;
 		}
 
