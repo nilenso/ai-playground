@@ -1,0 +1,115 @@
+{
+  "documents": [
+    {
+      "doc_id": "doc_01",
+      "title": "Microsoft Completes $68.7 Billion Acquisition of Activision Blizzard",
+      "source": "The Verge",
+      "author": "Tom Warren",
+      "category": "technology",
+      "url": "https://www.theverge.com/microsoft-activision-blizzard-deal-closed",
+      "published_at": "2023-10-13",
+      "body": "Microsoft has officially completed its acquisition of Activision Blizzard, closing the largest deal in the history of the video game industry. The all-cash transaction was valued at $68.7 billion and brings franchises including Call of Duty, World of Warcraft, Candy Crush, and Diablo under Microsoft's Xbox umbrella. The deal closed nearly two years after it was first announced in January 2022, following prolonged regulatory scrutiny in the United States, the European Union, and the United Kingdom. Activision Blizzard chief executive Bobby Kotick said he would remain in his role through the end of 2023 to support the transition, after which Microsoft Gaming CEO Phil Spencer would oversee the combined studios."
+    },
+    {
+      "doc_id": "doc_02",
+      "title": "Broadcom Closes $69 Billion VMware Acquisition After China Approval",
+      "source": "Reuters",
+      "author": "Stephen Nellis",
+      "category": "business",
+      "url": "https://www.reuters.com/broadcom-vmware-close",
+      "published_at": "2023-11-22",
+      "body": "Chipmaker Broadcom said it had completed its $69 billion acquisition of cloud-computing firm VMware after receiving final regulatory clearance from China. The deal, first announced in May 2022, makes Broadcom a much larger player in enterprise software. Broadcom said it would invest in VMware's portfolio and accelerate its transition to a subscription model."
+    },
+    {
+      "doc_id": "doc_03",
+      "title": "Adobe Abandons $20 Billion Figma Deal Over Regulatory Hurdles",
+      "source": "Bloomberg",
+      "author": "Brody Ford",
+      "category": "business",
+      "url": "https://www.bloomberg.com/adobe-figma-terminated",
+      "published_at": "2023-12-18",
+      "body": "Adobe and Figma agreed to terminate their proposed $20 billion merger after European and British regulators signalled the deal would harm competition in product-design software. Adobe will pay Figma a $1 billion termination fee. The collapse marks one of the highest-profile failed technology acquisitions of the year."
+    },
+    {
+      "doc_id": "doc_04",
+      "title": "Nvidia Briefly Tops $1 Trillion Valuation on AI Chip Demand",
+      "source": "CNBC",
+      "author": "Kif Leswing",
+      "category": "markets",
+      "url": "https://www.cnbc.com/nvidia-trillion-ai",
+      "published_at": "2023-05-30",
+      "body": "Nvidia shares surged after the company forecast quarterly revenue far above Wall Street estimates, driven by surging demand for the graphics processors that power artificial-intelligence systems. The rally briefly pushed Nvidia's market capitalisation above $1 trillion, making it the first chipmaker to reach that milestone."
+    },
+    {
+      "doc_id": "doc_05",
+      "title": "Apple Unveils Vision Pro Mixed-Reality Headset",
+      "source": "TechCrunch",
+      "author": "Matthew Panzarino",
+      "category": "technology",
+      "url": "https://techcrunch.com/apple-vision-pro",
+      "published_at": "2023-06-05",
+      "body": "Apple announced the Vision Pro, its first mixed-reality headset, at its annual developer conference. Priced at $3,499, the device blends digital content with the physical world and is controlled by a user's eyes, hands, and voice. Apple positioned the product as the start of a new era of spatial computing."
+    },
+    {
+      "doc_id": "doc_06",
+      "title": "Microsoft Deepens OpenAI Partnership With Multibillion-Dollar Investment",
+      "source": "The Wall Street Journal",
+      "author": "Tom Dotan",
+      "category": "technology",
+      "url": "https://www.wsj.com/microsoft-openai-investment",
+      "published_at": "2023-01-23",
+      "body": "Microsoft confirmed a new multiyear, multibillion-dollar investment in OpenAI, the maker of ChatGPT, extending a partnership that began in 2019. Microsoft said it would deploy OpenAI's models across its consumer and enterprise products and provide the startup with Azure cloud computing. The investment is reported to be around $10 billion."
+    },
+    {
+      "doc_id": "doc_07",
+      "title": "FTC Sues to Block Microsoft's Activision Purchase",
+      "source": "The New York Times",
+      "author": "Cecilia Kang",
+      "category": "technology",
+      "url": "https://www.nytimes.com/ftc-microsoft-activision-lawsuit",
+      "published_at": "2022-12-08",
+      "body": "The Federal Trade Commission sued to block Microsoft's proposed acquisition of Activision Blizzard, arguing the deal would give Microsoft the ability to suppress competitors to its Xbox consoles and its subscription and cloud-gaming businesses. The agency pointed to Microsoft's earlier purchase of ZeniMax Media as evidence of its willingness to make games exclusive. Microsoft said it remained committed to the deal and would keep Call of Duty available on rival platforms."
+    },
+    {
+      "doc_id": "doc_08",
+      "title": "Tesla Misses Profit Estimates as Price Cuts Bite",
+      "source": "Reuters",
+      "author": "Hyunjoo Jin",
+      "category": "markets",
+      "url": "https://www.reuters.com/tesla-q3-earnings",
+      "published_at": "2023-10-18",
+      "body": "Tesla reported quarterly profit below analyst expectations as a series of price cuts aimed at boosting demand squeezed margins. Chief executive Elon Musk warned of pressure from high interest rates on car buyers and struck a cautious tone about the timeline for the Cybertruck ramp-up."
+    },
+    {
+      "doc_id": "doc_09",
+      "title": "Amazon's $1.7 Billion iRobot Deal Faces EU Scrutiny",
+      "source": "Financial Times",
+      "author": "Javier Espinoza",
+      "category": "business",
+      "url": "https://www.ft.com/amazon-irobot-eu",
+      "published_at": "2023-11-27",
+      "body": "European Union regulators warned that Amazon's proposed $1.7 billion acquisition of robot-vacuum maker iRobot could restrict competition. The Commission said Amazon might have an incentive to foreclose rival vacuum makers from its online marketplace. Amazon defended the deal as beneficial for consumers and innovation."
+    },
+    {
+      "doc_id": "doc_10",
+      "title": "Google Faces Landmark Antitrust Trial Over Search Dominance",
+      "source": "Associated Press",
+      "author": "Michael Liedtke",
+      "category": "technology",
+      "url": "https://apnews.com/google-antitrust-trial",
+      "published_at": "2023-09-12",
+      "body": "The US Department of Justice opened its landmark antitrust trial against Google, accusing the company of illegally maintaining a monopoly in online search by paying billions of dollars to be the default search engine on smartphones and web browsers. Google argued that its search engine is dominant because consumers prefer it, not because of anticompetitive conduct."
+    }
+  ],
+  "eval": [
+    {
+      "query": "Which company acquired Activision?",
+      "answer": "Microsoft",
+      "question_type": "inference_query",
+      "gold_doc_ids": ["doc_01"],
+      "evidence": [
+        "Microsoft has officially completed its acquisition of Activision Blizzard, closing the largest deal in the history of the video game industry."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+[project]
+name = "sift"
+version = "0.1.0"
+description = "Internal knowledge-base research agent: cited, source-grounded answers over a RAG pipeline."
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "anthropic>=0.69",
+    "qdrant-client>=1.12",
+    "fastembed>=0.4",
+    "datasets>=2.18",        # real MultiHopRAG corpus (slice 2+)
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+# Cross-encoder reranker (slice 4+). Pulls torch; auto-selects Apple MPS.
+rerank = ["sentence-transformers>=3.0"]
+# Answer-quality eval (slice 6). Ragas 0.2 needs the langchain 0.3 generation,
+# not 1.x — newer langchain-community drops the import path ragas 0.2 reaches for.
+eval = [
+    "ragas>=0.2,<0.3",
+    "langchain-core>=0.3,<0.4",
+    "langchain-community>=0.3,<0.4",
+    "langchain-anthropic>=0.3,<0.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["core", "adapters", "agent", "eval", "apps"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
