@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual env (uv-managed, Python 3.12)
+.venv/
+
+# Vector store persistence (slice 2+)
+qdrant_db/
+.qdrant_db/
+
+# Local scratch / issue tracker (not part of the committed codebase)
+.scratch/
+
+# Claude Code runtime state (machine-specific)
+.claude/scheduled_tasks.lock
+
+# OS
+.DS_Store

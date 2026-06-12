@@ -1,0 +1,123 @@
+[
+  {
+    "query": "How much did Microsoft pay for Activision Blizzard?",
+    "answer": "Microsoft paid $69bn (£56bn) for Activision Blizzard, sealing its long-awaited deal.",
+    "citations": [
+      {
+        "cited_text": "Microsoft has sealed its long-awaited deal for Activision Blizzard, and it's paid $69bn (£56bn) for the privilege.",
+        "chunk_id": "doc_0214::0",
+        "title": "Microsoft Activision: What does deal mean for gamers?"
+      }
+    ],
+    "human": {
+      "citation_precision": 1.0,
+      "citation_coverage": 1.0,
+      "note": "Single load-bearing claim (the $69bn price); the cited passage states exactly that. Supported and fully covered."
+    }
+  },
+  {
+    "query": "Who was the judge presiding over the Sam Bankman-Fried trial?",
+    "answer": "The judge presiding over the Sam Bankman-Fried trial was Lewis Kaplan.",
+    "citations": [
+      {
+        "cited_text": "That answer ultimately lies with the jury, which was selected on Wednesday morning",
+        "chunk_id": "doc_0031::0",
+        "title": "Is Sam Bankman-Fried a bad ‘man’ or a good ‘boy’? Lawyers swap opening"
+      }
+    ],
+    "human": {
+      "citation_precision": 0.0,
+      "citation_coverage": 1.0,
+      "note": "The claim (judge = Lewis Kaplan) has a citation attached (coverage 1.0), but the cited passage is about jury selection and says nothing about the judge — it does not support the claim (precision 0.0). The decorative/wrong-citation case."
+    }
+  },
+  {
+    "query": "What is the NBA Rookie of the Year award and who is the early favorite?",
+    "answer": "The NBA Rookie of the Year is an award that bettors can wager on as part of NBA futures betting. Victor Wembanyama is the early favorite to win it.",
+    "citations": [
+      {
+        "cited_text": "Bettors across the country can wager on which player they believe will win the coveted NBA Rookie of the Year award as part of NBA futures betting.",
+        "chunk_id": "doc_0062::0",
+        "title": "NBA Rookie of the Year Odds - Wembanyama the early favorite"
+      }
+    ],
+    "human": {
+      "citation_precision": 1.0,
+      "citation_coverage": 0.5,
+      "note": "Two load-bearing claims. Claim 1 (it's a futures bet) is cited and supported. Claim 2 (Wembanyama is the early favorite) is load-bearing but UNCITED — coverage 1/2 = 0.5. The one citation present is accurate, so precision 1.0."
+    }
+  },
+  {
+    "query": "What happened in Manchester United's Champions League match against Galatasaray?",
+    "answer": "Manchester United drew 3-3 with Galatasaray in the Champions League, dropping points from a winning position — a damaging result in their bid to reach the last 16.",
+    "citations": [
+      {
+        "cited_text": "Erik ten Hag's side have once again dropped points from a winning position as they drew 3-3 with Galatasaray in the Champions League, a damaging result in their bid to reach the last 16.",
+        "chunk_id": "doc_0012::0",
+        "title": "Leaky defence ‘isn’t good enough’ and ‘scars’ grow from throwing away leads"
+      }
+    ],
+    "human": {
+      "citation_precision": 1.0,
+      "citation_coverage": 1.0,
+      "note": "Every part of the claim (3-3 draw, dropped from a winning position, last-16 bid) is in the cited passage. Fully supported and covered."
+    }
+  },
+  {
+    "query": "What was the 2024 box-office gross of the vampire film Polygon reviewed?",
+    "answer": "The knowledge base does not contain information about the box-office gross of a 2024 vampire film. Insufficient information to answer.",
+    "citations": [],
+    "human": {
+      "citation_precision": null,
+      "citation_coverage": null,
+      "note": "Correct abstention: the corpus has a Polygon piece on vampire AUTHORS, not a 2024 film's box office. No factual claims and no citations, so both metrics are undefined (null) — the honest-IDK case scored by idk_rate instead."
+    }
+  },
+  {
+    "query": "What did the Fortune article say about Bankman-Fried's defense, and what was the verdict?",
+    "answer": "Bankman-Fried's defense argued he acted in good faith and, like many a startup founder, flew too close to the sun. The jury found him guilty on all seven counts.",
+    "citations": [
+      {
+        "cited_text": "Or did he act in good faith, and like many a startup founder, fly too close to the sun?",
+        "chunk_id": "doc_0031::0",
+        "title": "Is Sam Bankman-Fried a bad ‘man’ or a good ‘boy’? Lawyers swap opening"
+      },
+      {
+        "cited_text": "That answer ultimately lies with the jury, which was selected on Wednesday morning",
+        "chunk_id": "doc_0031::0",
+        "title": "Is Sam Bankman-Fried a bad ‘man’ or a good ‘boy’? Lawyers swap opening"
+      }
+    ],
+    "human": {
+      "citation_precision": 0.5,
+      "citation_coverage": 1.0,
+      "note": "Both claims are cited (coverage 1.0). Citation 1 supports the good-faith defense. Citation 2 (jury selection) does NOT support 'found guilty on all seven counts' — that passage predates any verdict. So precision = 1/2 = 0.5."
+    }
+  },
+  {
+    "query": "What is the Polygon vampire article about?",
+    "answer": "The Polygon article is a field guide to vampire authors, noting that vampire fiction has a long pedigree in English since Robert Southey introduced the British Isles to the coffin-sleeping undead at the turn of the 19th century.",
+    "citations": [
+      {
+        "cited_text": "From the moment that Robert Southey introduced the British Isles to the concept of the coffin-sleeping undead at the turn of the 19th century, the authors of vampiric stories have mirrored the changing face of the society that reads them.",
+        "chunk_id": "doc_0452::0",
+        "title": "A field guide to the vampire authors who were probably vampires"
+      }
+    ],
+    "human": {
+      "citation_precision": 1.0,
+      "citation_coverage": 1.0,
+      "note": "The load-bearing claim (Southey introduced the concept at the turn of the 19th century) is exactly what the cited passage states. Supported and covered."
+    }
+  },
+  {
+    "query": "What did TechCrunch report about Google's AI demo this week?",
+    "answer": "Google faked an AI demo, according to TechCrunch's Week in Review.",
+    "citations": [],
+    "human": {
+      "citation_precision": null,
+      "citation_coverage": 0.0,
+      "note": "One confident load-bearing claim (Google faked an AI demo) with NO citation at all — coverage 0.0, the uncited-assertion failure citation_coverage exists to catch. precision is undefined (no citations to score)."
+    }
+  }
+]
