@@ -81,6 +81,7 @@ await run([
   "--allow-write",
   "--allow-net",
   "--allow-env=HOME,USER,EIP_WEBUI_LIBRARY_PATH",
+  "--allow-run=firefox,google-chrome",
   "--allow-ffi",
   "--include",
   "ui/dist",
