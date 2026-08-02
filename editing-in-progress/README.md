@@ -70,11 +70,13 @@ archive SHA-256 file. Install or distribute the complete extracted directory.
 After building, run the public command:
 
 ```sh
+dist/editing-in-progress
 dist/editing-in-progress serve
 dist/editing-in-progress edit
 dist/editing-in-progress edit --serve
 ```
 
+- With no arguments, the command opens the editor.
 - `serve` runs the in-memory room coordinator.
 - `edit` runs the local application service, connects to the configured
   coordinator, and opens the native window.

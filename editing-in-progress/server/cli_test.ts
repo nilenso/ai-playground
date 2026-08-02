@@ -6,12 +6,16 @@ function assertEquals(actual: unknown, expected: unknown): void {
   }
 }
 
-Deno.test("Deno CLI accepts serve, edit, and edit --serve only", () => {
+Deno.test("Deno CLI opens the editor when invoked without arguments", () => {
+  assertEquals(parseMode([]), "edit");
+});
+
+Deno.test("Deno CLI accepts serve, edit, and edit --serve", () => {
   assertEquals(parseMode(["serve"]), "serve");
   assertEquals(parseMode(["edit"]), "edit");
   assertEquals(parseMode(["edit", "--serve"]), "edit-and-serve");
   for (
-    const invalid of [[], ["edit", "--other"], ["serve", "--extra"], [
+    const invalid of [["edit", "--other"], ["serve", "--extra"], [
       "unknown",
     ]]
   ) {
