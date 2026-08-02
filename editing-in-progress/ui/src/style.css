@@ -1,0 +1,347 @@
+:root {
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  color: #272727;
+  background: #f8f7f3;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  color: inherit;
+}
+
+.loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: #777;
+}
+.app-shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  height: 100%;
+  background: #fff;
+}
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 22px 14px 16px;
+  background: #f3f2ee;
+  border-right: 1px solid #e5e3dc;
+}
+.identity > input {
+  width: 100%;
+  padding: 0 10px 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 650;
+}
+.people-label {
+  margin: 24px 10px 9px;
+  color: #8c8981;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.people {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  overflow: auto;
+}
+.person {
+  display: grid;
+  grid-template-columns: 9px 1fr;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.person:hover:not(:disabled),
+.person.active {
+  background: #e8e6df;
+}
+.person:disabled {
+  cursor: default;
+  opacity: .58;
+}
+.person span:last-child {
+  display: grid;
+  min-width: 0;
+}
+.person strong,
+.person small,
+.person em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.person strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+.person small {
+  margin-top: 2px;
+  color: #66635d;
+  font-size: 12px;
+}
+.person em {
+  margin-top: 3px;
+  color: #99958d;
+  font-size: 10px;
+  font-style: normal;
+}
+.presence,
+.status-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #aaa;
+}
+.presence.online,
+.status-dot.online {
+  background: #46a66c;
+  box-shadow: 0 0 0 2px rgb(70 166 108 / 12%);
+}
+.presence.offline,
+.status-dot.disconnected {
+  background: #aaa69d;
+}
+.status-dot.connecting {
+  background: #d49a3d;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.empty {
+  margin: 10px;
+  color: #99958d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 10px 0;
+  border-top: 1px solid #dfddd6;
+  color: #77736b;
+  font-size: 11px;
+}
+.connection .status-dot {
+  margin: 0;
+}
+
+.workspace {
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr);
+  min-width: 0;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid #efeee9;
+}
+.file-switcher {
+  overflow: hidden;
+  max-width: 60%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.file-switcher:hover {
+  background: #f3f2ee;
+}
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.top-actions button {
+  padding: 7px 13px;
+  border: 1px solid #d8d6cf;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.top-actions button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+.shortcut {
+  color: #aaa69d;
+  font-size: 11px;
+}
+.editor {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+}
+.editor > div {
+  min-height: 100%;
+}
+.editor [role="toolbar"] {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+  justify-content: center;
+  padding: 8px;
+  border: 0;
+  border-bottom: 1px solid #f1f0ec;
+  border-radius: 0;
+  background: rgb(255 255 255 / 94%);
+  backdrop-filter: blur(10px);
+}
+.prose {
+  width: min(100% - 48px, 760px);
+  min-height: calc(100vh - 120px);
+  margin: 0 auto;
+  padding: 64px 0 120px;
+  color: #292929;
+  font-family: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 19px;
+  line-height: 1.72;
+  caret-color: #222;
+}
+.prose:focus {
+  outline: none;
+}
+.prose h1 {
+  margin-top: 0;
+  font-size: 2.1em;
+  line-height: 1.18;
+  letter-spacing: -.025em;
+}
+.prose h2 {
+  margin-top: 1.8em;
+  font-size: 1.45em;
+  line-height: 1.25;
+}
+.prose p {
+  margin: 1em 0;
+}
+.read-only .prose {
+  color: #464646;
+}
+.read-only [role="toolbar"] {
+  display: none;
+}
+.read-only-banner {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  padding: 7px 14px;
+  background: #f2eee3;
+  color: #766d57;
+  font-size: 11px;
+  text-align: center;
+}
+
+.palette-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding-top: 15vh;
+  background: rgb(30 30 28 / 25%);
+  backdrop-filter: blur(2px);
+}
+.palette {
+  width: min(620px, calc(100vw - 40px));
+  overflow: hidden;
+  border: 1px solid #d8d6cf;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 22px 70px rgb(35 33 28 / 20%);
+}
+.palette > input {
+  width: 100%;
+  padding: 17px 18px;
+  border: 0;
+  border-bottom: 1px solid #eceae4;
+  outline: 0;
+  font-size: 15px;
+}
+.palette-list {
+  max-height: 340px;
+  padding: 7px;
+  overflow: auto;
+}
+.palette-list button {
+  display: grid;
+  width: 100%;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.palette-list button:hover,
+.palette-list button.selected {
+  background: #f3f2ee;
+}
+.palette-list strong {
+  font-size: 13px;
+}
+.palette-list small {
+  overflow: hidden;
+  margin-top: 3px;
+  color: #8c8981;
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+.palette-list p {
+  padding: 12px;
+  color: #99958d;
+  font-size: 12px;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: .4;
+  }
+}
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .prose {
+    width: min(100% - 32px, 760px);
+    padding-top: 42px;
+    font-size: 17px;
+  }
+}

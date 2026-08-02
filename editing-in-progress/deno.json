@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "jsxImportSourceTypes": "npm:@types/react@19.2.17",
+    "lib": ["dom", "dom.iterable", "deno.ns"]
+  },
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@automerge/automerge": "npm:@automerge/automerge@3.3.2",
+    "@mdxeditor/editor": "npm:@mdxeditor/editor@4.1.1",
+    "@webui/deno-webui": "./vendor/deno-webui/mod.ts",
+    "react": "npm:react@19.2.8",
+    "react/jsx-runtime": "npm:react@19.2.8/jsx-runtime",
+    "react-dom/client": "npm:react-dom@19.2.8/client"
+  },
+  "tasks": {
+    "test": "deno task build:ui && deno test --allow-read --allow-write --allow-net --allow-env ui/src server",
+    "check": "deno check ui/src/index.tsx server/main.ts",
+    "check:webui": "deno run --allow-read --allow-env=EIP_WEBUI_LIBRARY_PATH --allow-ffi scripts/check_webui.ts",
+    "build:ui": "deno run --allow-run --allow-read --allow-write scripts/build_ui.ts",
+    "build": "deno run --allow-read --allow-write --allow-env=EIP_TARGET --allow-run scripts/build_app.ts",
+    "app": "deno run --allow-read --allow-write --allow-net --allow-env --allow-ffi server/main.ts"
+  }
+}

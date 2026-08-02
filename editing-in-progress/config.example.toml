@@ -1,0 +1,25 @@
+# Deno creates a private config automatically on first run. Use this template
+# when preparing a coordinator configuration manually.
+# Generate a 32-byte secret with:
+#   openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+
+[instance]
+# Persist one random UUIDv4 per installation.
+id = "00000000-0000-4000-8000-000000000000"
+display_name = "Your name"
+
+[coordinator]
+# Use wss:// outside localhost. SCRAM authenticates the room but does not
+# encrypt presence, filenames, or document contents.
+url = "wss://editor.example.test/v1"
+listen = "127.0.0.1:8787"
+
+# Exactly 32 random bytes encoded as unpadded base64url. Never commit a real
+# room secret. Every repository example intentionally uses [REDACTED].
+secret_base64 = "[REDACTED]"
+
+# Exactly 16 random bytes in standard padded base64. A coordinator may rotate
+# this salt; it is not secret.
+scram_salt_base64 = "[REDACTED]"
+scram_iterations = 4096
+offline_retention_seconds = 1800
