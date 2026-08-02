@@ -15,7 +15,7 @@
     "react-dom/client": "npm:react-dom@19.2.8/client"
   },
   "tasks": {
-    "test": "deno test --allow-read --allow-write --allow-net --allow-env ui/src server",
+    "test": "deno task build:ui && deno test --allow-read --allow-write --allow-net --allow-env ui/src server",
     "check": "deno check ui/src/index.tsx server/main.ts",
     "check:webui": "deno run --allow-read --allow-env=EIP_WEBUI_LIBRARY_PATH --allow-ffi scripts/check_webui.ts",
     "build:ui": "deno run --allow-run --allow-read --allow-write scripts/build_ui.ts",
