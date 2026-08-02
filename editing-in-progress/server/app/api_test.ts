@@ -52,4 +52,13 @@ Deno.test("static index requires token while health remains public", async () =>
   );
   assertEquals(index.status, 200);
   assertEquals(index.headers.get("x-content-type-options"), "nosniff");
+  if (
+    !index.headers.get("content-security-policy")?.includes(
+      "script-src 'self' 'wasm-unsafe-eval'",
+    )
+  ) {
+    throw new Error(
+      "content security policy blocks the Automerge WebAssembly module",
+    );
+  }
 });

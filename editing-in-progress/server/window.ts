@@ -25,7 +25,15 @@ export async function openNativeWindow(url: string): Promise<void> {
   window.setSize(1180, 800);
   window.setCenter();
   try {
-    if (!window.showWebView(url)) await window.show(url);
+    if (Deno.build.os === "linux") {
+      // GTK WebView must run on the main thread, but its synchronous first
+      // navigation blocks the loopback Deno server that supplies this page.
+      // Running it on an FFI worker avoids that deadlock but makes WebKitGTK
+      // abort during interaction, so use WebUI's browser window on Linux.
+      await window.show(url);
+    } else if (!window.showWebView(url)) {
+      await window.show(url);
+    }
     await WebUI.wait();
   } finally {
     WebUI.clean();
