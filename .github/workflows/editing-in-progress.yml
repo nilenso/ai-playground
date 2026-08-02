@@ -1,0 +1,106 @@
+name: Editing in Progress CI
+
+on:
+  push:
+    paths:
+      - "editing-in-progress/**"
+      - ".github/workflows/editing-in-progress.yml"
+  pull_request:
+    paths:
+      - "editing-in-progress/**"
+      - ".github/workflows/editing-in-progress.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DENO_VERSION: 2.9.4
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editing-in-progress
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+
+      - name: Install locked dependencies
+        run: deno install --frozen
+
+      - name: Check formatting
+        run: deno fmt --check
+
+      - name: Type-check
+        run: deno task check
+
+      - name: Run tests
+        run: deno task test
+
+      - name: Initialize pinned WebUI sidecar
+        run: deno task check:webui
+
+  package:
+    name: Package ${{ matrix.target }}
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+    defaults:
+      run:
+        working-directory: editing-in-progress
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+
+      - name: Install locked dependencies
+        run: deno install --frozen
+
+      - name: Compile application
+        env:
+          EIP_TARGET: ${{ matrix.target }}
+        run: deno task build
+
+      - name: Assemble archive
+        env:
+          EIP_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          package="editing-in-progress-${EIP_TARGET}"
+          mkdir -p "package/${package}/lib"
+          cp "dist/${EIP_TARGET}/editing-in-progress" "package/${package}/"
+          cp "dist/${EIP_TARGET}/lib/"* "package/${package}/lib/"
+          cp README.md config.example.toml native/LICENSE.webui "package/${package}/"
+          tar -C package -czf "${package}.tar.gz" "${package}"
+          sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256"
+
+      - name: Upload executable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: editing-in-progress-${{ matrix.target }}
+          path: |
+            editing-in-progress/editing-in-progress-${{ matrix.target }}.tar.gz
+            editing-in-progress/editing-in-progress-${{ matrix.target }}.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
