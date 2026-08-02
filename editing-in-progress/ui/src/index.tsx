@@ -230,19 +230,26 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if (
+        (event.metaKey || event.ctrlKey) && event.shiftKey &&
+        event.key.toLowerCase() === "k"
+      ) {
         event.preventDefault();
+        event.stopPropagation();
         setPaletteIndex(0);
         setPaletteOpen(true);
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
+        event.stopPropagation();
         void handleSave();
       }
       if (event.key === "Escape") setPaletteOpen(false);
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    // Capture shortcuts before MDXEditor or the external browser handles them.
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [handleSave]);
 
   useEffect(() => () => window.clearTimeout(syncTimer.current), []);
@@ -356,7 +363,7 @@ function App() {
           </button>
           <div className="top-actions">
             <span className="shortcut">
-              {navigator.platform.includes("Mac") ? "⌘K" : "Ctrl K"}
+              {navigator.platform.includes("Mac") ? "⌘⇧K" : "Ctrl Shift K"}
             </span>
             <button
               onClick={() => void handleSave()}
