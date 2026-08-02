@@ -15,25 +15,66 @@ export function isLocalWindowUrl(value: string): boolean {
   return token.length === 1 && /^[A-Za-z0-9_-]{32,128}$/.test(token[0]);
 }
 
+async function waitForShutdownSignal(): Promise<void> {
+  const signals = ["SIGINT", "SIGTERM"] as const;
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      for (const signal of signals) Deno.removeSignalListener(signal, finish);
+      resolve();
+    };
+    for (const signal of signals) Deno.addSignalListener(signal, finish);
+  });
+}
+
+function openLinuxBrowserWindow(url: string): boolean {
+  const browsers: ReadonlyArray<readonly [string, readonly string[]]> = [
+    [
+      "google-chrome",
+      [`--app=${url}`, "--new-window", "--window-size=1180,800"],
+    ],
+    ["firefox", ["--new-window", url]],
+  ];
+  for (const [command, args] of browsers) {
+    try {
+      const browser = new Deno.Command(command, {
+        args: [...args],
+        stdin: "null",
+        stdout: "null",
+        stderr: "null",
+      }).spawn();
+      browser.unref();
+      return true;
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+  }
+  return false;
+}
+
 export async function openNativeWindow(url: string): Promise<void> {
   if (!isLocalWindowUrl(url)) {
     throw new Error("refusing to open a non-loopback or untrusted window URL");
   }
   const { WebUI } = await import("@webui/deno-webui");
+  if (Deno.build.os === "linux") {
+    // The GTK WebView deadlocks with a loopback server in this Deno process.
+    // Open the system browser without WebUI's bridge handshake and keep the
+    // local service alive until the command receives Ctrl-C or SIGTERM.
+    try {
+      if (!openLinuxBrowserWindow(url)) WebUI.openUrl(url);
+      await waitForShutdownSignal();
+    } finally {
+      WebUI.clean();
+    }
+    return;
+  }
+
   const window = new WebUI();
   window.setPublic(false);
   window.setSize(1180, 800);
   window.setCenter();
   try {
-    if (Deno.build.os === "linux") {
-      // GTK WebView must run on the main thread, but its synchronous first
-      // navigation blocks the loopback Deno server that supplies this page.
-      // Running it on an FFI worker avoids that deadlock but makes WebKitGTK
-      // abort during interaction, so use WebUI's browser window on Linux.
-      await window.show(url);
-    } else if (!window.showWebView(url)) {
-      await window.show(url);
-    }
+    if (!window.showWebView(url)) await window.show(url);
     await WebUI.wait();
   } finally {
     WebUI.clean();
