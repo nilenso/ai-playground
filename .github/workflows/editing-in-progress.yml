@@ -47,6 +47,8 @@ jobs:
         run: deno task test
 
       - name: Initialize pinned WebUI sidecar
+        env:
+          EIP_WEBUI_LIBRARY_PATH: native/x86_64-unknown-linux-gnu/libwebui-2.so
         run: deno task check:webui
 
   package:
