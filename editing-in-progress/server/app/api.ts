@@ -138,7 +138,7 @@ export function createLocalHandler(
           "content-type": contentType,
           "cache-control": "no-store",
           "content-security-policy":
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data:; font-src 'self' data:",
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data:; font-src 'self' data:",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
         },
