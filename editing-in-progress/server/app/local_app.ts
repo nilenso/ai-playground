@@ -1,4 +1,5 @@
 import * as Automerge from "@automerge/automerge";
+import { errorDetails, log } from "../log.ts";
 import { type EditorDocument, LocalDocument } from "./local_document.ts";
 
 const maxMarkdownBytes = 8 * 1024 * 1024;
@@ -35,6 +36,7 @@ export interface RemoteCoordinator {
     { ownerId: string; name: string; filename: string; snapshot: Uint8Array }
   >;
   releasePeer(id: string): void;
+  retry(): void;
 }
 export interface LocalPersistence {
   touchLocal(path: string): Promise<void>;
@@ -222,6 +224,10 @@ export class LocalApplication {
       once: true,
     });
   }
+  retryConnection(): void {
+    if (!this.#coordinator) throw new Error("coordinator is unavailable");
+    this.#coordinator.retry();
+  }
   setConnectionStatus(status: ConnectionStatus): void {
     this.#status = status;
     this.#publish({ type: "connection", status });
@@ -274,7 +280,12 @@ export class LocalApplication {
       );
       this.#unsynced = false;
       this.#scheduleRecovery();
-    } catch {
+    } catch (error) {
+      log.error("editor", "failed to publish local document to coordinator", {
+        ...errorDetails(error),
+        filename: this.#document.filename,
+        snapshotBytes: this.#document.save().length,
+      });
       this.setConnectionStatus("disconnected");
     }
   }

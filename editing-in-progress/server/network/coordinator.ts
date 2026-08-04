@@ -16,6 +16,7 @@ import {
   ServerSession,
 } from "../core/scram.ts";
 import { formatUuid, generateUuidV4, parseUuidV4 } from "../core/uuid.ts";
+import { errorDetails, log } from "../log.ts";
 import { RoomPolicy } from "../state/room.ts";
 
 export interface CoordinatorSocket {
@@ -104,6 +105,9 @@ export class Coordinator {
       queue: Promise.resolve(),
     };
     this.#connections.set(socket, state);
+    log.info("coordinator", "websocket client connected", {
+      activeConnections: this.#connections.size,
+    });
     const writer = new PayloadWriter(68)
       .writeUuid(parseUuidV4(this.serverEpoch))
       .writeUuid(parseUuidV4(this.roomId))
@@ -127,13 +131,16 @@ export class Coordinator {
         throw new Error("binary messages required");
       }
       await this.#handle(socket, state, decodeFrame(message));
-    }).catch(() => this.#fail(socket, state, 1002, "protocol error"));
+    }).catch((error) =>
+      this.#fail(socket, state, 1002, "protocol error", error)
+    );
     return state.queue;
   }
 
   disconnect(socket: CoordinatorSocket): void {
     const state = this.#connections.get(socket);
     if (!state || state.phase === "closed") return;
+    const previousPhase = state.phase;
     state.phase = "closed";
     this.#connections.delete(socket);
     if (state.instanceId && this.#online.get(state.instanceId) === socket) {
@@ -151,6 +158,11 @@ export class Coordinator {
         ),
       );
     }
+    log.info("coordinator", "websocket client disconnected", {
+      instanceId: state.instanceId ?? "not authenticated",
+      previousPhase,
+      activeConnections: this.#connections.size,
+    });
   }
 
   startExpiryTimer(intervalMs = 1000): void {
@@ -214,6 +226,9 @@ export class Coordinator {
       state.challenge = challenge;
       state.instanceId = first.instanceId;
       state.phase = "waiting-proof";
+      log.debug("coordinator", "received SCRAM client-first", {
+        instanceId: first.instanceId,
+      });
       socket.send(
         encodeFrame(
           MessageType.auth_server_first,
@@ -252,6 +267,10 @@ export class Coordinator {
       this.room.connect(state.instanceId, "Anonymous", this.#now());
       this.#online.set(state.instanceId, socket);
       state.phase = "ready";
+      log.info("coordinator", "client authentication completed", {
+        instanceId: state.instanceId,
+        onlineClients: this.#online.size,
+      });
       socket.send(
         encodeFrame(MessageType.ready, frame.requestId, new Uint8Array()),
       );
@@ -399,7 +418,15 @@ export class Coordinator {
     state: ConnectionState,
     code: number,
     reason: string,
+    error: unknown,
   ): void {
+    log.error("coordinator", "closing client after protocol failure", {
+      ...errorDetails(error),
+      instanceId: state.instanceId ?? "not authenticated",
+      phase: state.phase,
+      closeCode: code,
+      closeReason: reason,
+    });
     socket.close(code, reason);
     this.disconnect(socket);
   }

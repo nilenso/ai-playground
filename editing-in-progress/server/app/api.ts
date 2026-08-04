@@ -90,6 +90,10 @@ export function createLocalHandler(
           await options.app.rename(body.name);
           return json({ ok: true });
         }
+        if (url.pathname === "/api/retry" && request.method === "POST") {
+          options.app.retryConnection();
+          return json({ ok: true });
+        }
         if (url.pathname === "/api/sync" && request.method === "POST") {
           const message = new Uint8Array(await request.arrayBuffer());
           if (message.length > maxSyncBytes) {

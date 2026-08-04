@@ -164,6 +164,10 @@ export async function rename(name: string): Promise<void> {
   });
 }
 
+export async function retryConnection(): Promise<void> {
+  await apiJson("/api/retry", { method: "POST" });
+}
+
 export async function pushSync(
   filename: string,
   message: Uint8Array,

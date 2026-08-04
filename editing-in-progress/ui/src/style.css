@@ -154,6 +154,31 @@ button {
 .connection .status-dot {
   margin: 0;
 }
+.retry-connection {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 4px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: #77736b;
+  background: transparent;
+  cursor: pointer;
+}
+.retry-connection:hover {
+  color: #272727;
+  background: rgb(39 39 39 / 8%);
+}
+.retry-connection:focus-visible {
+  outline: 2px solid #77736b;
+  outline-offset: 1px;
+}
+.retry-connection svg {
+  width: 16px;
+  height: 16px;
+}
 
 .workspace {
   display: grid;

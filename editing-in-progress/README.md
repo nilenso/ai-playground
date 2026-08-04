@@ -77,12 +77,24 @@ dist/editing-in-progress edit --serve
 ```
 
 - With no arguments, the command opens the editor.
+- Only one editor process may use an installation at a time. A second launch
+  exits with an error instead of connecting with the same collaboration
+  identity.
 - `serve` runs the in-memory room coordinator.
 - `edit` runs the local application service, connects to the configured
   coordinator, and opens the native window.
 - `edit --serve` starts both in one Deno process.
 
 For source-level development, the equivalent entry point is `deno task app`.
+
+Connection diagnostics are written to stdout/stderr with `client`, `editor`, and
+`coordinator` scopes. Run the editor and coordinator from a terminal to see
+WebSocket close codes and timings, retry delays, SCRAM handshake progress,
+request timeouts, and protocol failures. When a WebSocket transport fails, the
+client also reports DNS results and performs a rate-limited HTTP/TLS probe of
+the same endpoint so certificate, TLS, proxy, and routing failures are visible
+even when the WebSocket API supplies no error details. Logs include instance IDs
+and document metadata, but never room credentials or document contents.
 
 The coordinator exposes `GET /health` and `/v1` with WebSocket subprotocol
 `collab.v1`.

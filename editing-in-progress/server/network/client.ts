@@ -14,6 +14,7 @@ import {
   parseServerFirst,
 } from "../core/scram.ts";
 import { formatUuid, parseUuidV4 } from "../core/uuid.ts";
+import { errorDetails, log, type LogDetails } from "../log.ts";
 
 export type ClientStatus = "online" | "connecting" | "disconnected";
 export interface RemotePresence {
@@ -70,6 +71,62 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length &&
     left.every((byte, index) => byte === right[index]);
 }
+export function reconnectDelayMs(attempt: number): number {
+  return Math.min(10 * 60_000, 250 * 2 ** Math.min(attempt, 12));
+}
+
+function prefixedErrorDetails(prefix: string, error: unknown): LogDetails {
+  const details = errorDetails(error);
+  return Object.fromEntries(
+    Object.entries(details).map((
+      [key, value],
+    ) => [`${prefix}${key[0].toUpperCase()}${key.slice(1)}`, value]),
+  );
+}
+
+async function diagnoseTransport(endpointValue: string): Promise<void> {
+  const endpoint = new URL(endpointValue);
+  const probe = new URL(endpoint);
+  probe.protocol = endpoint.protocol === "wss:" ? "https:" : "http:";
+  const [ipv4, ipv6] = await Promise.allSettled([
+    Deno.resolveDns(endpoint.hostname, "A"),
+    Deno.resolveDns(endpoint.hostname, "AAAA"),
+  ]);
+  log.info("client", "coordinator DNS diagnostics", {
+    hostname: endpoint.hostname,
+    port: endpoint.port || (endpoint.protocol === "wss:" ? 443 : 80),
+    ipv4Addresses: ipv4.status === "fulfilled" ? ipv4.value : [],
+    ipv6Addresses: ipv6.status === "fulfilled" ? ipv6.value : [],
+    ...(ipv4.status === "rejected"
+      ? prefixedErrorDetails("ipv4", ipv4.reason)
+      : {}),
+    ...(ipv6.status === "rejected"
+      ? prefixedErrorDetails("ipv6", ipv6.reason)
+      : {}),
+  });
+  const startedAt = performance.now();
+  try {
+    const response = await fetch(probe, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+    await response.body?.cancel();
+    log.info("client", "coordinator HTTP/TLS probe completed", {
+      url: probe.href,
+      status: response.status,
+      statusText: response.statusText,
+      server: response.headers.get("server") ?? "not supplied",
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+  } catch (error) {
+    log.error("client", "coordinator HTTP/TLS probe failed", {
+      url: probe.href,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      ...errorDetails(error),
+    });
+  }
+}
+
 function validateUrl(value: string): void {
   const url = new URL(value);
   if (url.protocol === "wss:") return;
@@ -109,6 +166,8 @@ export class CoordinatorClient {
   #pending = new Map<number, PendingRequest>();
   #clientNonce?: string;
   #clientAuth?: ClientSession;
+  #reconnectTimer?: number;
+  #lastTransportDiagnosticsAt = 0;
   #latestOwner?: { name: string; filename: string; snapshot: Uint8Array };
 
   constructor(options: CoordinatorClientOptions) {
@@ -131,10 +190,21 @@ export class CoordinatorClient {
 
   stop(): void {
     this.#stopped = true;
+    this.#clearReconnectTimer();
     this.#socket?.close(1000, "client stopped");
     this.#socket = undefined;
     this.#rejectPending(new Error("client stopped"));
     this.#setStatus("disconnected");
+  }
+
+  retry(): void {
+    if (this.#stopped || this.#status !== "disconnected") return;
+    log.info("client", "retrying coordinator connection immediately", {
+      endpoint: this.#safeEndpoint(),
+    });
+    this.#clearReconnectTimer();
+    this.#attempt = 0;
+    this.#connect();
   }
 
   async updateOwner(
@@ -194,33 +264,105 @@ export class CoordinatorClient {
   #connect(): void {
     if (this.#stopped) return;
     this.#setStatus("connecting");
+    const attempt = this.#attempt + 1;
+    log.info("client", "connecting to coordinator", {
+      endpoint: this.#safeEndpoint(),
+      attempt,
+      instanceId: this.#options.instanceId,
+    });
+    const startedAt = performance.now();
+    let opened = false;
     const socket = new WebSocket(this.#options.url, "collab.v1");
     socket.binaryType = "arraybuffer";
     this.#socket = socket;
+    socket.onopen = () => {
+      opened = true;
+      log.info("client", "coordinator websocket opened", {
+        endpoint: this.#safeEndpoint(),
+        protocol: socket.protocol || "none",
+        elapsedMs: Math.round(performance.now() - startedAt),
+      });
+    };
     socket.onmessage = (event) => {
+      if (this.#socket !== socket || this.#stopped) return;
       try {
         if (!(event.data instanceof ArrayBuffer)) {
           throw new Error("binary frame required");
         }
-        void this.#handle(decodeFrame(new Uint8Array(event.data))).catch(() =>
-          socket.close(1002, "protocol error")
-        );
-      } catch {
-        socket.close(1002, "protocol error");
+        const frame = decodeFrame(new Uint8Array(event.data));
+        void this.#handle(frame).catch((error) => {
+          if (this.#socket !== socket || this.#stopped) return;
+          log.error("client", "failed to handle coordinator frame", {
+            ...errorDetails(error),
+            messageType: MessageType[frame.messageType],
+            requestId: frame.requestId,
+            status: this.#status,
+          });
+          this.#closeForProtocolError(socket);
+        });
+      } catch (error) {
+        log.error("client", "failed to decode coordinator frame", {
+          ...errorDetails(error),
+          dataType: typeof event.data,
+        });
+        this.#closeForProtocolError(socket);
       }
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this.#socket !== socket) return;
       this.#socket = undefined;
       this.#clientAuth = undefined;
       this.#rejectPending(new Error("coordinator disconnected"));
       this.#setStatus("disconnected");
+      log.warn("client", "coordinator websocket closed", {
+        endpoint: this.#safeEndpoint(),
+        code: event.code,
+        reason: event.reason || "none supplied",
+        clean: event.wasClean,
+        opened,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        stopped: this.#stopped,
+      });
       if (!this.#stopped) {
-        const delay = Math.min(30_000, 250 * 2 ** Math.min(this.#attempt++, 7));
-        setTimeout(() => this.#connect(), delay);
+        const delay = reconnectDelayMs(this.#attempt++);
+        log.info("client", "scheduling coordinator reconnect", {
+          delayMs: delay,
+          nextAttempt: this.#attempt + 1,
+        });
+        this.#reconnectTimer = setTimeout(() => {
+          this.#reconnectTimer = undefined;
+          this.#connect();
+        }, delay);
       }
     };
-    socket.onerror = () => {};
+    socket.onerror = () => {
+      const endpoint = this.#safeEndpoint();
+      log.warn("client", "coordinator websocket reported a transport error", {
+        endpoint,
+        readyState: socket.readyState,
+        opened,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        runtime: `Deno ${Deno.version.deno}`,
+        platform: `${Deno.build.os}/${Deno.build.arch}`,
+      });
+      const now = Date.now();
+      if (now - this.#lastTransportDiagnosticsAt >= 5 * 60_000) {
+        this.#lastTransportDiagnosticsAt = now;
+        void diagnoseTransport(endpoint).catch((error) => {
+          log.error(
+            "client",
+            "failed to collect coordinator transport diagnostics",
+            errorDetails(error),
+          );
+        });
+      }
+    };
+  }
+
+  #clearReconnectTimer(): void {
+    if (this.#reconnectTimer === undefined) return;
+    clearTimeout(this.#reconnectTimer);
+    this.#reconnectTimer = undefined;
   }
 
   async #handle(frame: Frame): Promise<void> {
@@ -242,6 +384,15 @@ export class CoordinatorClient {
         maxFrame !== 16 * 1024 * 1024 || maxSnapshot < 8 * 1024 * 1024 ||
         retention !== 1800
       ) throw new Error("unsupported server limits");
+      log.debug(
+        "client",
+        "received coordinator hello; starting SCRAM authentication",
+        {
+          maxFrameBytes: maxFrame,
+          maxSnapshotBytes: maxSnapshot,
+          retentionSeconds: retention,
+        },
+      );
       this.#clientNonce = randomNonce();
       const requestId = this.#nextRequestId();
       this.#send(
@@ -270,6 +421,9 @@ export class CoordinatorClient {
         !bytesEqual(challenge.salt, this.#options.expectedSalt) ||
         challenge.iterations !== this.#options.expectedIterations
       ) throw new Error("server SCRAM parameters do not match configuration");
+      log.debug("client", "coordinator SCRAM parameters verified", {
+        iterations: challenge.iterations,
+      });
       this.#clientAuth = await ClientSession.respond(
         this.#options.secret,
         challenge,
@@ -293,6 +447,7 @@ export class CoordinatorClient {
       const signature = parseServerFinal(cursor.readString());
       cursor.finish();
       this.#clientAuth.verifyServer(signature);
+      log.debug("client", "coordinator SCRAM signature verified");
       if (!this.#clientAuth.canSendApplication) {
         throw new Error("server signature was not verified");
       }
@@ -311,6 +466,9 @@ export class CoordinatorClient {
     ) {
       this.#attempt = 0;
       this.#setStatus("online");
+      log.info("client", "coordinator connection is ready", {
+        instanceId: this.#options.instanceId,
+      });
       if (this.#latestOwner) {
         await this.updateOwner(
           this.#latestOwner.name,
@@ -383,11 +541,35 @@ export class CoordinatorClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(requestId);
+        log.warn("client", "coordinator request timed out", {
+          messageType: MessageType[type],
+          expectedType: MessageType[expected],
+          requestId,
+        });
         reject(new Error("coordinator request timed out"));
       }, 10_000);
       this.#pending.set(requestId, { expected, resolve, reject, timer });
       this.#send(encodeFrame(type, requestId, payload));
     });
+  }
+
+  #closeForProtocolError(socket: WebSocket): void {
+    if (
+      socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING
+    ) {
+      // Deno permits clients to send only 1000 or application-defined close codes.
+      socket.close(4002, "protocol error");
+    }
+  }
+
+  #safeEndpoint(): string {
+    const endpoint = new URL(this.#options.url);
+    endpoint.username = "";
+    endpoint.password = "";
+    endpoint.search = "";
+    endpoint.hash = "";
+    return endpoint.href;
   }
 
   #nextRequestId(): number {

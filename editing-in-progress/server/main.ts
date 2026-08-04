@@ -8,7 +8,17 @@ import { type CollabSession, createHttpHandler } from "./http/mod.ts";
 import { CoordinatorClient } from "./network/client.ts";
 import { Coordinator } from "./network/coordinator.ts";
 import type { Config } from "./core/config.ts";
+import { statePath } from "./state/storage.ts";
+import { log } from "./log.ts";
 import { openNativeWindow } from "./window.ts";
+
+function remoteAddress(session: CollabSession): string {
+  try {
+    return session.request.headers.get("x-forwarded-for") ?? "unknown";
+  } catch {
+    return "unavailable after transport closed";
+  }
+}
 
 function randomToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -37,11 +47,21 @@ export function startCoordinator(
     onMessage(session: CollabSession, message: string | Uint8Array) {
       return coordinator.receive(session, message);
     },
-    onClose(session: CollabSession) {
+    onClose(session: CollabSession, event: CloseEvent) {
       coordinator.disconnect(session);
+      log.info("coordinator", "websocket transport closed", {
+        remoteAddress: remoteAddress(session),
+        code: event.code,
+        reason: event.reason || "none supplied",
+        clean: event.wasClean,
+      });
     },
-    onError(session: CollabSession) {
+    onError(session: CollabSession, event: Event) {
       coordinator.disconnect(session);
+      log.warn("coordinator", "websocket transport reported an error", {
+        remoteAddress: remoteAddress(session),
+        eventType: event.type,
+      });
     },
   };
   const listen = parseListenAddress(config.listenAddress);
@@ -59,12 +79,35 @@ export function startCoordinator(
   return server;
 }
 
-export async function runEditor(
+export async function acquireEditorLock(home: string): Promise<Deno.FsFile> {
+  const directory = statePath(home);
+  await Deno.mkdir(directory, { recursive: true, mode: 0o700 });
+  const file = await Deno.open(`${directory}/editingip.lock`, {
+    create: true,
+    read: true,
+    write: true,
+    mode: 0o600,
+  });
+  try {
+    if (!await file.tryLock(true)) {
+      throw new Error(
+        "another Editing in Progress editor is already running; close its window before starting another",
+      );
+    }
+    await file.truncate(0);
+    await file.write(new TextEncoder().encode(`${Deno.pid}\n`));
+    return file;
+  } catch (error) {
+    file.close();
+    throw error;
+  }
+}
+
+async function runLockedEditor(
+  home: string,
   config: Config,
-  openWindow: (url: string) => Promise<void> = openNativeWindow,
+  openWindow: (url: string) => Promise<void>,
 ): Promise<void> {
-  const home = Deno.env.get("HOME");
-  if (!home) throw new Error("HOME is required");
   const persisted = await AppPersistence.load(home, config.instanceId);
   const recovery = persisted.state.recovery;
   const document = recovery
@@ -85,7 +128,10 @@ export async function runEditor(
     expectedSalt: config.scramSalt,
     expectedIterations: config.scramIterations,
     events: {
-      onStatus: (status) => app.setConnectionStatus(status),
+      onStatus: (status) => {
+        log.info("editor", "coordinator status changed", { status });
+        app.setConnectionStatus(status);
+      },
       onPresence: (peers) => app.replacePresence(peers),
       onPeer: (peer) => app.updatePresence(peer),
       onRemoteDocument: (ownerId, name, filename, snapshot) =>
@@ -114,6 +160,20 @@ export async function runEditor(
     client.stop();
     await persisted.persistence.flush();
     await localServer.shutdown();
+  }
+}
+
+export async function runEditor(
+  config: Config,
+  openWindow: (url: string) => Promise<void> = openNativeWindow,
+): Promise<void> {
+  const home = Deno.env.get("HOME");
+  if (!home) throw new Error("HOME is required");
+  const lock = await acquireEditorLock(home);
+  try {
+    await runLockedEditor(home, config, openWindow);
+  } finally {
+    lock.close();
   }
 }
 
