@@ -14,6 +14,7 @@ import {
   parseServerFirst,
 } from "../core/scram.ts";
 import { formatUuid, parseUuidV4 } from "../core/uuid.ts";
+import { errorDetails, log } from "../log.ts";
 
 export type ClientStatus = "online" | "connecting" | "disconnected";
 export interface RemotePresence {
@@ -194,33 +195,74 @@ export class CoordinatorClient {
   #connect(): void {
     if (this.#stopped) return;
     this.#setStatus("connecting");
+    const attempt = this.#attempt + 1;
+    log.info("client", "connecting to coordinator", {
+      endpoint: this.#safeEndpoint(),
+      attempt,
+      instanceId: this.#options.instanceId,
+    });
     const socket = new WebSocket(this.#options.url, "collab.v1");
     socket.binaryType = "arraybuffer";
     this.#socket = socket;
+    socket.onopen = () => {
+      log.info("client", "coordinator websocket opened", {
+        endpoint: this.#safeEndpoint(),
+        protocol: socket.protocol || "none",
+      });
+    };
     socket.onmessage = (event) => {
+      if (this.#socket !== socket || this.#stopped) return;
       try {
         if (!(event.data instanceof ArrayBuffer)) {
           throw new Error("binary frame required");
         }
-        void this.#handle(decodeFrame(new Uint8Array(event.data))).catch(() =>
-          socket.close(1002, "protocol error")
-        );
-      } catch {
-        socket.close(1002, "protocol error");
+        const frame = decodeFrame(new Uint8Array(event.data));
+        void this.#handle(frame).catch((error) => {
+          if (this.#socket !== socket || this.#stopped) return;
+          log.error("client", "failed to handle coordinator frame", {
+            ...errorDetails(error),
+            messageType: MessageType[frame.messageType],
+            requestId: frame.requestId,
+            status: this.#status,
+          });
+          this.#closeForProtocolError(socket);
+        });
+      } catch (error) {
+        log.error("client", "failed to decode coordinator frame", {
+          ...errorDetails(error),
+          dataType: typeof event.data,
+        });
+        this.#closeForProtocolError(socket);
       }
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this.#socket !== socket) return;
       this.#socket = undefined;
       this.#clientAuth = undefined;
       this.#rejectPending(new Error("coordinator disconnected"));
       this.#setStatus("disconnected");
+      log.warn("client", "coordinator websocket closed", {
+        endpoint: this.#safeEndpoint(),
+        code: event.code,
+        reason: event.reason || "none supplied",
+        clean: event.wasClean,
+        stopped: this.#stopped,
+      });
       if (!this.#stopped) {
         const delay = Math.min(30_000, 250 * 2 ** Math.min(this.#attempt++, 7));
+        log.info("client", "scheduling coordinator reconnect", {
+          delayMs: delay,
+          nextAttempt: this.#attempt + 1,
+        });
         setTimeout(() => this.#connect(), delay);
       }
     };
-    socket.onerror = () => {};
+    socket.onerror = () => {
+      log.warn("client", "coordinator websocket reported a transport error", {
+        endpoint: this.#safeEndpoint(),
+        readyState: socket.readyState,
+      });
+    };
   }
 
   async #handle(frame: Frame): Promise<void> {
@@ -242,6 +284,15 @@ export class CoordinatorClient {
         maxFrame !== 16 * 1024 * 1024 || maxSnapshot < 8 * 1024 * 1024 ||
         retention !== 1800
       ) throw new Error("unsupported server limits");
+      log.debug(
+        "client",
+        "received coordinator hello; starting SCRAM authentication",
+        {
+          maxFrameBytes: maxFrame,
+          maxSnapshotBytes: maxSnapshot,
+          retentionSeconds: retention,
+        },
+      );
       this.#clientNonce = randomNonce();
       const requestId = this.#nextRequestId();
       this.#send(
@@ -270,6 +321,9 @@ export class CoordinatorClient {
         !bytesEqual(challenge.salt, this.#options.expectedSalt) ||
         challenge.iterations !== this.#options.expectedIterations
       ) throw new Error("server SCRAM parameters do not match configuration");
+      log.debug("client", "coordinator SCRAM parameters verified", {
+        iterations: challenge.iterations,
+      });
       this.#clientAuth = await ClientSession.respond(
         this.#options.secret,
         challenge,
@@ -293,6 +347,7 @@ export class CoordinatorClient {
       const signature = parseServerFinal(cursor.readString());
       cursor.finish();
       this.#clientAuth.verifyServer(signature);
+      log.debug("client", "coordinator SCRAM signature verified");
       if (!this.#clientAuth.canSendApplication) {
         throw new Error("server signature was not verified");
       }
@@ -311,6 +366,9 @@ export class CoordinatorClient {
     ) {
       this.#attempt = 0;
       this.#setStatus("online");
+      log.info("client", "coordinator connection is ready", {
+        instanceId: this.#options.instanceId,
+      });
       if (this.#latestOwner) {
         await this.updateOwner(
           this.#latestOwner.name,
@@ -383,11 +441,35 @@ export class CoordinatorClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(requestId);
+        log.warn("client", "coordinator request timed out", {
+          messageType: MessageType[type],
+          expectedType: MessageType[expected],
+          requestId,
+        });
         reject(new Error("coordinator request timed out"));
       }, 10_000);
       this.#pending.set(requestId, { expected, resolve, reject, timer });
       this.#send(encodeFrame(type, requestId, payload));
     });
+  }
+
+  #closeForProtocolError(socket: WebSocket): void {
+    if (
+      socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING
+    ) {
+      // Deno permits clients to send only 1000 or application-defined close codes.
+      socket.close(4002, "protocol error");
+    }
+  }
+
+  #safeEndpoint(): string {
+    const endpoint = new URL(this.#options.url);
+    endpoint.username = "";
+    endpoint.password = "";
+    endpoint.search = "";
+    endpoint.hash = "";
+    return endpoint.href;
   }
 
   #nextRequestId(): number {

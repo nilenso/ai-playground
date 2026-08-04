@@ -8,6 +8,7 @@ import { type CollabSession, createHttpHandler } from "./http/mod.ts";
 import { CoordinatorClient } from "./network/client.ts";
 import { Coordinator } from "./network/coordinator.ts";
 import type { Config } from "./core/config.ts";
+import { log } from "./log.ts";
 import { openNativeWindow } from "./window.ts";
 
 function randomToken(): string {
@@ -37,10 +38,22 @@ export function startCoordinator(
     onMessage(session: CollabSession, message: string | Uint8Array) {
       return coordinator.receive(session, message);
     },
-    onClose(session: CollabSession) {
+    onClose(session: CollabSession, event: CloseEvent) {
+      log.info("coordinator", "websocket transport closed", {
+        remoteAddress: session.request.headers.get("x-forwarded-for") ??
+          "unknown",
+        code: event.code,
+        reason: event.reason || "none supplied",
+        clean: event.wasClean,
+      });
       coordinator.disconnect(session);
     },
-    onError(session: CollabSession) {
+    onError(session: CollabSession, event: Event) {
+      log.warn("coordinator", "websocket transport reported an error", {
+        remoteAddress: session.request.headers.get("x-forwarded-for") ??
+          "unknown",
+        eventType: event.type,
+      });
       coordinator.disconnect(session);
     },
   };
@@ -85,7 +98,10 @@ export async function runEditor(
     expectedSalt: config.scramSalt,
     expectedIterations: config.scramIterations,
     events: {
-      onStatus: (status) => app.setConnectionStatus(status),
+      onStatus: (status) => {
+        log.info("editor", "coordinator status changed", { status });
+        app.setConnectionStatus(status);
+      },
       onPresence: (peers) => app.replacePresence(peers),
       onPeer: (peer) => app.updatePresence(peer),
       onRemoteDocument: (ownerId, name, filename, snapshot) =>

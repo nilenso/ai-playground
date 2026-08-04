@@ -84,6 +84,12 @@ dist/editing-in-progress edit --serve
 
 For source-level development, the equivalent entry point is `deno task app`.
 
+Connection diagnostics are written to stdout/stderr with `client`, `editor`, and
+`coordinator` scopes. Run the editor and coordinator from a terminal to see
+WebSocket close codes, retry delays, SCRAM handshake progress, request timeouts,
+and protocol failures. Logs include instance IDs and document metadata, but
+never room credentials or document contents.
+
 The coordinator exposes `GET /health` and `/v1` with WebSocket subprotocol
 `collab.v1`.
 
