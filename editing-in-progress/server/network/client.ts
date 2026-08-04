@@ -14,7 +14,7 @@ import {
   parseServerFirst,
 } from "../core/scram.ts";
 import { formatUuid, parseUuidV4 } from "../core/uuid.ts";
-import { errorDetails, log } from "../log.ts";
+import { errorDetails, log, type LogDetails } from "../log.ts";
 
 export type ClientStatus = "online" | "connecting" | "disconnected";
 export interface RemotePresence {
@@ -75,6 +75,58 @@ export function reconnectDelayMs(attempt: number): number {
   return Math.min(10 * 60_000, 250 * 2 ** Math.min(attempt, 12));
 }
 
+function prefixedErrorDetails(prefix: string, error: unknown): LogDetails {
+  const details = errorDetails(error);
+  return Object.fromEntries(
+    Object.entries(details).map((
+      [key, value],
+    ) => [`${prefix}${key[0].toUpperCase()}${key.slice(1)}`, value]),
+  );
+}
+
+async function diagnoseTransport(endpointValue: string): Promise<void> {
+  const endpoint = new URL(endpointValue);
+  const probe = new URL(endpoint);
+  probe.protocol = endpoint.protocol === "wss:" ? "https:" : "http:";
+  const [ipv4, ipv6] = await Promise.allSettled([
+    Deno.resolveDns(endpoint.hostname, "A"),
+    Deno.resolveDns(endpoint.hostname, "AAAA"),
+  ]);
+  log.info("client", "coordinator DNS diagnostics", {
+    hostname: endpoint.hostname,
+    port: endpoint.port || (endpoint.protocol === "wss:" ? 443 : 80),
+    ipv4Addresses: ipv4.status === "fulfilled" ? ipv4.value : [],
+    ipv6Addresses: ipv6.status === "fulfilled" ? ipv6.value : [],
+    ...(ipv4.status === "rejected"
+      ? prefixedErrorDetails("ipv4", ipv4.reason)
+      : {}),
+    ...(ipv6.status === "rejected"
+      ? prefixedErrorDetails("ipv6", ipv6.reason)
+      : {}),
+  });
+  const startedAt = performance.now();
+  try {
+    const response = await fetch(probe, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+    await response.body?.cancel();
+    log.info("client", "coordinator HTTP/TLS probe completed", {
+      url: probe.href,
+      status: response.status,
+      statusText: response.statusText,
+      server: response.headers.get("server") ?? "not supplied",
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+  } catch (error) {
+    log.error("client", "coordinator HTTP/TLS probe failed", {
+      url: probe.href,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      ...errorDetails(error),
+    });
+  }
+}
+
 function validateUrl(value: string): void {
   const url = new URL(value);
   if (url.protocol === "wss:") return;
@@ -115,6 +167,7 @@ export class CoordinatorClient {
   #clientNonce?: string;
   #clientAuth?: ClientSession;
   #reconnectTimer?: number;
+  #lastTransportDiagnosticsAt = 0;
   #latestOwner?: { name: string; filename: string; snapshot: Uint8Array };
 
   constructor(options: CoordinatorClientOptions) {
@@ -217,13 +270,17 @@ export class CoordinatorClient {
       attempt,
       instanceId: this.#options.instanceId,
     });
+    const startedAt = performance.now();
+    let opened = false;
     const socket = new WebSocket(this.#options.url, "collab.v1");
     socket.binaryType = "arraybuffer";
     this.#socket = socket;
     socket.onopen = () => {
+      opened = true;
       log.info("client", "coordinator websocket opened", {
         endpoint: this.#safeEndpoint(),
         protocol: socket.protocol || "none",
+        elapsedMs: Math.round(performance.now() - startedAt),
       });
     };
     socket.onmessage = (event) => {
@@ -262,6 +319,8 @@ export class CoordinatorClient {
         code: event.code,
         reason: event.reason || "none supplied",
         clean: event.wasClean,
+        opened,
+        elapsedMs: Math.round(performance.now() - startedAt),
         stopped: this.#stopped,
       });
       if (!this.#stopped) {
@@ -277,10 +336,26 @@ export class CoordinatorClient {
       }
     };
     socket.onerror = () => {
+      const endpoint = this.#safeEndpoint();
       log.warn("client", "coordinator websocket reported a transport error", {
-        endpoint: this.#safeEndpoint(),
+        endpoint,
         readyState: socket.readyState,
+        opened,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        runtime: `Deno ${Deno.version.deno}`,
+        platform: `${Deno.build.os}/${Deno.build.arch}`,
       });
+      const now = Date.now();
+      if (now - this.#lastTransportDiagnosticsAt >= 5 * 60_000) {
+        this.#lastTransportDiagnosticsAt = now;
+        void diagnoseTransport(endpoint).catch((error) => {
+          log.error(
+            "client",
+            "failed to collect coordinator transport diagnostics",
+            errorDetails(error),
+          );
+        });
+      }
     };
   }
 

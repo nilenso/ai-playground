@@ -11,6 +11,14 @@ import type { Config } from "./core/config.ts";
 import { log } from "./log.ts";
 import { openNativeWindow } from "./window.ts";
 
+function remoteAddress(session: CollabSession): string {
+  try {
+    return session.request.headers.get("x-forwarded-for") ?? "unknown";
+  } catch {
+    return "unavailable after transport closed";
+  }
+}
+
 function randomToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   let binary = "";
@@ -39,22 +47,20 @@ export function startCoordinator(
       return coordinator.receive(session, message);
     },
     onClose(session: CollabSession, event: CloseEvent) {
+      coordinator.disconnect(session);
       log.info("coordinator", "websocket transport closed", {
-        remoteAddress: session.request.headers.get("x-forwarded-for") ??
-          "unknown",
+        remoteAddress: remoteAddress(session),
         code: event.code,
         reason: event.reason || "none supplied",
         clean: event.wasClean,
       });
-      coordinator.disconnect(session);
     },
     onError(session: CollabSession, event: Event) {
+      coordinator.disconnect(session);
       log.warn("coordinator", "websocket transport reported an error", {
-        remoteAddress: session.request.headers.get("x-forwarded-for") ??
-          "unknown",
+        remoteAddress: remoteAddress(session),
         eventType: event.type,
       });
-      coordinator.disconnect(session);
     },
   };
   const listen = parseListenAddress(config.listenAddress);
