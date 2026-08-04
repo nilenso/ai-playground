@@ -71,6 +71,10 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length &&
     left.every((byte, index) => byte === right[index]);
 }
+export function reconnectDelayMs(attempt: number): number {
+  return Math.min(10 * 60_000, 250 * 2 ** Math.min(attempt, 12));
+}
+
 function validateUrl(value: string): void {
   const url = new URL(value);
   if (url.protocol === "wss:") return;
@@ -110,6 +114,7 @@ export class CoordinatorClient {
   #pending = new Map<number, PendingRequest>();
   #clientNonce?: string;
   #clientAuth?: ClientSession;
+  #reconnectTimer?: number;
   #latestOwner?: { name: string; filename: string; snapshot: Uint8Array };
 
   constructor(options: CoordinatorClientOptions) {
@@ -132,10 +137,21 @@ export class CoordinatorClient {
 
   stop(): void {
     this.#stopped = true;
+    this.#clearReconnectTimer();
     this.#socket?.close(1000, "client stopped");
     this.#socket = undefined;
     this.#rejectPending(new Error("client stopped"));
     this.#setStatus("disconnected");
+  }
+
+  retry(): void {
+    if (this.#stopped || this.#status !== "disconnected") return;
+    log.info("client", "retrying coordinator connection immediately", {
+      endpoint: this.#safeEndpoint(),
+    });
+    this.#clearReconnectTimer();
+    this.#attempt = 0;
+    this.#connect();
   }
 
   async updateOwner(
@@ -249,12 +265,15 @@ export class CoordinatorClient {
         stopped: this.#stopped,
       });
       if (!this.#stopped) {
-        const delay = Math.min(30_000, 250 * 2 ** Math.min(this.#attempt++, 7));
+        const delay = reconnectDelayMs(this.#attempt++);
         log.info("client", "scheduling coordinator reconnect", {
           delayMs: delay,
           nextAttempt: this.#attempt + 1,
         });
-        setTimeout(() => this.#connect(), delay);
+        this.#reconnectTimer = setTimeout(() => {
+          this.#reconnectTimer = undefined;
+          this.#connect();
+        }, delay);
       }
     };
     socket.onerror = () => {
@@ -263,6 +282,12 @@ export class CoordinatorClient {
         readyState: socket.readyState,
       });
     };
+  }
+
+  #clearReconnectTimer(): void {
+    if (this.#reconnectTimer === undefined) return;
+    clearTimeout(this.#reconnectTimer);
+    this.#reconnectTimer = undefined;
   }
 
   async #handle(frame: Frame): Promise<void> {

@@ -32,6 +32,33 @@ Deno.test("local API requires its random bearer token", async () => {
   }
 });
 
+Deno.test("local API retries the coordinator connection", async () => {
+  const app = new LocalApplication(
+    "123e4567-e89b-42d3-a456-426614174000",
+    "Alice",
+  );
+  let retries = 0;
+  app.setCoordinator({
+    updateOwner: () => Promise.resolve(),
+    selectPeer: () => Promise.reject(new Error("not used")),
+    releasePeer: () => {},
+    retry: () => retries++,
+  });
+  const handler = createLocalHandler({
+    app,
+    token: "local-secret",
+    uiDirectory: "ui/dist",
+  });
+  const response = await handler(
+    new Request("http://127.0.0.1/api/retry", {
+      method: "POST",
+      headers: { authorization: "Bearer local-secret" },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(retries, 1);
+});
+
 Deno.test("static index requires token while health remains public", async () => {
   const app = new LocalApplication(
     "123e4567-e89b-42d3-a456-426614174000",

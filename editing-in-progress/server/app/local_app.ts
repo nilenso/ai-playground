@@ -36,6 +36,7 @@ export interface RemoteCoordinator {
     { ownerId: string; name: string; filename: string; snapshot: Uint8Array }
   >;
   releasePeer(id: string): void;
+  retry(): void;
 }
 export interface LocalPersistence {
   touchLocal(path: string): Promise<void>;
@@ -222,6 +223,10 @@ export class LocalApplication {
     socket.addEventListener("close", () => this.#events.delete(socket), {
       once: true,
     });
+  }
+  retryConnection(): void {
+    if (!this.#coordinator) throw new Error("coordinator is unavailable");
+    this.#coordinator.retry();
   }
   setConnectionStatus(status: ConnectionStatus): void {
     this.#status = status;

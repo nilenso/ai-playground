@@ -286,6 +286,16 @@ function App() {
     applyReplicaToOwnView();
   }
 
+  async function handleRetryConnection() {
+    setStatus("connecting");
+    try {
+      await bridge.retryConnection();
+    } catch (error) {
+      setStatus("disconnected");
+      console.error(error);
+    }
+  }
+
   const filteredRecent = useMemo(
     () =>
       recentFiles.filter((candidate) =>
@@ -346,6 +356,25 @@ function App() {
         <div className="connection">
           <span className={`status-dot ${status}`} />
           <span>{status[0].toUpperCase() + status.slice(1)}</span>
+          {status === "disconnected" && (
+            <button
+              className="retry-connection"
+              aria-label="Retry coordinator connection"
+              title="Retry connection"
+              onClick={() => void handleRetryConnection()}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5m-5 4a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       </aside>
 
