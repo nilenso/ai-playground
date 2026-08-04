@@ -8,6 +8,7 @@ import { type CollabSession, createHttpHandler } from "./http/mod.ts";
 import { CoordinatorClient } from "./network/client.ts";
 import { Coordinator } from "./network/coordinator.ts";
 import type { Config } from "./core/config.ts";
+import { statePath } from "./state/storage.ts";
 import { log } from "./log.ts";
 import { openNativeWindow } from "./window.ts";
 
@@ -78,12 +79,35 @@ export function startCoordinator(
   return server;
 }
 
-export async function runEditor(
+export async function acquireEditorLock(home: string): Promise<Deno.FsFile> {
+  const directory = statePath(home);
+  await Deno.mkdir(directory, { recursive: true, mode: 0o700 });
+  const file = await Deno.open(`${directory}/editingip.lock`, {
+    create: true,
+    read: true,
+    write: true,
+    mode: 0o600,
+  });
+  try {
+    if (!await file.tryLock(true)) {
+      throw new Error(
+        "another Editing in Progress editor is already running; close its window before starting another",
+      );
+    }
+    await file.truncate(0);
+    await file.write(new TextEncoder().encode(`${Deno.pid}\n`));
+    return file;
+  } catch (error) {
+    file.close();
+    throw error;
+  }
+}
+
+async function runLockedEditor(
+  home: string,
   config: Config,
-  openWindow: (url: string) => Promise<void> = openNativeWindow,
+  openWindow: (url: string) => Promise<void>,
 ): Promise<void> {
-  const home = Deno.env.get("HOME");
-  if (!home) throw new Error("HOME is required");
   const persisted = await AppPersistence.load(home, config.instanceId);
   const recovery = persisted.state.recovery;
   const document = recovery
@@ -136,6 +160,20 @@ export async function runEditor(
     client.stop();
     await persisted.persistence.flush();
     await localServer.shutdown();
+  }
+}
+
+export async function runEditor(
+  config: Config,
+  openWindow: (url: string) => Promise<void> = openNativeWindow,
+): Promise<void> {
+  const home = Deno.env.get("HOME");
+  if (!home) throw new Error("HOME is required");
+  const lock = await acquireEditorLock(home);
+  try {
+    await runLockedEditor(home, config, openWindow);
+  } finally {
+    lock.close();
   }
 }
 

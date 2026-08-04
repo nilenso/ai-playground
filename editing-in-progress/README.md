@@ -77,6 +77,9 @@ dist/editing-in-progress edit --serve
 ```
 
 - With no arguments, the command opens the editor.
+- Only one editor process may use an installation at a time. A second launch
+  exits with an error instead of connecting with the same collaboration
+  identity.
 - `serve` runs the in-memory room coordinator.
 - `edit` runs the local application service, connects to the configured
   coordinator, and opens the native window.
