@@ -1,7 +1,8 @@
 # Editing in Progress
 
 A local-first collaborative Markdown editor implemented entirely in
-Deno/TypeScript. Deno-WebUI opens the loopback UI in a native WebView window.
+Deno/TypeScript. Deno-WebUI opens the loopback UI in a native WebView window,
+with the system default browser as a macOS fallback.
 
 ## Architecture
 
@@ -21,7 +22,7 @@ viewers.
 
 - Deno **2.9.4** to build and test
 - Linux: the GTK WebView runtime required by WebUI
-- macOS: WKWebView
+- macOS: WKWebView, or a default browser such as Safari as fallback
 
 The installed public command contains the Deno runtime, TypeScript application,
 and bundled UI. A checksummed WebUI native library is shipped beside it. An
