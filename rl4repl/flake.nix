@@ -1,5 +1,5 @@
 {
-  description = "Development shell with the just command runner";
+  description = "Development shell for rl4repl";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -21,7 +21,11 @@
         in
         {
           default = pkgs.mkShell {
-            packages = [ pkgs.just ];
+            packages = [
+              pkgs.clojure
+              pkgs.just
+              pkgs.uv
+            ];
           };
         }
       );

@@ -1,0 +1,14 @@
+[dataset]
+name = "rl4repl/replbench"
+version = "0.1.0"
+description = "Clojure code-repair tasks evaluated through REPL feedback."
+authors = []
+keywords = [ "clojure", "lisp", "repl", "code-repair",]
+
+[[tasks]]
+name = "rl4repl/sum-even-squares"
+digest = "sha256:c99bade821a67bee868372b70bba41d54d9fc7d7dd7d48717560db2f187edda8"
+
+[[tasks]]
+name = "rl4repl/merge-intervals"
+digest = "sha256:b9823ed7a20b987ddacf67199ca4669970ab1553814438d4152f0fb8a9540e16"

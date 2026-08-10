@@ -1,0 +1,11 @@
+harbor_version := "0.21.0"
+tasks := "bench/tasks"
+
+check:
+	uvx --from 'harbor=={{harbor_version}}' python bench/check.py
+
+verify-oracle:
+	uvx --from 'harbor=={{harbor_version}}' harbor run --path {{tasks}} --agent oracle --n-concurrent 1 --yes
+
+bench agent model:
+	uvx --from 'harbor=={{harbor_version}}' harbor run --path {{tasks}} --agent {{agent}} --model {{model}} --n-concurrent 1
