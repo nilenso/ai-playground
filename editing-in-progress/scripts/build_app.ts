@@ -72,6 +72,9 @@ await Deno.mkdir(libraryDirectory, { recursive: true });
 await Deno.writeFile(`${libraryDirectory}/${target.library}`, library, {
   mode: 0o644,
 });
+const runPermission = targetName.endsWith("-linux-gnu")
+  ? ["--allow-run=firefox,google-chrome"]
+  : [];
 await run([
   Deno.execPath(),
   "compile",
@@ -81,7 +84,7 @@ await run([
   "--allow-write",
   "--allow-net",
   "--allow-env=HOME,USER,EIP_WEBUI_LIBRARY_PATH",
-  "--allow-run=firefox,google-chrome",
+  ...runPermission,
   "--allow-ffi",
   "--include",
   "ui/dist",

@@ -74,8 +74,15 @@ export async function openNativeWindow(url: string): Promise<void> {
   window.setSize(1180, 800);
   window.setCenter();
   try {
-    if (!window.showWebView(url)) await window.show(url);
-    await WebUI.wait();
+    if (window.showWebView(url)) {
+      await WebUI.wait();
+    } else {
+      // Safari is not a WebUI-managed browser, but the editor only needs its
+      // authenticated loopback HTTP API. Use the macOS default browser (Safari
+      // on a stock installation) when WKWebView is unavailable.
+      WebUI.openUrl(url);
+      await waitForShutdownSignal();
+    }
   } finally {
     WebUI.clean();
   }
