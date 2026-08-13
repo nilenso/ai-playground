@@ -8,6 +8,9 @@ A Harbor benchmark for evaluating models that repair Clojure code using REPL fee
 - `tasks/` — executable benchmark tasks
   - `0001-sum-even-squares/` — simple predicate repair
   - `0002-merge-intervals/` — closed-interval boundary repair
+  - `0003-rotate-left/` — negative modular rotation repair
+  - `0004-token-frequencies/` — missing-map-entry update repair
+  - `0005-prefix-sums/` — seeded-prefix removal repair
   - each task contains the instruction, Clojure environment, hidden verifier, oracle repair, and Harbor configuration
 
 SFT trajectories are kept separately under `../sft/`.

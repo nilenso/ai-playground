@@ -12,3 +12,15 @@ digest = "sha256:c99bade821a67bee868372b70bba41d54d9fc7d7dd7d48717560db2f187edda
 [[tasks]]
 name = "rl4repl/merge-intervals"
 digest = "sha256:b9823ed7a20b987ddacf67199ca4669970ab1553814438d4152f0fb8a9540e16"
+
+[[tasks]]
+name = "rl4repl/rotate-left"
+digest = "sha256:e0ff86b76e99b0c26e1e49e85c0babd31c905263571acd127f9bc2245d361912"
+
+[[tasks]]
+name = "rl4repl/token-frequencies"
+digest = "sha256:9589ea88d50663373fc7f894f7032733a420089f2c6b69d31164dd7c7d9c39f6"
+
+[[tasks]]
+name = "rl4repl/prefix-sums"
+digest = "sha256:246ce6998544cc5d4db14fb82d7b5a961b35038736829cdce22309d03a1671a4"

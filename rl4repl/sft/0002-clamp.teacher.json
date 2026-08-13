@@ -1,0 +1,184 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "rl4repl-teacher-0002",
+  "trajectory_id": "0002-clamp-teacher",
+  "agent": {
+    "name": "rl4repl-teacher",
+    "version": "0.1.0",
+    "model_name": "gpt-5.6-sol",
+    "tool_definitions": [
+      {
+        "type": "function",
+        "function": {
+          "name": "repl_eval",
+          "description": "Evaluate a Clojure expression with the candidate namespace loaded.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "expression": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "replace",
+          "description": "Replace one exact occurrence of text in a workspace file.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "old": {
+                "type": "string"
+              },
+              "new": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "old",
+              "new"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "run_tests",
+          "description": "Run the task verifier tests.",
+          "parameters": {
+            "type": "object",
+            "properties": {}
+          }
+        }
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "source": "system",
+      "message": "Repair pure Clojure code using the available REPL, edit, and test tools. Make the smallest justified edit. Do not claim success until tests pass."
+    },
+    {
+      "step_id": 2,
+      "source": "user",
+      "message": "Repair `/workspace/solution.clj`. `clamp` must constrain number `x` to the inclusive range from `lo` to `hi`. Inputs satisfy `lo <= hi`. Preserve the function name and arity."
+    },
+    {
+      "step_id": 3,
+      "source": "agent",
+      "message": "I\u2019ll reproduce the bug with a focused example.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call-0002-eval-before",
+          "function_name": "repl_eval",
+          "arguments": {
+            "expression": "(clamp 5 0 10)"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call-0002-eval-before",
+            "content": "10"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 4,
+      "source": "agent",
+      "message": "The focused result exposes the incorrect behavior. I\u2019ll make the smallest targeted replacement.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call-0002-edit",
+          "function_name": "replace",
+          "arguments": {
+            "path": "/workspace/solution.clj",
+            "old": "(max hi (min lo x))",
+            "new": "(min hi (max lo x))"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call-0002-edit",
+            "content": "Updated /workspace/solution.clj"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 5,
+      "source": "agent",
+      "message": "I\u2019ll re-evaluate the focused example after the edit.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call-0002-eval-after",
+          "function_name": "repl_eval",
+          "arguments": {
+            "expression": "(clamp 5 0 10)"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call-0002-eval-after",
+            "content": "5"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 6,
+      "source": "agent",
+      "message": "The focused result is correct. I\u2019ll run the verifier before claiming success.",
+      "tool_calls": [
+        {
+          "tool_call_id": "call-0002-tests",
+          "function_name": "run_tests",
+          "arguments": {}
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "call-0002-tests",
+            "content": "Ran 1 test containing 6 assertions. 0 failures, 0 errors. Reward: 1."
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 7,
+      "source": "agent",
+      "message": "Fixed `clamp` by applying the lower bound before the upper bound in the correct order. The focused evaluation returns 5 and all 6 verifier assertions pass."
+    }
+  ],
+  "final_metrics": {
+    "total_steps": 7,
+    "extra": {
+      "reward": 1,
+      "repl_eval_calls": 2,
+      "edits": 1
+    }
+  },
+  "notes": "Hand-authored teacher demonstration for SFT. This training example is intentionally distinct from every held-out benchmark task.",
+  "extra": {
+    "training_example": "clamp"
+  }
+}
