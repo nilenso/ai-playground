@@ -33,6 +33,18 @@ just bench claude-code anthropic/claude-sonnet-4-5
 
 Harbor writes run results under `jobs/`, which is ignored by Git.
 
+## Baseline model
+
+Use [`google/gemma-4-E2B-it`](https://huggingface.co/google/gemma-4-E2B-it)
+as the initial small-model baseline. Do not shorten this to “Gemma 4B”: E2B is
+the model's effective-parameter class, not a four-billion-parameter label or the
+E2B sandbox service.
+
+A reproducible result must name the checkpoint, precision or quantization,
+runtime, decoding configuration, agent and tool protocol, attempt count, and
+verifier outcome. Keep raw trajectories under `jobs/`; commit concise reports
+under `results/` when a result informs benchmark-task selection.
+
 ## Dataset rules
 
 - Keep target programs pure and deterministic.
