@@ -43,6 +43,7 @@ def main() -> int:
         ok("everything we need is where we expect it", checks["repo"])
         # Never print the key itself — only that one was found, and where from.
         ok("the proposer has a key", f"{config.REFLECTION_KEY_VAR} for {config.REFLECTION_LM}")
+        ok("the proposer can afford to run", checks["balance"])
     except (FileNotFoundError, ValueError) as exc:
         bad("settings", str(exc))
         return _report()

@@ -8,7 +8,7 @@ import pytest
 
 from pathlib import Path
 
-from autoresearch import config, score
+from autoresearch import config, credits, score
 from autoresearch.questions import Question, load, split
 from autoresearch.taxonomy import classify
 from autoresearch.trace import Call, Transcript, Usage
@@ -358,3 +358,43 @@ class TestWriteCandidateRefusesOutsideTheLever:
             pool.write_candidate(tmp_path, "tool",
                                  {"botmap/filters.py": "new", "botmap/core.py": "nope"})
         assert (tmp_path / "botmap" / "filters.py").read_text() == "original"
+
+
+class TestCreditsCheck:
+    """A key that is merely present tells us nothing.
+
+    Both real failures we hit look identical to a working setup if you only
+    check that the variable is set: a revoked key, and a valid key on an empty
+    account. Each would surface an hour into a run, after the baseline had been
+    paid for.
+    """
+
+    def test_remaining_is_granted_minus_used(self):
+        assert credits.Balance(granted=1340.0, used=1338.64).remaining == pytest.approx(1.36)
+
+    def test_enough_credit_passes_and_reports_the_figure(self):
+        note = credits.assess(credits.Balance(granted=100.0, used=10.0), minimum=5.0)
+        assert "$90.00" in note
+
+    def test_too_little_credit_refuses_before_the_baseline_runs(self):
+        with pytest.raises(ValueError, match=r"\$1\.36"):
+            credits.assess(credits.Balance(granted=1340.0, used=1338.64), minimum=5.0)
+
+    def test_exactly_the_floor_is_allowed(self):
+        assert credits.assess(credits.Balance(granted=5.0, used=0.0), minimum=5.0)
+
+    def test_unreachable_does_not_block_the_run(self, monkeypatch, tmp_path):
+        """A flaky network is not evidence against the key."""
+        monkeypatch.setattr(config, "ENV_FILE", tmp_path / "absent")
+        monkeypatch.setenv(config.REFLECTION_KEY_VAR, "sk-or-v1-whatever")
+        monkeypatch.setattr(credits, "fetch",
+                            lambda key, **kw: (_ for _ in ()).throw(credits.Unreachable("dns")))
+        assert "could not check" in config.preflight()["balance"]
+
+    def test_revoked_key_stops_the_run(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(config, "ENV_FILE", tmp_path / "absent")
+        monkeypatch.setenv(config.REFLECTION_KEY_VAR, "sk-or-v1-revoked")
+        monkeypatch.setattr(credits, "fetch",
+                            lambda key, **kw: (_ for _ in ()).throw(credits.Unauthorized("no")))
+        with pytest.raises(credits.Unauthorized):
+            config.preflight()

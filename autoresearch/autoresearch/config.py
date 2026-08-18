@@ -1,15 +1,19 @@
 """Everything that must stay the same across the whole run.
 
 If any of these changed mid-run, two measurements couldn't be compared, and the
-whole search would be chasing its own tail. So they live in one place, nothing
-here imports from the rest of the package, and nothing else is allowed to
-override them.
+whole search would be chasing its own tail. So they live in one place and
+nothing else is allowed to override them.
+
+The only thing imported from the package is `credits`, which imports nothing
+back, so this stays free of cycles.
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+
+from . import credits
 
 ROOT = Path(__file__).resolve().parent.parent
 EXPERIMENTS = ROOT / "experiments"
@@ -42,6 +46,11 @@ REFLECTION_KEY_VAR = "OPENROUTER_API_KEY"
 # Keys live here rather than in your shell profile, so a checkout is
 # self-contained. Git ignores it.
 ENV_FILE = ROOT / ".env"
+
+# Least we are willing to start a run with. Not a forecast of what the run
+# costs -- it is a floor that rules out the case where the baseline runs for an
+# hour and the first proposal then fails for want of a few dollars.
+MIN_BALANCE_USD = 5.0
 
 # How long we let one question run before giving up.
 RUN_TIMEOUT_S = 900
@@ -171,6 +180,27 @@ def lever_files(lever: str, override: tuple[str, ...] | None = None) -> tuple[st
     return LEVERS[lever]
 
 
+def _check_funding() -> str:
+    """Confirm the proposing model can actually be paid for."""
+    key = os.environ.get(REFLECTION_KEY_VAR)
+    if not key:
+        raise ValueError(
+            f"{REFLECTION_KEY_VAR} is not set. The model that proposes changes "
+            f"({REFLECTION_LM}) cannot run without it. Put it in {ENV_FILE} or "
+            f"export it."
+        )
+
+    # A key that is merely present tells us nothing: it may be revoked, or the
+    # account may be empty. Both would only surface an hour in, after we had
+    # paid for the baseline. One free request settles it.
+    try:
+        return credits.assess(credits.fetch(key), MIN_BALANCE_USD)
+    except credits.Unreachable as exc:
+        # Could not ask. That is not evidence against the key, and refusing to
+        # start over a flaky network would be worse than trying.
+        return f"could not check the balance ({exc}); continuing"
+
+
 def preflight() -> dict[str, str]:
     """Check everything exists before we spend money.
 
@@ -178,12 +208,7 @@ def preflight() -> dict[str, str]:
     we look for every required piece up front.
     """
     load_env()
-    if not os.environ.get(REFLECTION_KEY_VAR):
-        raise ValueError(
-            f"{REFLECTION_KEY_VAR} is not set. The model that proposes changes "
-            f"({REFLECTION_LM}) cannot run without it. Put it in {ENV_FILE} or "
-            f"export it."
-        )
+    balance_note = _check_funding()
 
     repo = repo_root()
     required = [
@@ -196,4 +221,4 @@ def preflight() -> dict[str, str]:
     for path, problem in required:
         if not path.exists():
             raise FileNotFoundError(problem)
-    return {"repo": str(repo), "questions": str(QUESTIONS)}
+    return {"repo": str(repo), "questions": str(QUESTIONS), "balance": balance_note}

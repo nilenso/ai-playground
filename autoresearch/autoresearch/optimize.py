@@ -109,7 +109,7 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
     sha = head_sha()
     print(f"[oa] tool: {checks['repo']} @ {sha}")
     print("[oa] map data: NOT pinned — the tool uses whatever is latest")
-    print(f"[oa] proposals from: {reflection_lm}")
+    print(f"[oa] proposals from: {reflection_lm} ({checks['balance']})")
     files = config.lever_files(lever, files)
     print(f"[oa] lever '{lever}' covers {len(files)} file(s):")
     for f in files:
