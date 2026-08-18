@@ -1,0 +1,316 @@
+# Agent-usability eval question bank.
+# Fields:
+#   id                     stable slug (no '__' — that delimits run dirs)
+#   question               the prompt handed verbatim to `claude -p`
+#   tier                   1..5 complexity tier
+#   download_is_legitimate true only when no convenience verb covers the type
+#   target_type            expected Overture type(s) for the answer
+#   place                  optional; resolved by the cost guard to bound query size
+#   notes                  ideal path (and, for compound, the expected decomposition)
+#   subtasks               optional; expected verb-by-verb decomposition (compound)
+
+# Flags, slugs and field paths verified against botmap 0.1.2 / release
+# 2026-07-22.0 (probe.log); slugs cross-checked against Overture's published
+# Place Categories + Basic Categories sheet. See findings.md.
+
+# ---------------------------------------------------------------------------
+# Tier 1 — one verb, one answer.
+# ---------------------------------------------------------------------------
+
+- id: hospitals-rhode-island
+  question: "How many hospitals are there in Rhode Island?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: place
+  place: "Rhode Island, US"
+  notes: "Ideal: count -t place --in 'Rhode Island, US' --where categories.primary=hospital. `count` has no --category flag."
+
+- id: bbox-cambridge
+  question: "What area does Cambridge, Massachusetts cover?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: division
+  place: "Cambridge, MA"
+  notes: "Ideal: where 'Cambridge, MA' (--json for the bbox). Not boundary / --geometry — those take ~20 min."
+
+- id: pharmacies-monaco
+  question: "List the pharmacies in Monaco."
+  tier: 1
+  download_is_legitimate: false
+  target_type: place
+  place: "Monaco"
+  notes: "Ideal: places --in Monaco --category pharmacy. Tests stderr hygiene — --in Monaco warns region-vs-country."
+
+- id: nearest-pois-harvard
+  question: "What's around 42.3736, -71.1097?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: place
+  notes: "Ideal: at 42.3736,-71.1097 -t place -n 10. --bbox is not distance-ordered; `at` emits no distance field."
+
+- id: motorways-rhode-island
+  question: "What are the major highways running through Rhode Island?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: segment
+  place: "Rhode Island, US"
+  notes: "Ideal: roads --in 'Rhode Island, US' --class motorway. download -t segment is a failure."
+
+# ---------------------------------------------------------------------------
+# Tier 2 — right verb exists but isn't obvious, or the filter needs a value the
+# model cannot guess.
+# ---------------------------------------------------------------------------
+
+- id: asian-restaurants-rollup
+  question: "How many Asian restaurants are in Cambridge, Massachusetts?"
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Cambridge, MA"
+  notes: >
+    Ideal: categories -t place --in 'Cambridge, MA' --top 400, then count --where
+    'categories.primary in [asian_restaurant,chinese_restaurant,japanese_restaurant,…]'.
+    asian_restaurant alone undercounts ~10x — only leaf categories are stored.
+
+- id: street-canonical-form
+  question: "How many street addresses are on Massachusetts Avenue in Cambridge, MA?"
+  tier: 2
+  download_is_legitimate: false
+  target_type: address
+  place: "Cambridge, MA"
+  notes: "Ideal: addresses --in 'Cambridge, MA' --street Massachusetts. --where street='Massachusetts Avenue' returns a silent 0 (stored form is uppercase, --where is exact)."
+
+- id: tattoo-category-discovery
+  question: "Where can I get a tattoo in Cambridge, Massachusetts?"
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Cambridge, MA"
+  notes: "Ideal: categories -t place --in 'Cambridge, MA' --top 400 | grep -i tattoo, then places --category tattoo_and_piercing. Guessing tattoo_parlor via count gives a silent 0."
+
+- id: malta-highways-absent-class
+  question: "Show me the highway network in Malta."
+  tier: 2
+  download_is_legitimate: false
+  target_type: segment
+  place: "Malta"
+  notes: "Ideal: roads --in Malta --class trunk (or primary). --class motorway returns 0 with no hint; the wrong answer is 'Malta has no highways'."
+
+- id: starbucks-name-vs-brand
+  question: "Find every Starbucks in Cambridge, Massachusetts."
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Cambridge, MA"
+  notes: "Ideal: places --in 'Cambridge, MA' --where brand.names.primary=Starbucks, stating the choice — names.primary gives a different count and neither errors."
+
+- id: tall-buildings-cambridge
+  question: "Are there any buildings over 100 metres tall in Cambridge, Massachusetts?"
+  tier: 2
+  download_is_legitimate: false
+  target_type: building
+  place: "Cambridge, MA"
+  notes: "Ideal: buildings --in 'Cambridge, MA' --where 'height>100' — single-quoted, or the shell writes a file named 100."
+
+- id: basic-category-rollup
+  question: "How many drugstores and pharmacies are there in Cambridge, Massachusetts?"
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Cambridge, MA"
+  notes: "Ideal: count -t place --in 'Cambridge, MA' --where basic_category=pharmacy_and_drug_store. basic_category is undocumented and has its own vocabulary — basic_category=pharmacy returns 0."
+
+# ---------------------------------------------------------------------------
+# Tier 3 — malformed, ambiguous, or aimed past the data. Success is a good
+# error, not a good answer.
+# ---------------------------------------------------------------------------
+
+- id: unsupported-hours-and-ratings
+  question: "Find highly rated coffee shops near me that are open right now."
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  notes: >
+    Names the gaps (no rating field, no hours field, no origin, no radius), then still
+    delivers: at LAT,LON -t place --radius R --where categories.primary=coffee_shop.
+    Substituting confidence or operating_status is the failure.
+
+- id: bus-stops-cambridge
+  question: "How many bus stops are there in Cambridge, Massachusetts?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  place: "Cambridge, MA"
+  notes: >
+    Ideal: places --in 'Cambridge, MA' --category bus_station — "bus stop" is regional
+    vocabulary for the same ask. Both documented alternatives are dead ends: --category
+    bus_stop returns 0, and download -t infrastructure --where class=bus_stop is
+    hard-refused by a CLI guard that points back at the empty command.
+
+- id: reykjavik-diacritic
+  question: "How many restaurants are in Reykjavik?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  notes: "Ideal: read the no_match, retry as 'Reykjavík', then count. The error suggests three recoveries and none is the diacritic retry that works."
+
+- id: williamsburg-which-one
+  question: "How many coffee shops are in Williamsburg?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  notes: "Ideal: where Williamsburg --all, name both candidates, answer for the likely intent. Bare Williamsburg resolves to Virginia, not Brooklyn — a >10x difference."
+
+- id: brooklyn-every-building
+  question: "I need every building in Brooklyn as GeoJSON."
+  tier: 3
+  download_is_legitimate: false
+  target_type: building
+  place: "Brooklyn"
+  notes: "Ideal: count -t building --in Brooklyn first (~460k), report the size, then narrow or confirm. GeoParquet, not GeoJSON, at this scale."
+
+- id: residential-share-cambridge
+  question: "What share of the buildings in Cambridge, Massachusetts are residential?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: building
+  place: "Cambridge, MA"
+  notes: "Ideal: two counts (total, and --where subtype=residential) and divide. Estimating from `sample` gives ~2.75% against a true ~25% — it returns the first N, not a random draw."
+
+# ---------------------------------------------------------------------------
+# Tier 4 — multi-verb; needs a plan before the first call.
+# ---------------------------------------------------------------------------
+
+- id: clipping-polygon-qgis
+  question: "I need a clipping polygon for Malta to use in QGIS."
+  tier: 4
+  download_is_legitimate: false
+  target_type: division_area
+  place: "Malta"
+  notes: "Ideal: where Malta --geometry > malta.geojson. Correct but returns after ~20 min with no output — a strong answer time-boxes the wait and reports the latency."
+
+- id: which-admin-areas
+  question: "Which city and state is the point 42.3736, -71.1097 in?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: division
+  notes: "Ideal: containing 42.3736,-71.1097 (correct, but ~10 min with no output). Fast fallback: at 42.3736,-71.1097 -t place -n 1 and read the address. Answer is Cambridge, MA."
+
+- id: pharmacy-near-address
+  question: "What's the nearest pharmacy to 770 Massachusetts Avenue, Cambridge MA?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: [address, place]
+  place: "Cambridge, MA"
+  notes: "Geocode first, then search from that point. `at` takes --where, not --category — the Skill's recipe 7 example does not run."
+  subtasks:
+    - "addresses --in 'Cambridge, MA' --street Massachusetts --number 770"
+    - "at LAT,LON -t place --where categories.primary=pharmacy -r 2000 -n 5"
+    - "compute distances in code; `at` emits no distance field"
+
+- id: hotel-density-two-countries
+  question: "Does Malta or Luxembourg have more hotels per resident?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: [place, division]
+  notes: "Two counts over two populations, but `where Luxembourg` resolves to the city and `where Malta` to the country — the subtype mismatch must be caught, not divided through."
+  subtasks:
+    - "where Malta --json / where Luxembourg --json (check subtype)"
+    - "count -t place --in <each> --where categories.primary=hotel"
+    - "divide in code; reconcile or flag the country-vs-city mismatch"
+
+- id: ev-charging-gap
+  question: "Which parts of Cambridge, Massachusetts are underserved by EV charging?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: place
+  place: "Cambridge, MA"
+  notes: "Ideal: places --category ev_charging_station plus a stated demand proxy, then grid in code. --where has no spatial predicate; leaving 'underserved' undefined is the failure."
+
+# ---------------------------------------------------------------------------
+# Tier 5 — compound. The decomposition itself is under test.
+# ---------------------------------------------------------------------------
+
+- id: hardware-near-bikepaths
+  question: "Find hardware stores within 200m of a bike path in Cambridge, Massachusetts."
+  tier: 5
+  download_is_legitimate: false
+  target_type: [place, segment]
+  place: "Cambridge, MA"
+  notes: "Both layers have verbs; fetch each and join in code. download -t place/segment is a failure."
+  subtasks:
+    - "places --in 'Cambridge, MA' --category hardware_store"
+    - "roads --in 'Cambridge, MA' --class cycleway"
+    - "spatial join: hardware stores within 200m of a cycleway"
+
+- id: bus-stops-with-coffee
+  question: "How many bus stops in Williamsburg, Brooklyn have a coffee shop within 100m?"
+  tier: 5
+  download_is_legitimate: false
+  target_type: place
+  place: "Williamsburg, NY"
+  notes: "Both layers are places; fetch each and join in code. 'bus stop' maps to --category bus_station; the literal bus_stop slug returns 0."
+  subtasks:
+    - "places --in 'Williamsburg, NY' --category bus_station"
+    - "places --in 'Williamsburg, NY' --category coffee_shop"
+    - "spatial join + count: bus stations with a coffee shop within 100m"
+
+- id: beach-accessibility-malta
+  question: "Which beaches in Malta have a road within 300m?"
+  tier: 5
+  download_is_legitimate: true
+  target_type: [land, segment]
+  place: "Malta"
+  notes: "No convenience verb for land; download -t land --where class=beach is correct. `landuse` is a different type and returns nothing for beaches."
+  subtasks:
+    - "download -t land --in Malta --where class=beach"
+    - "roads --in Malta --class trunk/primary/residential (narrow before joining)"
+    - "spatial join: beaches within 300m of a road"
+
+- id: bike-parking-coverage
+  question: "Is bike parking in Cambridge, Massachusetts concentrated near the cycle network or spread out?"
+  tier: 5
+  download_is_legitimate: true
+  target_type: [infrastructure, segment]
+  place: "Cambridge, MA"
+  notes: "No convenience verb for infrastructure; download is correct there, but roads covers the segments. Answer needs a distribution, not two counts."
+  subtasks:
+    - "download -t infrastructure --in 'Cambridge, MA' --where class=bicycle_parking"
+    - "roads --in 'Cambridge, MA' --class cycleway"
+    - "nearest-cycleway distance per point, then a distribution summary"
+
+- id: waterfront-buildings-reykjavik
+  question: "How many buildings in Reykjavik are within 100m of the water?"
+  tier: 5
+  download_is_legitimate: false
+  target_type: [building, water]
+  notes: "Both layers have verbs; fetch each and join in code. Blocked at step zero unless the agent retries 'Reykjavík' after the no_match."
+  subtasks:
+    - "where Reykjavík --json (retry after no_match on the unaccented form)"
+    - "water --in Reykjavík (do not pre-filter to ocean)"
+    - "buildings --in Reykjavík"
+    - "spatial join + count: buildings within 100m of any water feature"
+
+- id: building-parts-detail
+  question: "Which buildings in Cambridge, Massachusetts are modelled with separate roof or tower sections?"
+  tier: 5
+  download_is_legitimate: true
+  target_type: [building_part, building]
+  place: "Cambridge, MA"
+  notes: "No convenience verb for building_part; download is correct. `buildings --where has_parts=true` is the plausible shortcut and answers a different question."
+  subtasks:
+    - "download -t building_part --in 'Cambridge, MA'"
+    - "group by building_id in code"
+    - "buildings --in 'Cambridge, MA' to resolve parent names and ids"
+
+- id: junction-density
+  question: "Which part of Williamsburg, Brooklyn has the densest street-junction network?"
+  tier: 5
+  download_is_legitimate: true
+  target_type: [connector, segment]
+  place: "Williamsburg, NY"
+  notes: "No convenience verb for connector and `roads` returns segments only; download is correct. Counting segment endpoints instead double-counts shared junctions."
+  subtasks:
+    - "download -t connector --in 'Williamsburg, NY'"
+    - "spatial binning / density in code"
+    - "optionally roads --in 'Williamsburg, NY' for context"

@@ -1,0 +1,122 @@
+[
+  {
+    "title": "Emit progress and a timeout on the division-geometry verbs, which look hung for 10-20 minutes",
+    "target": "cli",
+    "evidence": "Measured: `where \"Monaco\" --geometry` exits 0 after 1181.5s (19m42s) with valid MultiPolygon; `containing 42.3736,-71.1097` after 637.2s; `boundary \"Monaco\"` still silent at 120s. No stdout, no stderr, no progress for the whole wait. By contrast `at 42.3736,-71.1097 -t place -n 3` returns in 6.6s, so this is specific to the division_area geometry path, not general S3 slowness. Skill recipes 8 and 16 advertise these as the supported route, and the `no_match` error recommends `containing`, so a failed place lookup funnels straight into an apparent hang.",
+    "proposal": "Emit a one-line stderr progress note before the scan starts, so an agent can tell slow from wedged. Investigate why this path is ~200x slower than `at` \u2014 STAC file pruning may not be applied to division_area reads. Add a default request timeout so it fails loudly rather than silently. At minimum, document the expected runtime in the help text."
+  },
+  {
+    "title": "Fix the `bus_stop` slug in the Skill; the category does not exist",
+    "target": "skill",
+    "evidence": "The Skill's anti-pattern section says to use `places --category bus_stop`. `bus_stop` appears nowhere in the published place taxonomy at any level, nor in the `Old Primary Category` column, so it was never renamed \u2014 it never existed. `places --category bus_stop` returns 0 with no near-match hint. The real slug is `bus_station` (L3, travel_and_transportation > ground_transport_facility), which returns 12 results in Cambridge including MBTA Alewife Station and Harvard Square Upper Busway. The guidance is right; only the example is wrong.",
+    "proposal": "Change `bus_stop` to `bus_station` in the Skill's anti-pattern line and in the schema cheatsheet's category list. Optionally add `bus_stop` -> `bus_station` to the near-match hint's alias table, since `bus_stop` is what users will type."
+  },
+  {
+    "title": "Put the zero-result near-match hint on `count` and `sample`, where the documented workflow starts",
+    "target": "hint",
+    "evidence": "The hint fires on `places --category X` and `places --where categories.primary=X`, but not on `count --where categories.primary=X` (returns `{\"count\": 0}`, exit 0, silent) or `sample` (empty, exit 0, silent). The Skill's own troubleshooting flow says 'Count before pulling', so an agent following the documented sequence hits the silent path first and never sees the hint that would have rescued it. Same gap on `roads --class`, `water --class`, `landuse --class`, `addresses --postcode`. Concrete case: `roads --in Malta --class motorway` -> 0 rows, no hint, while Malta has 1,341 `primary` and 1,247 `trunk` segments. The plausible wrong answer is 'Malta has no highways'.",
+    "proposal": "Reuse the existing near-match suggestion path from `places` in `count` and `sample` whenever a filter yields zero rows. Prioritise `count`, because it sits at the front of the recommended workflow. Extend to the `--class` shortcuts on `roads`/`water`/`landuse` next."
+  },
+  {
+    "title": "Teach `--where` list membership instead of crashing with a raw PyArrow traceback",
+    "target": "cli",
+    "evidence": "`--where` validates that a field exists, but a field that exists and is list-typed passes validation then explodes inside PyArrow: `--where 'categories.alternate=restaurant'` gives `ArrowNotImplementedError: Function 'equal' has no kernel matching input types (list<element: string>, string)`, exit 1. Same for `phones=555`, `road_surface=paved`, `speed_limits>50`. Every one of these fields is advertised by `schema -t TYPE`. Affected: categories.alternate, websites, emails, socials, phones, addresses, names.rules on place; road_surface, speed_limits, access_restrictions, routes, connectors on segment.",
+    "proposal": "Two changes. First, catch the Arrow error and emit a usable message naming the field's actual type. Second and far more valuable, make `=` mean 'the list contains' for list-typed fields. That single change also unlocks `--where taxonomy.hierarchy=asian_restaurant`, which is what makes Overture's 6-level category tree queryable at all."
+  },
+  {
+    "title": "Make `sample` either random or honestly named; it is currently the first N rows off the scan",
+    "target": "cli",
+    "evidence": "`sample` returns the front of the Parquet scan, verified deterministic \u2014 two consecutive runs of `sample -t building --in \"Cambridge, MA\" -n 5` return identical ids. The results are spatially clustered, so it badly misrepresents a dataset: estimating the residential share of Cambridge buildings gives 11/400 = 2.75% from `sample -n 400`, against a true 9,942/39,977 = 24.9% from `count`. That is a 9x error from a command an agent will reasonably use to characterise data, and Skill recipe 3 frames `sample` as the way to 'confirm shape before committing'.",
+    "proposal": "Pick one: add real reservoir sampling behind a `--random` flag; or rename to `head`/`preview`; or have the output state 'showing the first N of M (not a random sample)'. The last is cheapest and removes the wrong inference."
+  },
+  {
+    "title": "Make the place taxonomy tree queryable, and document `basic_category`",
+    "target": "cli",
+    "evidence": "`categories.primary` stores only the leaf of a 6-level tree, and the ancestry is present in the data as `taxonomy.hierarchy` on every categorised row. But it cannot be filtered: it is a list field, so `--where taxonomy.hierarchy=asian_restaurant` dies with the traceback from finding 4. Measured in Cambridge MA: `categories.primary=asian_restaurant` (the interior node) returns 23; a union of 9 hand-listed cuisine leaves returns 224. Any 'how many <broad category>' question therefore invites a ~10x undercount with no error and no hint. Separately, `basic_category` is ~94% filled, undocumented in the Skill, and does not share a vocabulary with `categories.primary` \u2014 `basic_category=pharmacy` returns 0; the value is `pharmacy_and_drug_store`.",
+    "proposal": "Fixing list membership in `--where` (finding 4) makes the rollup expressible in one command and is the prerequisite. Alongside it, document all four category-ish fields in the Skill cheatsheet \u2014 categories.primary, categories.alternate, taxonomy.hierarchy, basic_category \u2014 and state plainly that basic_category takes different values."
+  },
+  {
+    "title": "Resolve the `-r` collision: radius on `at`, release everywhere else",
+    "target": "cli",
+    "evidence": "`-r` means `--radius` on `at` and `--release` on download, count, sample, schema, categories, and all six data verbs. `at` has no short form for release at all. An agent that learns `-r 500` from an `at` example and carries it to `places` gets `Error: Release '500' is no longer available.` at exit 2. The error message is excellent and names the available releases, so this is recoverable \u2014 but it is a genuine inconsistency an agent has no way to anticipate.",
+    "proposal": "Either drop `-r` as a radius shorthand on `at` and let it mean `--release` everywhere, or give radius a distinct short flag. Whichever is chosen, make it uniform across every command, and update the Skill examples to match."
+  },
+  {
+    "title": "Close the flag-coverage gaps that make reasonable commands fail",
+    "target": "cli",
+    "evidence": "Flags exist on some verbs and not on obvious neighbours. `--category` is on `places` only, so `count --category coffee_shop` \u2014 the natural way to write 'count the coffee shops' \u2014 does not exist; the eval design doc's own stated ideal path uses it and is not a valid command. `at --category pharmacy` likewise fails with `Error: No such option: --category`, and Skill recipe 7 shows exactly that command. `--class` is on roads/water/landuse but not `buildings`, despite `building.class` existing. `--limit` exists only on the six convenience verbs, so `sample -t place --limit 5` fails, while the Skill states `-n / --limit` applies to sample, at, and every convenience verb.",
+    "proposal": "Add `--category` to `count`, `sample`, and `at`; add `--class` to `buildings`, `count`, and `sample`; make `--limit` an alias for `-n` on `sample` and `at`. These are all thin wrappers over the `--where` forms that already work. Then correct the Skill examples that currently do not run."
+  },
+  {
+    "title": "Fix the Skill's `--json` placement, which fails on the first example an agent reads",
+    "target": "skill",
+    "evidence": "`--json` is a group-level flag and must precede the subcommand. The Skill's trigger table \u2014 the first thing an agent reads \u2014 shows `where \"Boston, MA\" --json`, which fails with `Error: No such option '--json'. Did you mean '--geojson'?`. Every other example in the same file uses the correct `botmap --json where ...`. What makes the trailing form look plausible is that `--json` *is* a real per-command flag on the six convenience verbs and `at`.",
+    "proposal": "Correct the trigger table to `botmap --json where \"Boston, MA\"`. Add one line to the Skill stating that `--json` goes before the subcommand. Consider accepting the trailing form on metadata commands too, since the inconsistency is the root cause."
+  },
+  {
+    "title": "Give `--where` a substring operator so counting by street name works",
+    "target": "cli",
+    "evidence": "Supported operators, determined empirically: `=` `!=` `<` `<=` `>` `>=` `in [a,b,c]`. Not supported: `~`, `LIKE`, `contains` \u2014 all three give `Filter '<expr>' has no operator`. So `count -t address --in \"Cambridge, MA\" --where 'street=Massachusetts Avenue'` returns `{\"count\": 0}` at exit 0 with no hint, while `street=MASSACHUSETTS AVENUE` returns 4,140. The `addresses --street` fix (case-insensitive substring) solves this for `addresses`, but `count`, `sample`, and `download` have no equivalent, so an agent wanting a count rather than the rows falls straight back into the original hole.",
+    "proposal": "Add a substring/case-insensitive operator to the `--where` grammar \u2014 `~` or `contains` \u2014 and apply it wherever `--where` is accepted. Failing that, propagate the `--street` style shortcut to `count` and `sample`."
+  },
+  {
+    "title": "Add `categories --search` so discovery does not depend on guessing `--top N`",
+    "target": "cli",
+    "evidence": "There is no way to ask which categories match a term. The only route is to dump the top N and filter client-side: `botmap --json categories -t place --in \"Cambridge, MA\" --top 400 | grep -i tattoo` finds `tattoo_and_piercing`. `--top` is a guess, and if the slug ranks below the chosen N the grep returns nothing and the agent concludes the category does not exist \u2014 reintroducing, one layer up, the silent failure the near-match hint was built to prevent. The global-enumeration guard (`Provide --bbox or --in; global enumeration is too costly`) is good and worth keeping.",
+    "proposal": "Add `categories --search <term>`, matching case-insensitively against the full category list for the scope, independent of `--top`. Keep the existing area requirement."
+  },
+  {
+    "title": "Add a `land` verb; agents reach for `landuse` and get a clean, wrong zero",
+    "target": "cli",
+    "evidence": "`land_use` has the `landuse` verb. `land` \u2014 a different type holding beach, cliff, wood, scrub, peak, reef \u2014 has no verb and is reachable only through `download -t land`. An agent asked for beaches will plausibly try `landuse --class beach`, get a clean empty result, and conclude there are none. Malta has 67 (`land`, `class=beach`).",
+    "proposal": "Add a `land` verb mirroring `landuse`, with a `--class` shortcut. Alternatively, make `landuse --class beach` emit a hint naming the `land` type when the value exists there. The near-miss between the two names is the trap."
+  },
+  {
+    "title": "Remove the transit guard in `download`; it blocks a working query and redirects to an empty one",
+    "target": "cli",
+    "evidence": "`botmap/cli.py:519-534` hard-codes a guard in `download` that refuses any `-t infrastructure` query whose filter mentions bus_stop, bus_station, train_station or subtype=transit, raising `Transit stops are 'place' features, not infrastructure \u2014 run: botmap places --category bus_stop`. Both directions are dead ends: the blocked query works, and the suggested replacement uses `bus_stop`, which is not a real slug (finding 2), so it returns nothing. `infrastructure` genuinely does contain roadside waypoints at finer granularity than the 12 named terminals in `place` \u2014 they are different objects, not a mistake.",
+    "proposal": "Delete the guard. If a steering hint is still wanted, make it a non-fatal stderr note that mentions `places --category bus_station` as an alternative rather than refusing the command, and fix the slug it names."
+  },
+  {
+    "title": "Correct the `--class` value lists, which advertise `subtype` values that return zero",
+    "target": "cli",
+    "evidence": "`--class` maps verbatim to `class=VAL` (cli.py:1252), but several advertised values live in the `subtype` column. Measured in Williamsburg NY: land_use `recreation` -> 0 as class, 86 as subtype; land_use `agriculture` -> 0 either way; segment `sidewalk` -> 0 as class, 599 as subclass. `botmap landuse --help` lists 'commercial, residential, recreation, agriculture' \u2014 two of the four return nothing. `residential` and `commercial` exist as both, which is exactly why the list looks plausible. The same text is duplicated in introspection.py:36 and the Skill cheatsheet, so an agent gets the bad values from three independent places.",
+    "proposal": "Correct the help and Skill lists to real `class` values (garden, farmland, park, grass, retail, ...), or add `--subtype` and `--subclass` shortcuts so the advertised vocabulary is reachable. Fix all three copies. This is the cheapest place in the CLI to stop producing confident zeros."
+  },
+  {
+    "title": "Warn when a place qualifier contradicts the resolved country or region",
+    "target": "cli",
+    "evidence": "`botmap --json where \"Malta, MT\"` resolves to Malta, Montana (US/US-MT) with zero bytes on stderr. `where \"Reykjavik, IS\"` resolves to `Is (locality, ES-AS, pop 2)` in Spain. The ambiguity warning only fires when multiple candidates match; here exactly one does \u2014 it is just the wrong one \u2014 so nothing is emitted. Seen live: both `beach-accessibility-malta` runs queried Montana, and both `clipping-polygon-qgis` runs waited on `where \"Malta, MT\" --geometry`, so the polygon they waited twenty minutes for was probably Montana. The latency in finding 1 hid the wrong answer here.",
+    "proposal": "Warn whenever the resolved country or region contradicts what the qualifier implies, even with a single candidate \u2014 for example a two-letter qualifier that is a valid US state code resolving to a non-US country, or vice versa. Include the runner-up if one exists."
+  },
+  {
+    "title": "Tell the user when `categories --top N` truncated the list",
+    "target": "hint",
+    "evidence": "`--top` silently truncates with no indication of how much was cut. Measured: `--top 200` returns 200 rows and does not contain `bus_station`; `--top 500` does; `--top 5000` returns all 963. An agent trusting `--top 200` concludes the category does not exist. Observed in the run: `asian-restaurants-rollup__r2` reported 'No Vietnamese categories showed up in Cambridge's data' when `vietnamese_restaurant` exists at count 6; `basic-category-rollup__r1` asserted 'no separate drug store category exists in the schema' from a truncated `--top 100` grep. This compounds the missing `--search`: the only discovery route is a top-N dump, and the dump lies about completeness.",
+    "proposal": "Print 'showing N of M categories' whenever the result is truncated, on stderr for the human-readable output and as a field in the JSON payload. Cheap, and it converts a confident false negative into a visible next step."
+  },
+  {
+    "title": "Make `--class` repeatable, or reject the comma form instead of returning nothing",
+    "target": "cli",
+    "evidence": "`--class` is declared single-valued, so Click keeps the last occurrence and drops the rest with no warning. Measured on Malta: `--class trunk` -> 1247; `--class primary` -> 1341; `--class trunk --class primary` -> 1341, with trunk silently dropped; `--class \"trunk,primary\"` -> exit 0, 0 rows. Both failure modes exit cleanly. Three eval runs hit this and recovered only because they independently cross-checked `wc -l` against a prior `count`.",
+    "proposal": "Make `--class` repeatable and OR the values together. If that is not wanted, reject a comma-containing value with a message naming the working form, `--where \"class in [a,b]\"`. Either way, never silently drop a filter the user supplied."
+  },
+  {
+    "title": "Give `download` a help string",
+    "target": "docs",
+    "evidence": "`download` is the only command with no description in `botmap --help`. That is an odd signal for the command the design deliberately intends to demote in favour of the convenience verbs \u2014 it reads as unfinished rather than discouraged.",
+    "proposal": "Add a one-line description that states what it is for and points at the convenience verbs as the preferred route, so the help text does the steering work the design intends."
+  },
+  {
+    "title": "Fix the Skill cheatsheet entries that name fields and commands incorrectly",
+    "target": "skill",
+    "evidence": "Three separate errors. The segment cheatsheet lists 'subclass, surface, speed_limits' \u2014 the actual field is `road_surface`, and both `road_surface` and `speed_limits` crash under `--where` (finding 4). `boundary <query>` exists and appears to supersede `where ... --geometry`, but the Skill still teaches only recipe 16. And `operating_status` is 65% filled in Cambridge MA, 0/300 in Malta, 1/300 in Bengaluru, with values open / permanently_closed / null \u2014 it reads like an 'is it open now' field and is not one.",
+    "proposal": "Correct the segment field list to `road_surface`. Name `boundary` as the supported way to get a division polygon and mark `where --geometry` as the older form. Add a coverage note to `operating_status` in the cheatsheet warning that it is sparse outside the US and does not answer 'open right now'."
+  },
+  {
+    "title": "Make the no-match error recover instead of pointing at a command that hangs",
+    "target": "hint",
+    "evidence": "The `where` no_match error is well-formed, but it recommends `containing LAT,LON`, which takes ten minutes and emits nothing while it runs (finding 1) \u2014 so a place-resolution failure funnels the agent into an apparent hang. It also omits the recovery that actually works for its most likely trigger: a diacritic retry. `Reykjavik` fails; `Reykjav\u00edk` resolves.",
+    "proposal": "Retry the lookup with diacritics folded before reporting no match, and name the match if one is found. Drop `containing` from the suggestion list until its latency is fixed, or mark it as slow so the agent can decide."
+  }
+]

@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Sits in front of the real `botmap` on PATH and writes down every call.
+
+We put this earlier on PATH than the real tool, so when the AI types
+`botmap count ...` it hits this first. We record what was typed, run the real
+tool, and hand back exactly what it said.
+
+Two things matter:
+
+1. It runs `python -m botmap`, never `botmap`, so it can't accidentally call
+   itself forever.
+2. If writing the log fails, the real tool still runs and the AI still sees
+   normal output. A logger that changed what the AI sees would change the
+   behaviour we're trying to measure.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    python = os.environ.get("AUTORESEARCH_PYTHON") or sys.executable
+
+    started = time.monotonic()
+    proc = subprocess.run([python, "-m", "botmap", *argv], capture_output=True, text=True)
+    duration = time.monotonic() - started
+
+    log_path = os.environ.get("AUTORESEARCH_LOG")
+    if log_path:
+        try:
+            with open(log_path, "a", encoding="utf-8") as fh:
+                fh.write(
+                    json.dumps(
+                        {
+                            "argv": argv,
+                            "exit_code": proc.returncode,
+                            "stdout": proc.stdout,
+                            "stderr": proc.stderr,
+                            "duration": duration,
+                        }
+                    )
+                    + "\n"
+                )
+        except OSError:
+            pass  # fail quietly: logging must never break the AI's run
+
+    sys.stdout.write(proc.stdout)
+    sys.stderr.write(proc.stderr)
+    return proc.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())
