@@ -29,7 +29,7 @@ from pathlib import Path
 
 import gepa.optimize_anything as oa
 
-from . import baseline, blocked, config, questions as qmod
+from . import baseline, blocked, config, proposer as proposer_mod, questions as qmod
 from .evaluator import Evaluator
 from .worktree import Pool, head_sha
 
@@ -103,13 +103,20 @@ def _objective_text(lever: str) -> str:
 
 def run(lever: str, budget: int, holdout: float, reflection_lm: str,
         workers: int, keep_runs: bool,
-        files: tuple[str, ...] | None = None) -> None:
+        files: tuple[str, ...] | None = None,
+        proposer: str = "api") -> None:
     started = time.time()
-    checks = config.preflight()
+    subscription = proposer == "subscription"
+    checks = config.preflight(needs_api_key=not subscription)
     sha = head_sha()
     print(f"[oa] tool: {checks['repo']} @ {sha}")
     print("[oa] map data: NOT pinned — the tool uses whatever is latest")
-    print(f"[oa] proposals from: {reflection_lm} ({checks['balance']})")
+    # Either a model name for litellm to bill, or a callable that shells out
+    # to `claude -p` on the subscription. GEPA accepts both.
+    proposing_lm = proposer_mod.claude_cli() if subscription else reflection_lm
+    described = (f"claude -p --model {config.PROPOSER_MODEL}" if subscription
+                 else reflection_lm)
+    print(f"[oa] proposals from: {described} ({checks['balance']})")
     files = config.lever_files(lever, files)
     print(f"[oa] lever '{lever}' covers {len(files)} file(s):")
     for f in files:
@@ -172,7 +179,7 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
                     cache_evaluation=True,
                     display_progress_bar=True,
                 ),
-                reflection=oa.ReflectionConfig(reflection_lm=reflection_lm),
+                reflection=oa.ReflectionConfig(reflection_lm=proposing_lm),
             ),
         )
 
@@ -227,6 +234,7 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
             "release_requested": config.requested_release(),
             "pinned": False,
             "correctness_impl": config.CORRECTNESS_IMPL,
+            "proposer": described,
             "budget": budget,
             "evaluations_run": evaluate.calls,
             "candidates_tried": getattr(result, "num_candidates", None),
@@ -267,6 +275,10 @@ def main() -> None:
     p.add_argument("--files", nargs="+", metavar="PATH",
                    help="evolve exactly these files instead of the lever's default, "
                         "e.g. --files botmap/filters.py botmap/cli.py")
+    p.add_argument("--proposer", choices=("api", "subscription"), default="api",
+                   help="who proposes the changes: 'api' bills OPENROUTER_API_KEY, "
+                        "'subscription' shells out to `claude -p` and uses your "
+                        "Claude Code plan instead")
     p.add_argument("--all-files", action="store_true",
                    help="evolve every eligible file in the tool. Widens the search "
                         "beyond what we already know is broken, but splits the budget "
@@ -276,7 +288,7 @@ def main() -> None:
     chosen = tuple(args.files) if args.files else (
         config.discoverable_files() if args.all_files else None)
     run(args.lever, args.budget, args.holdout, args.reflection_lm,
-        args.workers, args.keep_runs, chosen)
+        args.workers, args.keep_runs, chosen, args.proposer)
 
 
 if __name__ == "__main__":

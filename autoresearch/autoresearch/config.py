@@ -39,6 +39,10 @@ AGENT_MODEL = "sonnet"
 # OpenRouter, so one key covers every provider we might want to try.
 REFLECTION_LM = "openrouter/anthropic/claude-opus-5"
 
+# The same job, done through the Claude Code subscription instead of an API
+# key. Chosen with `--proposer subscription`; see proposer.py for the catch.
+PROPOSER_MODEL = "opus"
+
 # The credential that model needs. Named here so preflight can check for it
 # before a run starts, rather than after hours of evaluations.
 REFLECTION_KEY_VAR = "OPENROUTER_API_KEY"
@@ -180,14 +184,23 @@ def lever_files(lever: str, override: tuple[str, ...] | None = None) -> tuple[st
     return LEVERS[lever]
 
 
-def _check_funding() -> str:
-    """Confirm the proposing model can actually be paid for."""
+def _check_funding(needs_api_key: bool) -> str:
+    """Confirm the proposing model can actually be paid for.
+
+    Split out because there are two ways to pay -- an API key with a balance,
+    or the Claude Code subscription -- and only the first can be checked.
+    """
+    if not needs_api_key:
+        # A subscription has rate limits rather than a balance, and there is
+        # no way to ask "how much is left" before spending it.
+        return "using the Claude Code subscription, not an API key"
+
     key = os.environ.get(REFLECTION_KEY_VAR)
     if not key:
         raise ValueError(
             f"{REFLECTION_KEY_VAR} is not set. The model that proposes changes "
-            f"({REFLECTION_LM}) cannot run without it. Put it in {ENV_FILE} or "
-            f"export it."
+            f"({REFLECTION_LM}) cannot run without it. Put it in {ENV_FILE}, "
+            f"export it, or pass --proposer subscription."
         )
 
     # A key that is merely present tells us nothing: it may be revoked, or the
@@ -201,14 +214,14 @@ def _check_funding() -> str:
         return f"could not check the balance ({exc}); continuing"
 
 
-def preflight() -> dict[str, str]:
+def preflight(needs_api_key: bool = True) -> dict[str, str]:
     """Check everything exists before we spend money.
 
     A run takes hours. Finding a bad path in hour three costs the whole run, so
     we look for every required piece up front.
     """
     load_env()
-    balance_note = _check_funding()
+    balance_note = _check_funding(needs_api_key)
 
     repo = repo_root()
     required = [
