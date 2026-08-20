@@ -35,7 +35,8 @@ _NETWORK = (
 LABELS = (
     "clean",
     "network_failure",
-    "bad_category_value",
+    "bad_value_reported",
+    "bad_value_silent",
     "traceback",
     "unknown_command",
     "bad_option",
@@ -50,13 +51,21 @@ def classify(call: Call) -> str:
     low = err.lower()
 
     if call.exit_code == 0:
-        # Exit 0 usually means fine. Two exceptions: the tool sometimes
-        # succeeds while telling you your filter value was wrong, which is the
-        # worst failure we have — it looks exactly like "there are none here".
+        # Exit 0 usually means fine. The exception is a query that quietly
+        # matched nothing because the filter value was not one the tool knows.
+        #
+        # These two used to share a label, and that was backwards in a way that
+        # actively hurt. A near-match suggestion is *proof the failure was not
+        # silent* -- the tool spotted the bad value and handed back a fix --
+        # yet it was scored as the silent failure it prevents. Any optimiser
+        # reading that has a gradient pointing straight at deleting its own
+        # diagnostics.
         if "did you mean:" in low:
-            return "bad_category_value"
+            return "bad_value_reported"
         if "0 rows" in low and "categories.primary" in low:
-            return "bad_category_value"
+            # Named the field but offered no way forward. The assistant learns
+            # something is wrong and nothing about what to do next.
+            return "bad_value_silent"
         # The "I picked one of several matching places" note is information,
         # not a failure, so it deliberately doesn't count.
         return "clean"

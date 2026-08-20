@@ -29,8 +29,22 @@ def transcript(ok=True, answer="12 hospitals", tokens=1000, ms=1000, turns=1) ->
 
 
 def silent_call() -> Call:
-    """Exited 0, but the filter value was wrong. The assistant cannot tell."""
-    return call(stderr="0 rows. No place has categories.primary=cafe. Did you mean:")
+    """Exited 0 and matched nothing, offering the assistant no way forward.
+
+    The tool named the field but not a value that would work, so all the
+    assistant learns is "none here" -- which is what it will go on to report.
+    """
+    return call(stderr="0 rows. No place has categories.primary=cafe")
+
+
+def hinted_call() -> Call:
+    """The same wrong value, but the tool caught it and named the right one.
+
+    The opposite outcome from `silent_call`, and the two must never be scored
+    alike: this is the tool working.
+    """
+    return call(stderr="0 rows. No place has categories.primary=cafe. "
+                       "Did you mean: coffee_shop?")
 
 
 def failing_call() -> Call:
@@ -47,11 +61,16 @@ class TestErrorNaming:
         # information. Counting it as a failure would penalise correct runs.
         assert classify(call(stderr="[botmap] Ambiguous --in 'Manhattan': picked ...")) == "clean"
 
-    def test_a_zero_result_with_a_suggestion_is_an_error_even_though_it_exited_ok(self):
-        # This is the worst failure we have: it looks like "there are none
-        # here", so the AI reports a confident wrong answer.
-        assert classify(call(stderr="0 rows. No place has categories.primary=cafe. Did you mean:")) \
-            == "bad_category_value"
+    def test_a_zero_result_with_no_way_forward_is_the_silent_failure(self):
+        # The worst failure we have: it looks like "there are none here", so
+        # the AI reports a confident wrong answer.
+        assert classify(silent_call()) == "bad_value_silent"
+
+    def test_a_suggestion_is_the_opposite_of_a_silent_failure(self):
+        # These two shared a label once, and it was backwards in a way that
+        # actively hurt: a suggestion is PROOF the failure was not silent, yet
+        # it was scored as the silent failure it prevents.
+        assert classify(hinted_call()) == "bad_value_reported"
 
     def test_a_crash_is_named_as_a_crash_not_the_generic_fallback(self):
         assert classify(call(exit_code=1, stderr="Traceback (most recent call last):\n ...")) \
@@ -467,6 +486,11 @@ class TestAnalyseCountsStruggle:
         a = score.analyse(QUESTION, [silent_call(), call()], transcript(), 1)
         assert a.silent_failures == 1
 
+    def test_a_corrected_value_is_not_counted_as_a_silent_failure(self):
+        a = score.analyse(QUESTION, [hinted_call(), call()], transcript(), 1)
+        assert a.silent_failures == 0
+        assert a.values_corrected == 1
+
 
 class TestStruggle:
     def test_a_short_clean_completed_attempt_scores_full_marks(self):
@@ -808,3 +832,59 @@ class TestQuotaExhaustion:
         ev = Evaluator("tool", pool, reference={})
         total, report = ev({"botmap/cli.py": "x"}, QUESTION)
         assert total == 0.0 and "Unmeasurable" in report
+
+
+class TestDiagnosticsAreNeverPunished:
+    """The gradient must never point at deleting the tool's own diagnostics.
+
+    Found by arm A: its candidate C1 adds a near-match hint where the tool
+    previously returned an unexplained zero. Under the original rules that
+    turned a `clean` call into a scored error, so C1 looked worse precisely
+    because it made the tool better. Any optimiser reading that learns to
+    remove diagnostics -- driving the tool toward the silent failures this
+    scorer exists to punish.
+
+    These are the cases that inversion would break. They are worth more than
+    their line count: the defect was invisible in every unit test that existed,
+    and only showed up when the three variants were scored side by side.
+    """
+
+    def _objective(self, first):
+        a = score.analyse(QUESTION, [first, call()], transcript(turns=2), 1)
+        return score.objective(score.correctness([a]), score.struggle([a]), 0.5, 0.5)
+
+    def test_adding_a_suggestion_scores_better_than_staying_unhelpful(self):
+        # The C1 case, stated as a number. This is the assertion that would
+        # have caught the original defect.
+        assert self._objective(hinted_call()) > self._objective(silent_call())
+
+    def test_removing_a_suggestion_never_pays(self):
+        # The same claim from the optimiser's side: going from helpful to
+        # unhelpful must never be an improvement.
+        assert self._objective(silent_call()) <= self._objective(hinted_call())
+
+    def test_a_helpful_tool_is_not_scored_below_one_that_says_nothing(self):
+        # The subtler half. A tool that says nothing at all is invisible to
+        # us -- it looks like a legitimate empty result -- so the best we can
+        # do is make sure being helpful is not actively worse than being mute.
+        says_nothing = call()
+        assert self._objective(hinted_call()) >= self._objective(says_nothing)
+
+    def test_the_suggestion_does_not_count_as_a_wasted_command(self):
+        # It cost a turn, and `path` already charges for that. Charging it
+        # again here would rebuild the same disincentive at lower magnitude.
+        a = score.analyse(QUESTION, [hinted_call(), call()], transcript(), 1)
+        assert a.wasted == 0
+
+    def test_the_proposer_is_told_the_suggestion_is_wanted(self):
+        a = score.analyse(QUESTION, [hinted_call(), call()], transcript(), 1)
+        text = score.feedback(QUESTION, [a])
+        assert "GOOD:" in text and "Do not remove it" in text
+
+    def test_spraying_suggestions_at_genuine_empty_results_does_not_pay(self):
+        # Guards the reward hack the fix could have opened: if a suggestion
+        # were rewarded rather than merely not punished, a candidate could add
+        # one to every empty result, including the honest ones.
+        honest_zero = self._objective(call())
+        sprayed = self._objective(hinted_call())
+        assert sprayed <= honest_zero

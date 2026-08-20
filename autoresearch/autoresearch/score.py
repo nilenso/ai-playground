@@ -40,6 +40,10 @@ class Attempt:
     # wrong. Kept out of `errors` entirely: they say nothing about the tool,
     # and charging them to a candidate would score our connection.
     network_failures: int = 0
+    # Times the tool caught a value it did not recognise and named the right
+    # one. Counted because it is worth seeing, and deliberately not penalised:
+    # this is the tool doing exactly its job.
+    values_corrected: int = 0
 
     @property
     def ok(self) -> bool:
@@ -91,12 +95,24 @@ def analyse(question: Question, calls: list[Call], transcript: Transcript, repea
         if label == "network_failure":
             attempt.network_failures += 1
             continue
+        if label == "bad_value_reported":
+            # Not a failure of the tool -- the opposite. The assistant guessed
+            # a value the tool does not know, and the tool said so and offered
+            # the right one. Charging that as an error would mean a candidate
+            # that ADDS the suggestion scores worse than one that stays quiet,
+            # and an optimiser reading that has a gradient pointing straight at
+            # deleting its own diagnostics.
+            #
+            # The guess still cost a command, and `path` already counts that.
+            # Counting it here too would charge two penalties for one turn.
+            attempt.values_corrected += 1
+            continue
         attempt.errors.append((label, call.pretty()))
         if first_bad is None:
             first_bad = i
 
     attempt.silent_failures = sum(
-        1 for label, _ in attempt.errors if label == "bad_category_value"
+        1 for label, _ in attempt.errors if label == "bad_value_silent"
     )
 
     # Everything that failed before the first command that actually worked. If
@@ -110,7 +126,8 @@ def analyse(question: Question, calls: list[Call], transcript: Transcript, repea
     # A command the network ate was not a wrong turn by the assistant, so it
     # does not count against the path it took.
     attempt.wasted = sum(
-        1 for c in considered if classify(c) not in ("clean", "network_failure")
+        1 for c in considered
+        if classify(c) not in ("clean", "network_failure", "bad_value_reported")
     )
 
     # The tool's error messages are supposed to help the AI recover. If it did
@@ -316,6 +333,15 @@ def feedback(question: Question, attempts: list[Attempt]) -> str:
             "from the score. Do NOT try to fix these: retry logic or error handling "
             "added for them would be tuning the tool to our connection on the day, "
             "which is not what is being measured and will not survive the next run."
+        )
+
+    if a.values_corrected:
+        lines.append(
+            f"GOOD: {a.values_corrected} time(s) the assistant used a value the tool "
+            "does not know, and the tool said so and named the right one instead of "
+            "returning an unexplained zero. That is exactly the behaviour we want, "
+            "and it is NOT counted against this candidate. Do not remove it -- "
+            "extend it to more of the places an assistant can get a value wrong."
         )
 
     if a.unnecessary_download:
