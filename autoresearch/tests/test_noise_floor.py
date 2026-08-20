@@ -230,3 +230,44 @@ class TestWithinRunFloor:
         write_attempt(a, "q1", 1, argv_list=CLEAN)
         result = noise_floor.compare_repeats(a, BANK)
         assert "q1" in result["dropped"] and "repeat 2" in result["dropped"]["q1"]
+
+
+class TestTheCaveatTravelsWithTheNumber:
+    """Today's recurring lesson: a figure gets separated from its caveats.
+    The limitation has to be in the artifact, not only in the writeup."""
+
+    def _within(self, tmp_path):
+        a = tmp_path / "run"
+        write_attempt(a, "q1", 1, argv_list=CLEAN)
+        write_attempt(a, "q1", 2, argv_list=MESSY)
+        return noise_floor.compare_repeats(a, BANK)
+
+    def _across(self, tmp_path):
+        a, b = tmp_path / "a", tmp_path / "b"
+        for r in (1, 2):
+            write_attempt(a, "q1", r, argv_list=CLEAN)
+            write_attempt(b, "q1", r, argv_list=MESSY)
+        return noise_floor.compare(a, b, BANK)
+
+    def test_a_within_run_floor_says_it_is_a_lower_bound(self, tmp_path):
+        text = noise_floor.render(self._within(tmp_path))
+        assert "LOWER BOUND" in text and "the real floor is HIGHER" in text
+
+    def test_it_says_what_may_and_may_not_be_concluded(self, tmp_path):
+        # Exceeding a lower bound is necessary, not sufficient. Without this
+        # the number reads as permission to believe a movement.
+        text = noise_floor.render(self._within(tmp_path))
+        assert "is unproven" in text and "NOT thereby proven" in text
+
+    def test_a_real_run_to_run_floor_carries_no_such_caveat(self, tmp_path):
+        text = noise_floor.render(self._across(tmp_path))
+        assert "LOWER BOUND" not in text and "the real floor is HIGHER" not in text
+
+    def test_clearing_a_lower_bound_is_not_reported_as_proof(self, tmp_path):
+        r = self._within(tmp_path)
+        text = noise_floor._verdict(r, 0.01, floor_is_lower_bound=True)
+        assert "NOT proof" in text and "EXCEEDS" not in text
+
+    def test_clearing_a_real_floor_is_reported_as_a_difference(self, tmp_path):
+        r = self._across(tmp_path)
+        assert "EXCEEDS the floor" in noise_floor._verdict(r, 0.01)

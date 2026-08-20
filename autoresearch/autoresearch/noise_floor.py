@@ -161,6 +161,11 @@ def compare(dir_a: Path, dir_b: Path,
 
     sources = {"run_a": _skill_sources(dir_a, bank), "run_b": _skill_sources(dir_b, bank)}
     return {"paired": paired, "dropped": dropped,
+            # Whether this floor is the real thing or a lower bound. Carried in
+            # the result rather than known only by the caller, so the caveat
+            # travels with the number instead of living in a writeup that gets
+            # read separately, or not at all.
+            "lower_bound": repeat_a is not None,
             "summary": _summarise(paired), "objective": _objective_floor(paired),
             "skill_sources": {k: dict(v) for k, v in sources.items()},
             "skills_consistent": all(len(v) <= 1 for v in sources.values())
@@ -227,11 +232,14 @@ def _objective_floor(paired: dict[str, dict[str, float]]) -> dict[str, float]:
 def render(result: dict[str, object]) -> str:
     paired, summary = result["paired"], result["summary"]
     obj = result["objective"]
+    bound = result.get("lower_bound")
     out = [
-        "STRUGGLE NOISE FLOOR",
+        "STRUGGLE NOISE FLOOR" + (" (LOWER BOUND)" if bound else ""),
         f"{len(paired)} question(s) measured twice on the unchanged tool.",
         "",
-        "Run-to-run wobble, |run 1 - run 2| on the same question:",
+        ("Repeat-to-repeat wobble within ONE run, |repeat 1 - repeat 2|:"
+         if bound else
+         "Run-to-run wobble, |run 1 - run 2| on the same question:"),
         "",
         f"  {'term':<20} {'median':>8} {'mean':>8} {'p90':>8} {'max':>8}  weight",
     ]
@@ -251,7 +259,8 @@ def render(result: dict[str, object]) -> str:
 
     out += [
         "",
-        f"MINIMUM BELIEVABLE MOVEMENT: {obj['p90']:.3f}",
+        f"MINIMUM BELIEVABLE MOVEMENT: {obj['p90']:.3f}"
+        + ("  (A FLOOR UNDER THE FLOOR -- read the caveat)" if bound else ""),
         "",
         "  A candidate must beat the baseline by more than this before the gain",
         "  is worth believing. Nine questions in ten drift by less than it with",
@@ -259,6 +268,20 @@ def render(result: dict[str, object]) -> str:
         "  every term's wobble as if they all fell the same way.",
         f"  (median drift {obj['median']:.3f}, worst question {obj['max']:.3f})",
     ]
+    if bound:
+        out += [
+            "",
+            "  CAVEAT, and it changes what you may conclude. These two repeats",
+            "  ran minutes apart in one session, sharing a cache state, a network",
+            "  and a map-data snapshot. Two separate runs would not, and would",
+            "  also pick up drift across time. So the real floor is HIGHER than",
+            "  this, by an unknown amount.",
+            "",
+            "  What that permits: a movement at or below this number is unproven,",
+            "  definitively -- it does not clear even the optimistic threshold.",
+            "  A movement above it is NOT thereby proven; it is only not ruled",
+            "  out, because the true floor sits somewhere above this line.",
+        ]
 
     if not result["skills_consistent"]:
         # Loud, because it inflates the very number this script exists to
@@ -281,7 +304,8 @@ def render(result: dict[str, object]) -> str:
     return "\n".join(out)
 
 
-def _verdict(result: dict[str, object], floor: float) -> str:
+def _verdict(result: dict[str, object], floor: float,
+             floor_is_lower_bound: bool = False) -> str:
     """Do these two conditions differ by more than ordinary wobble?
 
     The comparison that matters when the two directories are different setups
@@ -296,6 +320,13 @@ def _verdict(result: dict[str, object], floor: float) -> str:
         lines += ["  WITHIN the floor. The two conditions are not distinguishable",
                   "  from the assistant repeating itself, so treating them as",
                   "  interchangeable is defensible."]
+    elif floor_is_lower_bound:
+        # Clearing a lower bound is necessary, not sufficient. Saying "exceeds"
+        # here would promise more than the measurement can support.
+        lines += [f"  Above the floor by {observed - floor:.3f}, but that floor is a",
+                  "  lower bound, so this is NOT proof they differ -- only that the",
+                  "  question is still open. Deciding it needs a real run-to-run",
+                  "  floor."]
     else:
         lines += [f"  EXCEEDS the floor by {observed - floor:.3f}. They are not",
                   "  interchangeable: a yardstick taken under one and a candidate",
@@ -352,7 +383,8 @@ def main() -> int:
     print(render(result))
     if args.against_floor is not None:
         print()
-        print(_verdict(result, args.against_floor))
+        print(_verdict(result, args.against_floor,
+                       floor_is_lower_bound=bool(result.get("lower_bound"))))
     return 0
 
 
