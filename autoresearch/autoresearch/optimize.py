@@ -238,6 +238,20 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
 
         wanted = blocked.scan(run_dir / "gepa", files, Path(checks["repo"]))
         note = blocked.report(wanted)
+        if note and context_note.get("chars"):
+            # The counts mean something different once GEPA can see the whole
+            # repo. Before, naming a file it could not read was a deliberate
+            # act; now it can mention core.py simply because core.py is in
+            # front of it. The mentions are still worth reading -- but it is
+            # the reason attached to one that carries the evidence, not how
+            # many times the name appears.
+            note = (
+                "NOTE: this run gave GEPA read-only sight of the whole repo, so\n"
+                "it could name any file whether or not it was blocked. Read\n"
+                "the reasons rather than the counts: the counts are inflated\n"
+                "by visibility and are not comparable with a run that had no\n"
+                "repo context (--repo-context-chars 0).\n\n"
+            ) + note
         if note:
             (run_dir / "blocked-files.txt").write_text(note)
 
