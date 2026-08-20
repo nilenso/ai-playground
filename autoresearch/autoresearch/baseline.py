@@ -75,7 +75,15 @@ def measure(questions: list[Question], tree: Path, sha: str,
                 "sha": sha,
                 "release_requested": config.requested_release(),
                 "pinned": False,  # the tool picks the latest snapshot itself
-                "correctness_impl": config.CORRECTNESS_IMPL,
+                # The legacy name deliberately, not the run's scorer name.
+                # The `correctness` figures below come from
+                # `score.correctness()`, which is frozen at proxy-v1 precisely
+                # so baselines stay comparable across scorer changes. Stamping
+                # the current scorer here would label the file with rules its
+                # numbers were never computed under -- and a baseline that
+                # misreports how it was measured is worse than none, because
+                # it is trusted.
+                "correctness_impl": config.LEGACY_CORRECTNESS_IMPL,
                 "repeats": config.REPEATS,
                 "skipped": skipped,
                 "questions": {k: asdict(v) for k, v in readings.items()},

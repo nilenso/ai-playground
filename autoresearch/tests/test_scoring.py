@@ -585,3 +585,62 @@ class TestRepoContext:
         note = repo_context.describe(self._repo(tmp_path), ("botmap/cli.py",))
         assert note["read_only_sources_included"] == ["botmap/core.py"]
         assert note["chars"] > 0
+
+
+class TestBaselineSchema:
+    """A baseline is measured once and then consumed by other runs, possibly
+    ones scored by different rules. What it promises has to stay exact."""
+
+    def _record(self, **top):
+        base = {
+            "sha": "3009509",
+            "correctness_impl": config.LEGACY_CORRECTNESS_IMPL,
+            "repeats": 2,
+            "skipped": [],
+            "questions": {
+                "q1": {"tokens": 1000.0, "duration_ms": 2000.0, "correctness": 0.8},
+            },
+        }
+        base.update(top)
+        return base
+
+    def _write(self, tmp_path, monkeypatch, record):
+        import json
+        from autoresearch import baseline
+        d = tmp_path / "baselines"
+        d.mkdir()
+        (d / "3009509.json").write_text(json.dumps(record))
+        monkeypatch.setattr(baseline, "path_for", lambda sha: d / f"{sha}.json")
+        return baseline
+
+    def test_a_baseline_round_trips(self, tmp_path, monkeypatch):
+        baseline = self._write(tmp_path, monkeypatch, self._record())
+        assert baseline.load("3009509")["q1"].correctness == 0.8
+
+    def test_an_unknown_top_level_field_is_ignored(self, tmp_path, monkeypatch):
+        # The compatibility guarantee that lets one arm consume a baseline
+        # measured by another arm's newer code. Whole-measurement metadata --
+        # the map-data release, for instance -- belongs at this level, where
+        # adding it cannot break an older reader.
+        baseline = self._write(tmp_path, monkeypatch,
+                               self._record(release="2026-08-19.0"))
+        assert baseline.load("3009509")["q1"].tokens == 1000.0
+
+    def test_an_unknown_per_question_field_is_refused_loudly(self, tmp_path, monkeypatch):
+        # The other half of the same contract, asserted so nobody adds a field
+        # here by accident. `Reading(**v)` has no room for extras, so a
+        # per-question addition breaks every reader that has not been updated
+        # -- and it would break at load time, an hour into a paid run.
+        record = self._record()
+        record["questions"]["q1"]["release"] = "2026-08-19.0"
+        baseline = self._write(tmp_path, monkeypatch, record)
+        with pytest.raises(TypeError, match="release"):
+            baseline.load("3009509")
+
+    def test_the_stamp_names_the_measure_that_produced_the_numbers(self):
+        # The file records `correctness`, which comes from the frozen
+        # proxy-v1 function -- not from whatever scorer this run uses.
+        import inspect
+        from autoresearch import baseline
+        src = inspect.getsource(baseline.measure)
+        assert "LEGACY_CORRECTNESS_IMPL" in src
