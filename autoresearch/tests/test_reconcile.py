@@ -102,3 +102,52 @@ class TestReconcile:
         result = reconcile.check(baseline_file(tmp_path, 0.7), a, BANK)
         assert "q1" in result["unchecked"]
         assert not result["diverge"] and not result["agree"]
+
+
+class TestRefusesAnUnusableBaseline:
+    """A withdrawn baseline is renamed, not deleted, so the numbers survive for
+    forensics. That leaves it on disk one careless argument away from being
+    used as a yardstick -- which nearly happened."""
+
+    def _attempts(self, tmp_path):
+        a = tmp_path / "attempts"
+        for r in (1, 2):
+            write_attempt(a, "q1", r, argv_list=CLEAN)
+        return a
+
+    def test_a_file_marked_incomplete_is_refused(self, tmp_path):
+        p = baseline_file(tmp_path, 1.0)
+        withdrawn = p.parent / "3009509.INCOMPLETE-5of30.json"
+        p.rename(withdrawn)
+        with pytest.raises(SystemExit, match="INCOMPLETE"):
+            reconcile.check(withdrawn, self._attempts(tmp_path), BANK)
+
+    def test_a_file_marked_stale_is_refused(self, tmp_path):
+        p = baseline_file(tmp_path, 1.0)
+        stale = p.parent / "3009509.release-2026-07-22.0.STALE.json"
+        p.rename(stale)
+        with pytest.raises(SystemExit, match="STALE"):
+            reconcile.check(stale, self._attempts(tmp_path), BANK)
+
+    def test_a_baseline_missing_questions_is_refused_by_default(self, tmp_path):
+        # The 5-of-30 case. Reconciling it yields a report that is right about
+        # the five and silent about the rest, which reads as a completed check.
+        bank = BANK + [Question(id="q2", question="?", tier=1)]
+        with pytest.raises(SystemExit, match="covers 1 of 2"):
+            reconcile.check(baseline_file(tmp_path, 1.0), self._attempts(tmp_path), bank)
+
+    def test_the_refusal_names_what_is_missing(self, tmp_path):
+        bank = BANK + [Question(id="q2", question="?", tier=1)]
+        with pytest.raises(SystemExit, match="q2"):
+            reconcile.check(baseline_file(tmp_path, 1.0), self._attempts(tmp_path), bank)
+
+    def test_a_partial_baseline_can_be_used_deliberately(self, tmp_path):
+        bank = BANK + [Question(id="q2", question="?", tier=1)]
+        result = reconcile.check(baseline_file(tmp_path, 1.0), self._attempts(tmp_path),
+                                 bank, allow_partial=True)
+        assert result["agree"] == ["q1"]
+
+    def test_a_complete_canonical_baseline_passes(self, tmp_path):
+        result = reconcile.check(baseline_file(tmp_path, 1.0), self._attempts(tmp_path),
+                                 BANK)
+        assert result["agree"] == ["q1"]

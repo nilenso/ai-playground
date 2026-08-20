@@ -36,6 +36,46 @@ from . import questions as qmod, score
 from .noise_floor import load_attempts
 
 
+# A withdrawn baseline is renamed rather than deleted, so the numbers survive
+# for forensics. That leaves the file on disk, one careless argument away from
+# being used as a yardstick.
+_WITHDRAWN = ("INCOMPLETE", "STALE", "INVALID", "ABORTED")
+
+
+def refuse_if_unusable(baseline_path: Path, stored: dict, bank,
+                       allow_partial: bool = False) -> None:
+    """Stop before reconciling against a yardstick that was taken out of service.
+
+    Two ways a bad baseline gets picked up, and neither announces itself once
+    the path is typed. The name may say it was withdrawn -- the convention here
+    is to rename rather than delete, so `3009509.INCOMPLETE-5of30.json` sits in
+    the same directory as the real one. Or it may simply be short, because the
+    run that made it died partway and covered five questions out of thirty.
+
+    Refusing is the right default rather than warning. Reconciling against a
+    partial baseline produces a confident per-question report that is correct
+    about the handful it saw and silent about the rest, which is worse than an
+    error: it looks like the check was done.
+    """
+    marker = next((m for m in _WITHDRAWN if m in baseline_path.name), None)
+    if marker:
+        raise SystemExit(
+            f"{baseline_path.name} is marked {marker} and was taken out of service.\n"
+            f"Renaming rather than deleting keeps the numbers for forensics; it does\n"
+            f"not make them a yardstick. Point this at the canonical baseline."
+        )
+    if not allow_partial and len(stored) < len(bank):
+        missing = sorted({q.id for q in bank} - set(stored))
+        raise SystemExit(
+            f"{baseline_path.name} covers {len(stored)} of {len(bank)} questions.\n"
+            f"Missing: {', '.join(missing[:5])}"
+            f"{f' and {len(missing) - 5} more' if len(missing) > 5 else ''}.\n"
+            f"A partial baseline yields a report that is right about what it saw and\n"
+            f"silent about the rest, which reads exactly like a completed check.\n"
+            f"Wait for the full measurement, or pass --allow-partial if you mean it."
+        )
+
+
 def recompute(attempts_dir: Path, question) -> float | None:
     """This branch's correctness for one question, from the raw attempts.
 
@@ -50,10 +90,11 @@ def recompute(attempts_dir: Path, question) -> float | None:
 
 
 def check(baseline_path: Path, attempts_dir: Path,
-          bank=None) -> dict[str, object]:
+          bank=None, allow_partial: bool = False) -> dict[str, object]:
     bank = bank if bank is not None else qmod.load()
     raw = json.loads(baseline_path.read_text(encoding="utf-8"))
     stored = raw.get("questions", {})
+    refuse_if_unusable(baseline_path, stored, bank, allow_partial)
 
     agree: list[str] = []
     diverge: dict[str, dict[str, float]] = {}
@@ -135,6 +176,10 @@ def main() -> int:
     ap.add_argument("attempts", type=Path, help="the run's attempts/ directory")
     ap.add_argument("--apply", action="store_true",
                     help="rewrite the diverging correctness values in place")
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="reconcile a baseline that does not cover every question. "
+                         "Off by default: a partial one produces a report that "
+                         "looks complete.")
     args = ap.parse_args()
 
     if not args.baseline.exists():
@@ -142,7 +187,7 @@ def main() -> int:
     if not args.attempts.is_dir():
         raise SystemExit(f"not a directory: {args.attempts}")
 
-    result = check(args.baseline, args.attempts)
+    result = check(args.baseline, args.attempts, allow_partial=args.allow_partial)
     print(render(result))
     if args.apply:
         changed = apply(args.baseline, result)
