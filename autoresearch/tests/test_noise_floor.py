@@ -196,3 +196,37 @@ class TestCrossConditionVerdict:
         r = self._result(0.10)
         r["summary"]["path"]["p90"] = 0.4
         assert "path 0.400" in noise_floor._verdict(r, 0.05)
+
+
+class TestWithinRunFloor:
+    """A five-question run-to-run floor is too thin to lean on: at n=5 the
+    90th percentile lands on the largest value, so one unlucky question sets
+    the threshold. One 30-question run already holds thirty repeat-pairs."""
+
+    def test_identical_repeats_show_no_wobble(self, tmp_path):
+        a = tmp_path / "run"
+        for r in (1, 2):
+            write_attempt(a, "q1", r, argv_list=CLEAN)
+        assert noise_floor.compare_repeats(a, BANK)["paired"]["q1"]["struggle"] == \
+            pytest.approx(0.0)
+
+    def test_repeats_that_behaved_differently_show_wobble(self, tmp_path):
+        a = tmp_path / "run"
+        write_attempt(a, "q1", 1, argv_list=CLEAN)
+        write_attempt(a, "q1", 2, argv_list=MESSY)
+        assert noise_floor.compare_repeats(a, BANK)["paired"]["q1"]["struggle"] > 0
+
+    def test_it_uses_only_the_two_repeats_it_was_asked_for(self, tmp_path):
+        # A third repeat must not be silently folded into either side.
+        a = tmp_path / "run"
+        write_attempt(a, "q1", 1, argv_list=CLEAN)
+        write_attempt(a, "q1", 2, argv_list=CLEAN)
+        write_attempt(a, "q1", 3, argv_list=MESSY)
+        assert noise_floor.compare_repeats(a, BANK)["paired"]["q1"]["struggle"] == \
+            pytest.approx(0.0)
+
+    def test_a_missing_second_repeat_is_named_not_skipped(self, tmp_path):
+        a = tmp_path / "run"
+        write_attempt(a, "q1", 1, argv_list=CLEAN)
+        result = noise_floor.compare_repeats(a, BANK)
+        assert "q1" in result["dropped"] and "repeat 2" in result["dropped"]["q1"]

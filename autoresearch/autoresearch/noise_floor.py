@@ -86,15 +86,17 @@ def _skill_sources(attempts_dir: Path, bank: list[Question]) -> Counter:
     return seen
 
 
-def load_attempts(attempts_dir: Path, question: Question) -> list[Attempt]:
+def load_attempts(attempts_dir: Path, question: Question,
+                  repeat: int | None = None) -> list[Attempt]:
     """Rebuild one question's attempts from the files a run left behind.
 
     Deliberately re-derived with the current scorer rather than read from any
     recorded number: the point is to find out how *this* code behaves, and a
     figure saved by an earlier version would answer a different question.
     """
+    pattern = f"{question.id}__r*" if repeat is None else f"{question.id}__r{repeat}"
     found = []
-    for d in sorted(attempts_dir.glob(f"{question.id}__r*")):
+    for d in sorted(attempts_dir.glob(pattern)):
         repeat = d.name.rsplit("__r", 1)[-1]
         found.append(
             score.analyse(
@@ -130,19 +132,21 @@ def _scored(attempts: list[Attempt]) -> dict[str, float] | None:
 
 
 def compare(dir_a: Path, dir_b: Path,
-            bank: list[Question] | None = None) -> dict[str, object]:
-    """Pair up the two runs question by question and measure the wobble."""
+            bank: list[Question] | None = None,
+            repeat_a: int | None = None, repeat_b: int | None = None,
+            names: tuple[str, str] = ("run 1", "run 2")) -> dict[str, object]:
+    """Pair up two measurements question by question and measure the wobble."""
     bank = bank if bank is not None else qmod.load()
 
     paired: dict[str, dict[str, float]] = {}
     dropped: dict[str, str] = {}
     for q in bank:
-        a = _scored(load_attempts(dir_a, q))
-        b = _scored(load_attempts(dir_b, q))
+        a = _scored(load_attempts(dir_a, q, repeat_a))
+        b = _scored(load_attempts(dir_b, q, repeat_b))
         if a is None or b is None:
             # Named rather than skipped silently. A noise floor computed over
             # whichever questions happened to survive is not a noise floor.
-            missing = "run 1" if a is None else ("run 2" if b is None else "both")
+            missing = names[0] if a is None else (names[1] if b is None else "both")
             dropped[q.id] = f"no usable attempts in {missing}"
             continue
         paired[q.id] = {name: abs(a[name] - b[name])
@@ -161,6 +165,29 @@ def compare(dir_a: Path, dir_b: Path,
             "skill_sources": {k: dict(v) for k, v in sources.items()},
             "skills_consistent": all(len(v) <= 1 for v in sources.values())
                                  and set(sources["run_a"]) == set(sources["run_b"])}
+
+
+def compare_repeats(attempts_dir: Path,
+                    bank: list[Question] | None = None) -> dict[str, object]:
+    """Wobble between the two repeats of each question inside ONE measurement.
+
+    Why bother, when run-to-run is the number we actually want: the cheap
+    noise-floor scope is five held-out questions, and five points is not enough
+    to say anything with. At that size the 90th percentile lands on the largest
+    value, so one unlucky question sets the threshold on its own.
+
+    A single 30-question run already contains thirty such pairs, so this is six
+    times the evidence for no extra measurement.
+
+    It is a **lower bound**, not a substitute. Two repeats minutes apart share
+    whatever the session, the machine and the map data were doing at the time;
+    two runs hours apart do not. So expect this to read smaller than the real
+    floor. Its use is as a cross-check: if the five-question run-to-run figure
+    sits far above this, the five are simply thin, and if they agree the thin
+    number can be trusted.
+    """
+    return compare(attempts_dir, attempts_dir, bank,
+                   repeat_a=1, repeat_b=2, names=("repeat 1", "repeat 2"))
 
 
 def _spread(values: list[float]) -> dict[str, float]:
@@ -288,7 +315,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run_a", type=Path, help="first run's attempts/ directory")
-    ap.add_argument("run_b", type=Path, help="second run's attempts/ directory")
+    ap.add_argument("run_b", type=Path, nargs="?",
+                    help="second run's attempts/ directory. Omit with --within-run.")
+    ap.add_argument("--within-run", action="store_true",
+                    help="compare repeat 1 against repeat 2 inside a single run "
+                         "instead of one run against another. A lower bound on the "
+                         "real floor -- two repeats share a session -- but computed "
+                         "over every question rather than the handful measured "
+                         "twice, so it says whether a thin run-to-run figure can "
+                         "be trusted.")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--against-floor", type=float, metavar="X",
                     help="a previously measured noise floor. Use when the two "
@@ -298,13 +333,16 @@ def main() -> int:
                          "wobbles on its own.")
     args = ap.parse_args()
 
+    if not args.within_run and args.run_b is None:
+        raise SystemExit("give two attempts/ directories, or one with --within-run.")
     for d in (args.run_a, args.run_b):
-        if not d.is_dir():
+        if d is not None and not d.is_dir():
             raise SystemExit(f"not a directory: {d}\n"
                              f"Expected a run's attempts/ folder, the one holding "
                              f"<question-id>__r<n>/ subdirectories.")
 
-    result = compare(args.run_a, args.run_b)
+    result = (compare_repeats(args.run_a) if args.within_run
+              else compare(args.run_a, args.run_b))
     if not result["paired"]:
         raise SystemExit("No question had usable attempts in both runs — nothing to compare.")
     if args.json:
