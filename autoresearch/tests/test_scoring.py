@@ -11,6 +11,7 @@ from pathlib import Path
 from autoresearch import config, credits, score
 from autoresearch.questions import Question, load, split
 from autoresearch.taxonomy import classify
+from autoresearch.score import Attempt
 from autoresearch.trace import Call, Transcript, Usage
 
 
@@ -716,3 +717,94 @@ class TestNetworkFailuresAreNotToolFailures:
     def test_a_run_with_network_trouble_is_not_called_clean(self):
         a = score.analyse(QUESTION, [network_call(), call()], transcript(), 1)
         assert "This one went cleanly." not in score.feedback(QUESTION, [a])
+
+
+class TestQuotaExhaustion:
+    """Running out of subscription quota looks exactly like a candidate that
+    broke the tool: no commands, no answer, an errored result. Charging a
+    candidate for the account being empty would send the proposer hunting a
+    fault that does not exist.
+
+    Shape confirmed against real transcripts from the baseline run that hit it:
+    `is_error: true` with `subtype: "success"`, and a fixed message.
+    """
+
+    def _transcript(self, text, errored=True):
+        import json
+        from autoresearch.trace import parse_transcript
+        from pathlib import Path
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        (d / "t.jsonl").write_text(json.dumps({
+            "type": "result", "subtype": "success", "result": text,
+            "is_error": errored, "duration_ms": 900, "num_turns": 1,
+            "usage": {"input_tokens": 10},
+        }))
+        return parse_transcript(d / "t.jsonl")
+
+    def test_the_real_message_is_recognised(self):
+        t = self._transcript("You've hit your session limit · resets 10:50pm (Asia/Calcutta)")
+        assert t.quota_exhausted
+
+    def test_the_status_alone_does_not_give_it_away(self):
+        # subtype is "success" even here, so anything keying off status would
+        # miss it. This is the reason the check reads the message.
+        t = self._transcript("You've hit your session limit · resets 10:50pm")
+        assert t.status == "error" and not t.completed
+
+    def test_an_ordinary_failure_is_not_mistaken_for_quota(self):
+        assert not self._transcript("The command failed with an error").quota_exhausted
+
+    def test_a_successful_answer_is_never_quota(self):
+        # Guards the false positive: a question *about* rate limits must not
+        # abort the run.
+        t = self._transcript("The rate limit for that API is 10/sec", errored=False)
+        assert not t.quota_exhausted
+
+    def test_the_proposer_is_told_this_is_not_its_fault(self):
+        a = score.analyse(QUESTION, [], self._transcript("You've hit your session limit"), 1)
+        text = score.feedback(QUESTION, [a])
+        assert "MEASUREMENT ABANDONED" in text
+        assert "Do NOT" in text
+
+    def test_it_is_not_reported_as_the_tool_crashing(self):
+        # The pre-existing wording would have blamed the run itself.
+        a = score.analyse(QUESTION, [], self._transcript("You've hit your session limit"), 1)
+        assert "crashed or timed out" not in score.feedback(QUESTION, [a])
+
+    @pytest.mark.filterwarnings("ignore::UserWarning")
+    def test_the_evaluator_stops_the_run_rather_than_scoring_zero(self, monkeypatch):
+        # Scoring zero is the whole problem: it reads as "this candidate broke
+        # the tool" and burns the rest of the budget on an empty account.
+        from autoresearch import runner as runner_mod
+        from autoresearch.evaluator import Evaluator, QuotaExhausted
+        from autoresearch.score import Attempt
+
+        starved = Attempt(QUESTION.id, 1, [],
+                          self._transcript("You've hit your session limit"))
+        monkeypatch.setattr(runner_mod, "ask_repeatedly",
+                            lambda *a, **k: [starved, starved])
+        monkeypatch.setattr(Evaluator, "_broken", lambda self, tree: None)
+
+        pool = TestCandidateIsolation.FakePool()
+        ev = Evaluator("tool", pool, reference={})
+        with pytest.raises(QuotaExhausted, match="quota"):
+            ev({"botmap/cli.py": "x"}, QUESTION)
+
+    @pytest.mark.filterwarnings("ignore::UserWarning")
+    def test_a_normal_failure_still_scores_rather_than_stopping_everything(self,
+                                                                          monkeypatch):
+        # The abort must be reserved for quota. A candidate that genuinely
+        # breaks the tool has to keep scoring zero, or GEPA stops learning.
+        from autoresearch import runner as runner_mod
+        from autoresearch.evaluator import Evaluator
+
+        broken = Attempt(QUESTION.id, 1, [], self._transcript("it crashed"))
+        monkeypatch.setattr(runner_mod, "ask_repeatedly",
+                            lambda *a, **k: [broken, broken])
+        monkeypatch.setattr(Evaluator, "_broken", lambda self, tree: None)
+
+        pool = TestCandidateIsolation.FakePool()
+        ev = Evaluator("tool", pool, reference={})
+        total, report = ev({"botmap/cli.py": "x"}, QUESTION)
+        assert total == 0.0 and "Unmeasurable" in report

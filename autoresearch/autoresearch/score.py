@@ -51,6 +51,11 @@ class Attempt:
         return self.transcript.completed
 
     @property
+    def quota_exhausted(self) -> bool:
+        """The subscription ran out, so this says nothing about the tool."""
+        return self.transcript.quota_exhausted
+
+    @property
     def network_bound(self) -> bool:
         """Did the network, rather than the tool, decide how this went?
 
@@ -245,6 +250,18 @@ def feedback(question: Question, attempts: list[Attempt]) -> str:
     the improver work out what to change.
     """
     lines = [f'Question: "{question.question}"']
+
+    # Said before anything else and on its own, because every other line here
+    # describes the tool, and this one does not.
+    if any(a.quota_exhausted for a in attempts):
+        lines.append(
+            "MEASUREMENT ABANDONED: the subscription ran out of quota partway "
+            "through, so the assistant was cut off rather than defeated by the "
+            "tool. This tells us nothing about the change being tested. Do NOT "
+            "treat it as a fault to fix, and do not change anything in response "
+            "to it."
+        )
+        return "\n".join(lines)
 
     usable = [a for a in attempts if a.ok]
     if not usable:

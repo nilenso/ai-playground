@@ -63,6 +63,18 @@ class Usage:
         )
 
 
+# What the CLI says when the subscription has nothing left to spend. Checked
+# against the result event's text rather than its status, because the status is
+# no help: the event arrives with `is_error` true and `subtype` "success" --
+# the agent process exited cleanly, it simply never got to do anything.
+#
+# "session limit" is the wording seen in the real transcripts. The others are
+# not confirmed, and are matched anyway because the two directions cost very
+# differently: spotting quota exhaustion that did not happen wastes a run,
+# while missing one that did poisons every measurement after it.
+_QUOTA_MARKERS = ("session limit", "usage limit", "rate limit")
+
+
 @dataclass(frozen=True)
 class Transcript:
     """How the AI's attempt ended."""
@@ -71,6 +83,11 @@ class Transcript:
     completed: bool = False
     status: str = "error"  # "ok" or "error"
     usage: Usage = field(default_factory=Usage)
+    # The run ran out of quota rather than the tool doing anything wrong.
+    # Tracked apart from `status` because at the scoring layer the two are
+    # indistinguishable, and treating this as an ordinary failure would charge
+    # a candidate for something it had no part in.
+    quota_exhausted: bool = False
 
 
 def parse_calls(path: Path) -> list[Call]:
@@ -120,11 +137,13 @@ def parse_transcript(path: Path) -> Transcript:
 
     answer = result.get("result") or ""
     errored = bool(result.get("is_error"))
+    quota = errored and any(m in answer.lower() for m in _QUOTA_MARKERS)
     u = result.get("usage") or {}
     return Transcript(
         final_answer=answer,
         completed=(not errored) and bool(answer),
         status="error" if errored else "ok",
+        quota_exhausted=quota,
         usage=Usage(
             cost_usd=float(result.get("total_cost_usd") or 0.0),
             input_tokens=int(u.get("input_tokens") or 0),

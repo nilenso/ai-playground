@@ -31,7 +31,7 @@ import gepa.optimize_anything as oa
 
 from . import (baseline, blocked, config, proposer as proposer_mod,
                questions as qmod, repo_context)
-from .evaluator import Evaluator
+from .evaluator import Evaluator, QuotaExhausted
 from .worktree import Pool, head_sha
 
 # Told to the improver so it knows what it's working on and what "better"
@@ -278,6 +278,33 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
         if note:
             print()
             print(note)
+    except QuotaExhausted as exc:
+        # Leave a note in the run directory rather than only on the terminal.
+        # A half-finished run that cannot say why it stopped is indistinguishable
+        # from one that found nothing, and we have already lost a day to a
+        # directory full of numbers nobody could account for.
+        (run_dir / "ABORTED-QUOTA.md").write_text(
+            "# Run aborted — subscription quota exhausted\n\n"
+            f"Lever `{lever}` at `{sha}`, stopped after {evaluate.calls} "
+            f"evaluation(s).\n\n"
+            f"{exc}\n\n"
+            "## These numbers are not results\n\n"
+            "Nothing here says anything about the candidates. Once the session\n"
+            "limit is reached every attempt fails identically, and the harness\n"
+            "cannot tell that apart from a candidate that broke the tool: the\n"
+            "result event carries `is_error: true` with `subtype: \"success\"`,\n"
+            "which is why the check looks at the message rather than the status.\n\n"
+            "The run stopped instead of continuing because carrying on would\n"
+            "have spent the remaining budget recording zeros, and taught the\n"
+            "proposer that every candidate was broken.\n\n"
+            "## What to do\n\n"
+            "Wait for the quota to reset, then start again. Whatever GEPA had\n"
+            "already explored is under `gepa/`.\n"
+        )
+        print(f"\n[oa] STOPPED: {exc}")
+        print(f"[oa] wrote {run_dir / 'ABORTED-QUOTA.md'}")
+        print("[oa] no results were produced — this is not a negative result.")
+        raise SystemExit(2)
     finally:
         pool.close()
 

@@ -25,6 +25,18 @@ from .questions import Question
 from .worktree import Pool
 
 
+class QuotaExhausted(RuntimeError):
+    """The subscription ran out mid-run, so nothing further can be measured.
+
+    Raised rather than scored, and it stops the run rather than skipping the
+    question. Skipping would be wrong in a way that costs real money: once the
+    session limit is hit every later evaluation fails identically until the
+    quota resets, so continuing spends the rest of the budget writing zeros --
+    and teaches GEPA that every candidate is terrible, which is worse than
+    learning nothing. Stopping keeps the budget and the partial results.
+    """
+
+
 class Evaluator:
     """Applies a candidate to a private copy of the tool, then grades it."""
 
@@ -91,6 +103,18 @@ class Evaluator:
             return 0.0, {"Blocked": problem}
 
         attempts = runner.ask_repeatedly(example, tree, keep_dir=self.keep_dir)
+
+        # Before anything is scored. A quota failure arrives looking exactly
+        # like a candidate that broke the tool -- an attempt that ran no
+        # commands and produced no answer -- and scoring it would charge this
+        # candidate for the account being empty.
+        if any(a.quota_exhausted for a in attempts):
+            raise QuotaExhausted(
+                f"ran out of subscription quota while measuring {example.id}. "
+                f"Nothing after this point would be measurable, so the run is "
+                f"stopped rather than filled with zeros. Wait for the quota to "
+                f"reset, then start again."
+            )
         # An attempt that never got a command through to the data tells us
         # nothing about this candidate, so it is dropped rather than averaged
         # in. Averaging it would quietly move the score by however bad the
