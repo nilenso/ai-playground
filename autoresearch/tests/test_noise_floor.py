@@ -168,3 +168,31 @@ class TestSkillSourceDetection:
         result = noise_floor.compare(a, b, BANK)
         assert result["skill_sources"]["run_a"] == {"project-scoped": 1}
         assert result["skills_consistent"]
+
+
+class TestCrossConditionVerdict:
+    """The same arithmetic answers two different questions. Between repeats it
+    measures noise; between two setups it measures whether they behave alike.
+    The verdict is what keeps those apart in the reader's head."""
+
+    def _result(self, p90):
+        return {"objective": {"p90": p90},
+                "summary": {n: {"p90": 0.0} for n in
+                            ("path", "waste", "silent", "recovery")}}
+
+    def test_a_divergence_inside_the_floor_reads_as_interchangeable(self):
+        assert "WITHIN the floor" in noise_floor._verdict(self._result(0.02), 0.05)
+
+    def test_a_divergence_beyond_the_floor_reads_as_not_interchangeable(self):
+        text = noise_floor._verdict(self._result(0.12), 0.05)
+        assert "EXCEEDS the floor" in text and "0.070" in text
+
+    def test_exactly_at_the_floor_is_allowed(self):
+        assert "WITHIN the floor" in noise_floor._verdict(self._result(0.05), 0.05)
+
+    def test_it_names_which_term_moved_most(self):
+        # A path change can move turns and commands while correctness sits
+        # still, so the headline number alone can hide the thing that matters.
+        r = self._result(0.10)
+        r["summary"]["path"]["p90"] = 0.4
+        assert "path 0.400" in noise_floor._verdict(r, 0.05)

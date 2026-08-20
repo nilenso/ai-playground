@@ -254,12 +254,48 @@ def render(result: dict[str, object]) -> str:
     return "\n".join(out)
 
 
+def _verdict(result: dict[str, object], floor: float) -> str:
+    """Do these two conditions differ by more than ordinary wobble?
+
+    The comparison that matters when the two directories are different setups
+    rather than repeats: a divergence smaller than the floor is not evidence
+    that they behave differently, and one larger than it is not proof that they
+    do -- but it is the point at which "interchangeable" stops being free.
+    """
+    observed = result["objective"]["p90"]
+    lines = [f"AGAINST A NOISE FLOOR OF {floor:.3f}",
+             f"  observed divergence (p90): {observed:.3f}"]
+    if observed <= floor:
+        lines += ["  WITHIN the floor. The two conditions are not distinguishable",
+                  "  from the assistant repeating itself, so treating them as",
+                  "  interchangeable is defensible."]
+    else:
+        lines += [f"  EXCEEDS the floor by {observed - floor:.3f}. They are not",
+                  "  interchangeable: a yardstick taken under one and a candidate",
+                  "  under the other would differ for reasons nothing records."]
+
+    # The terms most likely to shift between harnesses, called out by name.
+    # Turn and command counts are partly a property of the harness, not only of
+    # the tool, so a path change can move them while correctness holds still.
+    movers = sorted(
+        ((n, result["summary"][n]["p90"]) for n in ("path", "waste", "silent", "recovery")),
+        key=lambda kv: -kv[1])
+    lines.append("  biggest movers: " + ", ".join(f"{n} {v:.3f}" for n, v in movers[:3]))
+    return "\n".join(lines)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run_a", type=Path, help="first run's attempts/ directory")
     ap.add_argument("run_b", type=Path, help="second run's attempts/ directory")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument("--against-floor", type=float, metavar="X",
+                    help="a previously measured noise floor. Use when the two "
+                         "directories are NOT two runs of the same thing but two "
+                         "different conditions -- two billing paths, say -- and the "
+                         "question is whether they differ by more than the assistant "
+                         "wobbles on its own.")
     args = ap.parse_args()
 
     for d in (args.run_a, args.run_b):
@@ -271,7 +307,14 @@ def main() -> int:
     result = compare(args.run_a, args.run_b)
     if not result["paired"]:
         raise SystemExit("No question had usable attempts in both runs — nothing to compare.")
-    print(json.dumps(result, indent=2) if args.json else render(result))
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return 0
+
+    print(render(result))
+    if args.against_floor is not None:
+        print()
+        print(_verdict(result, args.against_floor))
     return 0
 
 
