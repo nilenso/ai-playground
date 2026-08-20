@@ -91,13 +91,20 @@ class Evaluator:
             return 0.0, {"Blocked": problem}
 
         attempts = runner.ask_repeatedly(example, tree, keep_dir=self.keep_dir)
-        usable = [a for a in attempts if a.ok]
+        # An attempt that never got a command through to the data tells us
+        # nothing about this candidate, so it is dropped rather than averaged
+        # in. Averaging it would quietly move the score by however bad the
+        # connection was that minute.
+        usable = [a for a in attempts if a.ok and not a.network_bound]
 
         # Every try crashed or timed out. That's a broken measurement, not a
         # bad candidate, so say so rather than blaming the candidate.
         if not usable:
-            oa.log(f"Could not measure {example.id}: every attempt crashed or timed out.")
-            return 0.0, {"Unmeasurable": "all attempts failed"}
+            why = ("every attempt failed reaching the map data, so the tool was "
+                   "never really tested" if any(a.network_bound for a in attempts)
+                   else "every attempt crashed or timed out")
+            oa.log(f"Could not measure {example.id}: {why}.")
+            return 0.0, {"Unmeasurable": why}
 
         # Deliberately still the old, narrower measure. Keeping it unchanged is
         # what lets the comparison against the cached baseline below stay
@@ -131,6 +138,7 @@ class Evaluator:
             "Turns": usable[0].transcript.usage.num_turns,
             "WastedBeforeFirstSuccess": usable[0].wasted,
             "SilentWrongAnswers": usable[0].silent_failures,
+            "NetworkFailures": usable[0].network_failures,
             "FailedCommands": len(usable[0].errors),
             "RecoveredFromError": usable[0].recovered,
             "UsedBulkDownload": usable[0].unnecessary_download,

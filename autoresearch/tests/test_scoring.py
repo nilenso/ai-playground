@@ -644,3 +644,75 @@ class TestBaselineSchema:
         from autoresearch import baseline
         src = inspect.getsource(baseline.measure)
         assert "LEGACY_CORRECTNESS_IMPL" in src
+
+
+def network_call() -> Call:
+    """A command that never reached the data. Arrives as a traceback."""
+    return call(
+        exit_code=1,
+        stderr="Traceback (most recent call last):\n  ...\nOSError: When reading "
+               "information for key 'theme=places' in bucket 'overturemaps-us-west-2': "
+               "AWS Error NETWORK_CONNECTION during HeadObject operation: "
+               "curlCode: 28, Timeout was reached",
+    )
+
+
+class TestNetworkFailuresAreNotToolFailures:
+    """A flaky connection must not read as a broken tool.
+
+    botmap does not catch S3 errors, so pyarrow's OSError propagates raw and
+    lands in the same bucket as a genuine crash. Left that way, a bad
+    afternoon on the network becomes the dominant failure cluster, and the
+    proposer spends its budget 'fixing' our connection.
+    """
+
+    def test_a_curl_timeout_is_named_as_a_network_failure_not_a_crash(self):
+        assert classify(network_call()) == "network_failure"
+
+    def test_a_genuine_crash_is_still_named_a_crash(self):
+        # The label must stay specific enough to be worth having.
+        assert classify(call(exit_code=1, stderr="Traceback (most recent call last):\n"
+                                                 "ValueError: bad category")) == "traceback"
+
+    def test_a_tool_error_merely_mentioning_a_timeout_flag_is_not_network(self):
+        # Guards the false positive: mislabelling a real bug as weather would
+        # hide exactly what we are looking for.
+        assert classify(call(exit_code=2, stderr="Error: no such option: --timeout")) \
+            == "bad_option"
+
+    def test_it_is_counted_apart_from_errors_the_tool_caused(self):
+        a = score.analyse(QUESTION, [network_call(), call()], transcript(), 1)
+        assert a.network_failures == 1
+        assert a.errors == []
+
+    def test_it_does_not_count_as_a_wasted_command(self):
+        # The assistant did not take a wrong turn; the network ate the call.
+        a = score.analyse(QUESTION, [network_call(), call()], transcript(), 1)
+        assert a.wasted == 0
+
+    def test_it_does_not_drag_the_struggle_score_down(self):
+        clean = score.analyse(QUESTION, [call()], transcript(turns=1), 1)
+        flaky = score.analyse(QUESTION, [network_call(), call()], transcript(turns=1), 1)
+        assert score.struggle([flaky]) == pytest.approx(score.struggle([clean]))
+
+    def test_an_attempt_that_never_got_through_is_not_scored_at_all(self):
+        # Otherwise excluding network failures from the penalties would hand
+        # full marks to a run where nothing worked: no errors on the record,
+        # nothing wasted, and an answer saying it could not reach the data.
+        a = score.analyse(QUESTION, [network_call(), network_call()],
+                          transcript(answer="I could not reach the map data"), 1)
+        assert a.network_bound
+
+    def test_a_run_that_got_through_once_is_still_scored(self):
+        a = score.analyse(QUESTION, [network_call(), call()], transcript(), 1)
+        assert not a.network_bound
+
+    def test_the_proposer_is_told_not_to_chase_them(self):
+        a = score.analyse(QUESTION, [network_call(), call()], transcript(), 1)
+        text = score.feedback(QUESTION, [a])
+        assert "Do NOT try to fix these" in text
+        assert "network timeouts" in text
+
+    def test_a_run_with_network_trouble_is_not_called_clean(self):
+        a = score.analyse(QUESTION, [network_call(), call()], transcript(), 1)
+        assert "This one went cleanly." not in score.feedback(QUESTION, [a])

@@ -36,6 +36,10 @@ class Attempt:
     # Counted separately from `errors` because the assistant cannot see these:
     # to it they look like a successful query that found nothing.
     silent_failures: int = 0
+    # Commands that failed reaching the data rather than because they were
+    # wrong. Kept out of `errors` entirely: they say nothing about the tool,
+    # and charging them to a candidate would score our connection.
+    network_failures: int = 0
 
     @property
     def ok(self) -> bool:
@@ -45,6 +49,24 @@ class Attempt:
     @property
     def completed(self) -> bool:
         return self.transcript.completed
+
+    @property
+    def network_bound(self) -> bool:
+        """Did the network, rather than the tool, decide how this went?
+
+        True when not one command got through cleanly and at least one failed
+        on the way to the data. Such an attempt cannot be scored in either
+        direction: the assistant never found out what the tool would have done.
+
+        This matters more than it looks. Excluding network failures from the
+        penalties, without also refusing to score an attempt made entirely of
+        them, would hand full marks to a run where nothing worked at all --
+        no errors on the record, no wasted commands, and a final answer saying
+        it could not reach the data.
+        """
+        return self.network_failures > 0 and not any(
+            classify(c) == "clean" for c in self.calls
+        )
 
 
 def analyse(question: Question, calls: list[Call], transcript: Transcript, repeat: int) -> Attempt:
@@ -59,10 +81,14 @@ def analyse(question: Question, calls: list[Call], transcript: Transcript, repea
     first_bad = None
     for i, call in enumerate(calls):
         label = classify(call)
-        if label != "clean":
-            attempt.errors.append((label, call.pretty()))
-            if first_bad is None:
-                first_bad = i
+        if label == "clean":
+            continue
+        if label == "network_failure":
+            attempt.network_failures += 1
+            continue
+        attempt.errors.append((label, call.pretty()))
+        if first_bad is None:
+            first_bad = i
 
     attempt.silent_failures = sum(
         1 for label, _ in attempt.errors if label == "bad_category_value"
@@ -76,7 +102,11 @@ def analyse(question: Question, calls: list[Call], transcript: Transcript, repea
         None,
     )
     considered = calls if first_good is None else calls[:first_good]
-    attempt.wasted = sum(1 for c in considered if classify(c) != "clean")
+    # A command the network ate was not a wrong turn by the assistant, so it
+    # does not count against the path it took.
+    attempt.wasted = sum(
+        1 for c in considered if classify(c) not in ("clean", "network_failure")
+    )
 
     # The tool's error messages are supposed to help the AI recover. If it did
     # recover, the message did its job, so we penalise that far less.
@@ -253,6 +283,15 @@ def feedback(question: Question, attempts: list[Attempt]) -> str:
             "is worth as much as fixing an outright failure."
         )
 
+    if a.network_failures:
+        lines.append(
+            f"NOTE: {a.network_failures} command(s) failed on the way to the data -- "
+            "network timeouts, not the tool getting anything wrong. They are excluded "
+            "from the score. Do NOT try to fix these: retry logic or error handling "
+            "added for them would be tuning the tool to our connection on the day, "
+            "which is not what is being measured and will not survive the next run."
+        )
+
     if a.unnecessary_download:
         lines.append(
             "PROBLEM: it fell back to the bulk `download` escape hatch even though a "
@@ -268,7 +307,7 @@ def feedback(question: Question, attempts: list[Attempt]) -> str:
     if not a.completed:
         lines.append("PROBLEM: it never produced an answer.")
     if (not a.errors and not a.unnecessary_download and a.completed
-            and not a.wasted):
+            and not a.wasted and not a.network_failures):
         lines.append("This one went cleanly.")
 
     if question.notes:
