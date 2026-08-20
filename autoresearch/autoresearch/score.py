@@ -175,35 +175,44 @@ def struggle(attempts: list[Attempt]) -> float:
     """
     if not attempts:
         return 0.0
-
     w = config.STRUGGLE_WEIGHTS
-    total = 0.0
-    for a in attempts:
-        if not a.completed:
-            continue  # scores zero: see the gate, above
+    return sum(
+        sum(w[name] * value for name, value in struggle_terms(a).items())
+        for a in attempts
+    ) / len(attempts)
 
+
+def struggle_terms(a: Attempt) -> dict[str, float]:
+    """The four components of `struggle`, unweighted, each 0 to 1.
+
+    Split out so that anything wanting to see *which* kind of struggle moved --
+    the noise-floor analysis, chiefly -- reads the same numbers the score is
+    built from rather than recomputing them and slowly drifting apart.
+    """
+    if not a.completed:
+        # The gate. Zero across the board rather than a partial score, because
+        # an attempt that never answered has no path worth measuring.
+        return {name: 0.0 for name in config.STRUGGLE_WEIGHTS}
+
+    commands = _allowance(len(a.calls), config.FREE_COMMANDS)
+    turns = _allowance(a.transcript.usage.num_turns, config.FREE_TURNS)
+
+    return {
         # Binary rather than graded. One confident wrong answer is the whole
         # failure; a second one does not make it meaningfully worse.
-        silent = 0.0 if a.silent_failures else 1.0
+        "silent": 0.0 if a.silent_failures else 1.0,
         # A smooth decay rather than the allowance curve: there is no free
         # allowance for a wrong command, but there must still be a gradient
         # between one wrong command and five, or GEPA cannot tell a partial
         # improvement from none at all.
-        waste = 1.0 / (1.0 + a.wasted)
-
-        commands = _allowance(len(a.calls), config.FREE_COMMANDS)
-        turns = _allowance(a.transcript.usage.num_turns, config.FREE_TURNS)
-        path = (commands + turns) / 2
-
+        "waste": 1.0 / (1.0 + a.wasted),
+        "path": (commands + turns) / 2,
         # Only meaningful when something went wrong. An attempt with no errors
         # gets full marks here rather than a free pass it did not earn -- the
         # `waste` term is what rewards having no errors, so scoring recovery
         # as 1.0 keeps the two from counting the same thing twice.
-        recovery = 1.0 if (not a.errors or a.recovered) else 0.0
-
-        total += (w["silent"] * silent + w["waste"] * waste
-                  + w["path"] * path + w["recovery"] * recovery)
-    return total / len(attempts)
+        "recovery": 1.0 if (not a.errors or a.recovered) else 0.0,
+    }
 
 
 def efficiency(reference: float | None, actual: float) -> float:
