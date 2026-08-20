@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
+from collections import Counter
 from pathlib import Path
 
 from . import config, questions as qmod, score
@@ -37,6 +39,51 @@ from .trace import parse_calls, parse_transcript
 # the one being put on trial.
 TERMS = ("correctness", "struggle")
 SUB_TERMS = tuple(config.STRUGGLE_WEIGHTS)
+
+
+# Claude names the skill it loaded in its own context, which is the only
+# record of *which* instruction file the agent actually read.
+_SKILL_SOURCE = re.compile(r"Base directory for this skill: ([^\"\\]+)")
+
+# A user-global skill lives directly in someone's home: /Users/<name>/.claude
+# or /home/<name>/.claude. Matched by shape rather than against this machine's
+# actual home, so the check does not quietly stop working somewhere else.
+#
+# Requiring `.claude` to sit immediately under the user directory is what keeps
+# a project that happens to live under home -- ~/work/thing/.claude/skills --
+# from being misread as the global one.
+_USER_SKILL_ROOT = re.compile(r"^/(?:Users|home)/[^/]+/\.claude/")
+
+
+def skill_source(transcript: Path) -> str | None:
+    """Which copy of the botmap instructions this attempt actually loaded.
+
+    Worth extracting because it is invisible everywhere else and has already
+    bitten us once: a user-global skill of the same name shadowed the
+    project-scoped copy the runner installs, so edits to the instructions were
+    written to a file no agent ever read. Nothing in the score would have shown
+    that -- the run would simply have found nothing.
+    """
+    if not transcript.exists():
+        return None
+    found = _SKILL_SOURCE.search(transcript.read_text(encoding="utf-8", errors="replace"))
+    return found.group(1) if found else None
+
+
+def _skill_sources(attempts_dir: Path, bank: list[Question]) -> Counter:
+    seen: Counter = Counter()
+    for q in bank:
+        for d in sorted(attempts_dir.glob(f"{q.id}__r*")):
+            source = skill_source(d / "transcript.jsonl")
+            if source:
+                # Both paths end in `.claude/skills/botmap` -- the project copy
+                # lives at <workdir>/.claude/skills/botmap -- so the tail tells
+                # them apart not at all. What distinguishes them is the root:
+                # the shadowing copy sits under the user's home, the real one
+                # under the run's temp workdir.
+                seen["user-global" if _USER_SKILL_ROOT.match(source)
+                     else "project-scoped"] += 1
+    return seen
 
 
 def load_attempts(attempts_dir: Path, question: Question) -> list[Attempt]:
@@ -108,8 +155,12 @@ def compare(dir_a: Path, dir_b: Path,
         paired[q.id]["wallclock"] = abs(
             score.efficiency(a["duration_ms"], b["duration_ms"]) - 0.5)
 
+    sources = {"run_a": _skill_sources(dir_a, bank), "run_b": _skill_sources(dir_b, bank)}
     return {"paired": paired, "dropped": dropped,
-            "summary": _summarise(paired), "objective": _objective_floor(paired)}
+            "summary": _summarise(paired), "objective": _objective_floor(paired),
+            "skill_sources": {k: dict(v) for k, v in sources.items()},
+            "skills_consistent": all(len(v) <= 1 for v in sources.values())
+                                 and set(sources["run_a"]) == set(sources["run_b"])}
 
 
 def _spread(values: list[float]) -> dict[str, float]:
@@ -181,6 +232,19 @@ def render(result: dict[str, object]) -> str:
         "  every term's wobble as if they all fell the same way.",
         f"  (median drift {obj['median']:.3f}, worst question {obj['max']:.3f})",
     ]
+
+    if not result["skills_consistent"]:
+        # Loud, because it inflates the very number this script exists to
+        # produce: a condition that changed between or within runs shows up as
+        # run-to-run wobble and is indistinguishable from the assistant's own
+        # variability.
+        out += ["", "WARNING: the two runs did not read the same instruction file.",
+                f"  run 1: {result['skill_sources']['run_a'] or 'unknown'}",
+                f"  run 2: {result['skill_sources']['run_b'] or 'unknown'}",
+                "  Any difference between those files is being counted as noise,",
+                "  so the floor above is an over-estimate of the assistant's own",
+                "  wobble. If the files were byte-identical this is harmless; if",
+                "  they were not, re-measure before trusting the number."]
 
     if result["dropped"]:
         out += ["", "NOT COUNTED (no usable attempts in one or both runs):"]

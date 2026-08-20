@@ -94,3 +94,77 @@ class TestNoiseFloor:
         a, b = tmp_path / "a", tmp_path / "b"
         a.mkdir(); b.mkdir()
         assert noise_floor.compare(a, b, BANK)["paired"] == {}
+
+
+class TestSkillSourceDetection:
+    """Which instruction file the agent read is invisible in the score, and
+    has already been wrong once without anything looking wrong."""
+
+    def _transcript(self, tmp_path, text):
+        import json
+        d = tmp_path / "q1__r1"
+        d.mkdir(parents=True)
+        (d / "transcript.jsonl").write_text(json.dumps({
+            "type": "result", "result": text, "is_error": False,
+            "usage": {"input_tokens": 10},
+        }))
+        return d / "transcript.jsonl"
+
+    def test_it_finds_a_user_global_skill(self, tmp_path):
+        t = self._transcript(
+            tmp_path,
+            "Base directory for this skill: /Users/x/.claude/skills/botmap\n\n# CLI")
+        assert noise_floor.skill_source(t) == "/Users/x/.claude/skills/botmap"
+
+    def test_it_finds_a_project_scoped_skill(self, tmp_path):
+        t = self._transcript(
+            tmp_path,
+            "Base directory for this skill: /private/var/folders/T/oa-q1-x/"
+            ".claude/skills/botmap\n\n# CLI")
+        assert "/private/var/folders" in noise_floor.skill_source(t)
+
+    def test_no_skill_loaded_is_not_an_error(self, tmp_path):
+        # Some questions never trigger the skill at all. That is information,
+        # not a failure, and must not crash the analysis.
+        assert noise_floor.skill_source(self._transcript(tmp_path, "12 hospitals")) is None
+
+    def test_a_missing_transcript_is_not_an_error(self, tmp_path):
+        assert noise_floor.skill_source(tmp_path / "absent.jsonl") is None
+
+    def test_runs_reading_different_instruction_files_are_flagged(self, tmp_path):
+        import json
+        a, b = tmp_path / "a", tmp_path / "b"
+        for root, where in ((a, "/Users/x/.claude/skills/botmap"),
+                            (b, "/private/var/folders/T/oa/.claude/skills/botmap")):
+            for r in (1, 2):
+                d = write_attempt(root, "q1", r, argv_list=CLEAN)
+                (d / "transcript.jsonl").write_text(json.dumps({
+                    "type": "result",
+                    "result": f"Base directory for this skill: {where}\n\nok",
+                    "is_error": False, "duration_ms": 1000, "num_turns": 2,
+                    "usage": {"input_tokens": 1000},
+                }))
+        result = noise_floor.compare(a, b, BANK)
+        assert not result["skills_consistent"]
+        assert "user-global" in result["skill_sources"]["run_a"]
+        assert "project-scoped" in result["skill_sources"]["run_b"]
+
+    def test_a_project_that_lives_under_home_is_not_mistaken_for_the_global_one(self, tmp_path):
+        # ~/work/thing/.claude/skills/botmap is project-scoped, not global.
+        # Both paths end in .claude/skills/botmap, so only the root tells them
+        # apart -- and getting this backwards would report the bug as fixed
+        # while it was still happening.
+        import json
+        a, b = tmp_path / "a", tmp_path / "b"
+        for root, where in ((a, "/Users/someone/work/thing/.claude/skills/botmap"),
+                            (b, "/Users/someone/other/.claude/skills/botmap")):
+            d = write_attempt(root, "q1", 1, argv_list=CLEAN)
+            (d / "transcript.jsonl").write_text(json.dumps({
+                "type": "result",
+                "result": f"Base directory for this skill: {where}\n\nok",
+                "is_error": False, "duration_ms": 1000, "num_turns": 2,
+                "usage": {"input_tokens": 1000},
+            }))
+        result = noise_floor.compare(a, b, BANK)
+        assert result["skill_sources"]["run_a"] == {"project-scoped": 1}
+        assert result["skills_consistent"]
