@@ -29,6 +29,14 @@ class Attempt:
     unnecessary_download: bool = False
     recovered: bool = False
 
+    # Commands that failed before the first one that worked. "How hard was it
+    # to find the right command", counted rather than inferred.
+    wasted: int = 0
+    # Commands that exited 0 while telling the assistant its filter was wrong.
+    # Counted separately from `errors` because the assistant cannot see these:
+    # to it they look like a successful query that found nothing.
+    silent_failures: int = 0
+
     @property
     def ok(self) -> bool:
         """Did the attempt run at all? False means a crash or a timeout."""
@@ -55,6 +63,20 @@ def analyse(question: Question, calls: list[Call], transcript: Transcript, repea
             attempt.errors.append((label, call.pretty()))
             if first_bad is None:
                 first_bad = i
+
+    attempt.silent_failures = sum(
+        1 for label, _ in attempt.errors if label == "bad_category_value"
+    )
+
+    # Everything that failed before the first command that actually worked. If
+    # nothing ever worked, every failure counts -- the assistant never found
+    # its way, which is the case we most want to punish.
+    first_good = next(
+        (i for i, c in enumerate(calls) if c.exit_code == 0 and classify(c) == "clean"),
+        None,
+    )
+    considered = calls if first_good is None else calls[:first_good]
+    attempt.wasted = sum(1 for c in considered if classify(c) != "clean")
 
     # The tool's error messages are supposed to help the AI recover. If it did
     # recover, the message did its job, so we penalise that far less.
@@ -89,6 +111,71 @@ def correctness(attempts: list[Attempt]) -> float:
     return total / len(attempts)
 
 
+def _allowance(actual: float, free: int) -> float:
+    """Full marks up to `free`, then decaying. Never negative, never zero.
+
+    A ratio rather than a subtraction, so the penalty keeps its shape as the
+    numbers grow: twice the allowance always scores 0.5, whether the allowance
+    is three commands or thirty. A subtraction would fall off a cliff instead,
+    and GEPA cannot climb a cliff -- past the bottom every candidate would look
+    equally bad and the gradient it needs would be gone.
+    """
+    if actual <= free:
+        return 1.0
+    return free / actual
+
+
+def struggle(attempts: list[Attempt]) -> float:
+    """How hard the assistant had to work, from 0 (flailing) to 1 (straight there).
+
+    Separate from `correctness` because they answer different questions.
+    Correctness asks "did it get there". This asks "what did getting there cost
+    the assistant" -- and two candidates that both get there are not equally
+    good if one of them took nine commands and four dead ends.
+
+    **Gated on completion.** An attempt that never answered scores zero here,
+    and that gate is load-bearing rather than tidy: the command and turn counts
+    reward doing less, so without it the highest-scoring behaviour would be to
+    give up immediately. Combined with the gate, the only way to score well is
+    to answer the question *and* take a short path to it.
+
+    That leaves one gap the gate cannot close: an assistant that answers fast
+    and confidently wrong. That is exactly the silent-failure case, which is
+    why `silent` carries the heaviest weight of the four.
+    """
+    if not attempts:
+        return 0.0
+
+    w = config.STRUGGLE_WEIGHTS
+    total = 0.0
+    for a in attempts:
+        if not a.completed:
+            continue  # scores zero: see the gate, above
+
+        # Binary rather than graded. One confident wrong answer is the whole
+        # failure; a second one does not make it meaningfully worse.
+        silent = 0.0 if a.silent_failures else 1.0
+        # A smooth decay rather than the allowance curve: there is no free
+        # allowance for a wrong command, but there must still be a gradient
+        # between one wrong command and five, or GEPA cannot tell a partial
+        # improvement from none at all.
+        waste = 1.0 / (1.0 + a.wasted)
+
+        commands = _allowance(len(a.calls), config.FREE_COMMANDS)
+        turns = _allowance(a.transcript.usage.num_turns, config.FREE_TURNS)
+        path = (commands + turns) / 2
+
+        # Only meaningful when something went wrong. An attempt with no errors
+        # gets full marks here rather than a free pass it did not earn -- the
+        # `waste` term is what rewards having no errors, so scoring recovery
+        # as 1.0 keeps the two from counting the same thing twice.
+        recovery = 1.0 if (not a.errors or a.recovered) else 0.0
+
+        total += (w["silent"] * silent + w["waste"] * waste
+                  + w["path"] * path + w["recovery"] * recovery)
+    return total / len(attempts)
+
+
 def efficiency(reference: float | None, actual: float) -> float:
     """Cost or time, compared against the unchanged tool. 0.5 means "same".
 
@@ -101,10 +188,11 @@ def efficiency(reference: float | None, actual: float) -> float:
     return min(2.0, reference / actual) / 2.0
 
 
-def objective(correct: float, tokens: float, wall: float) -> float:
+def objective(correct: float, struggled: float, tokens: float, wall: float) -> float:
     w = config.WEIGHTS
     return (
         w["correctness"] * correct
+        + w["struggle"] * struggled
         + w["token_efficiency"] * tokens
         + w["wallclock"] * wall
     )
@@ -136,6 +224,35 @@ def feedback(question: Question, attempts: list[Attempt]) -> str:
             first_lines = " / ".join(err.splitlines()[:3])
             lines.append(f"        -> {first_lines[:400]}")
 
+    # Stated first, and in the strongest terms available, because it is the
+    # failure the assistant itself cannot see. Everything below is something it
+    # noticed; this is the one it reported as fact.
+    if a.silent_failures:
+        lines.append(
+            f"WORST PROBLEM: {a.silent_failures} command(s) exited successfully while "
+            "the result was wrong -- the tool returned 0 rows because the filter value "
+            "was not one it knows. The assistant had no way to tell that apart from "
+            "'there genuinely are none here', so it reported a confident wrong answer. "
+            "A command that cannot honour a filter must say so on stderr and fail, or "
+            "name the values it does accept."
+        )
+
+    # Effort, stated plainly whether or not it was excessive, so the improver
+    # can see the difference between a change that helped and one that merely
+    # did not hurt.
+    turns = a.transcript.usage.num_turns
+    lines.append(
+        f"Effort: {len(a.calls)} command(s), {turns} turn(s), "
+        f"{a.wasted} failed before the first one that worked."
+    )
+    if a.wasted:
+        lines.append(
+            f"PROBLEM: it took {a.wasted} wrong command(s) before finding one that "
+            "worked. Shortening that path -- by making the first thing an assistant "
+            "reasonably tries succeed, or by naming the right command in the error -- "
+            "is worth as much as fixing an outright failure."
+        )
+
     if a.unnecessary_download:
         lines.append(
             "PROBLEM: it fell back to the bulk `download` escape hatch even though a "
@@ -150,7 +267,8 @@ def feedback(question: Question, attempts: list[Attempt]) -> str:
         )
     if not a.completed:
         lines.append("PROBLEM: it never produced an answer.")
-    if not a.errors and not a.unnecessary_download and a.completed:
+    if (not a.errors and not a.unnecessary_download and a.completed
+            and not a.wasted):
         lines.append("This one went cleanly.")
 
     if question.notes:

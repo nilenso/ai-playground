@@ -99,14 +99,19 @@ class Evaluator:
             oa.log(f"Could not measure {example.id}: every attempt crashed or timed out.")
             return 0.0, {"Unmeasurable": "all attempts failed"}
 
+        # Deliberately still the old, narrower measure. Keeping it unchanged is
+        # what lets the comparison against the cached baseline below stay
+        # honest: that baseline was recorded under these rules, and a number
+        # computed under new rules could not be held up against it.
         correct = score.correctness(usable)
+        struggled = score.struggle(usable)
         tokens = statistics.mean(a.transcript.usage.total_tokens for a in usable)
         wall = statistics.mean(a.transcript.usage.duration_ms for a in usable)
 
         ref = self.reference.get(example.id)
         token_eff = score.efficiency(ref.tokens if ref else None, tokens)
         wall_eff = score.efficiency(ref.duration_ms if ref else None, wall)
-        total = score.objective(correct, token_eff, wall_eff)
+        total = score.objective(correct, struggled, token_eff, wall_eff)
 
         # The written half. GEPA reads this to decide what to try next.
         oa.log(score.feedback(example, attempts))
@@ -120,8 +125,13 @@ class Evaluator:
 
         return total, {
             "Score": f"{total:.4f} (correctness {correct:.2f}, "
-                     f"tokens {token_eff:.2f}, speed {wall_eff:.2f})",
+                     f"struggle {struggled:.2f}, tokens {token_eff:.2f}, "
+                     f"speed {wall_eff:.2f})",
             "Commands": len(usable[0].calls),
+            "Turns": usable[0].transcript.usage.num_turns,
+            "WastedBeforeFirstSuccess": usable[0].wasted,
+            "SilentWrongAnswers": usable[0].silent_failures,
             "FailedCommands": len(usable[0].errors),
+            "RecoveredFromError": usable[0].recovered,
             "UsedBulkDownload": usable[0].unnecessary_download,
         }

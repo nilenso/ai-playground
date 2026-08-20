@@ -88,13 +88,48 @@ LEVERS: dict[str, tuple[str, ...]] = {
 # problem is latency — which our scoring only sees indirectly. Add it here if
 # you want to go after that, but expect a rougher ride.
 
-# The score. Correctness dominates because the question is whether the AI can
-# drive the tool at all; speed and cost are tie-breakers, not the point.
-WEIGHTS = {"correctness": 0.60, "token_efficiency": 0.20, "wallclock": 0.20}
+# The score. Correctness still dominates -- the first question is whether the
+# AI can drive the tool at all. `struggle` is second and new: two candidates
+# can both reach an answer while one of them made the assistant flail to get
+# there, and the old score could not tell them apart. Speed and cost are
+# demoted to tie-breakers, partly because `struggle` now captures some of the
+# same waste more directly.
+WEIGHTS = {
+    "correctness": 0.45,
+    "struggle": 0.35,
+    "token_efficiency": 0.10,
+    "wallclock": 0.10,
+}
 
-# Names the way correctness is currently measured. Recorded on every result so
-# two runs scored by different rules are never compared as if they matched.
-CORRECTNESS_IMPL = "proxy-v1"
+# How much each kind of struggle counts, within the struggle term.
+#
+# `silent` is heaviest on purpose. A command that exits 0 while saying "0 rows"
+# is the worst failure in the system: the assistant reads it as "there are none
+# here" and reports a confident wrong answer. Every other failure here is
+# visible to the assistant and therefore recoverable; this one is not.
+STRUGGLE_WEIGHTS = {
+    "silent": 0.45,    # exited 0 but the answer was wrong and looked fine
+    "waste": 0.25,     # failed commands before the first one that worked
+    "path": 0.15,      # how many commands and turns it took at all
+    "recovery": 0.15,  # did the error message hand back a usable next command
+}
+
+# How much work an assistant may do before we start calling it struggling.
+# Below these it scores full marks -- the point is to punish flailing, not to
+# demand a one-shot answer to a question that honestly needs three commands.
+FREE_COMMANDS = 3
+FREE_TURNS = 6
+
+# Names the way the score is calculated. Recorded on every result so two runs
+# scored by different rules are never compared as if they matched. Bumped from
+# "proxy-v1" when the struggle term was added.
+CORRECTNESS_IMPL = "struggle-v1"
+
+# The older, narrower measure. Still computed and reported next to the new one,
+# for one specific reason: the cached baselines on disk were measured under it,
+# so it is the only number this run can honestly line up against the previous
+# one. `score.correctness()` is deliberately left unchanged so this stays true.
+LEGACY_CORRECTNESS_IMPL = "proxy-v1"
 
 # The tool we're changing. `~/workspace/botmap` unless you say otherwise.
 DEFAULT_REPO = Path.home() / "workspace" / "botmap"

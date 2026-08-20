@@ -18,13 +18,23 @@ def call(argv=("count", "-t", "place"), exit_code=0, stderr="", stdout="") -> Ca
     return Call(list(argv), exit_code, stdout, stderr, 1.0)
 
 
-def transcript(ok=True, answer="12 hospitals", tokens=1000, ms=1000) -> Transcript:
+def transcript(ok=True, answer="12 hospitals", tokens=1000, ms=1000, turns=1) -> Transcript:
     return Transcript(
         final_answer=answer,
         completed=ok and bool(answer),
         status="ok" if ok else "error",
-        usage=Usage(cost_usd=0.25, input_tokens=tokens, duration_ms=ms),
+        usage=Usage(cost_usd=0.25, input_tokens=tokens, duration_ms=ms, num_turns=turns),
     )
+
+
+def silent_call() -> Call:
+    """Exited 0, but the filter value was wrong. The assistant cannot tell."""
+    return call(stderr="0 rows. No place has categories.primary=cafe. Did you mean:")
+
+
+def failing_call() -> Call:
+    """Failed loudly. The assistant can see this one and react to it."""
+    return call(exit_code=1, stderr="Error: no such option: --category")
 
 
 QUESTION = Question(id="q1", question="how many hospitals?", tier=1)
@@ -94,7 +104,11 @@ class TestEfficiency:
 
     def test_the_weights_add_up_and_are_applied(self):
         assert sum(config.WEIGHTS.values()) == pytest.approx(1.0)
-        assert score.objective(1.0, 0.5, 0.5) == pytest.approx(0.6 + 0.1 + 0.1)
+        w = config.WEIGHTS
+        assert score.objective(1.0, 1.0, 0.5, 0.5) == pytest.approx(
+            w["correctness"] + w["struggle"]
+            + 0.5 * w["token_efficiency"] + 0.5 * w["wallclock"]
+        )
 
 
 class TestFeedback:
@@ -398,3 +412,123 @@ class TestCreditsCheck:
                             lambda key, **kw: (_ for _ in ()).throw(credits.Unauthorized("no")))
         with pytest.raises(credits.Unauthorized):
             config.preflight()
+
+
+class TestStruggleWeights:
+    """The struggle term's shape is a claim about what matters. Assert it."""
+
+    def test_the_struggle_weights_add_up(self):
+        assert sum(config.STRUGGLE_WEIGHTS.values()) == pytest.approx(1.0)
+
+    def test_silent_failures_carry_the_most_weight(self):
+        # The premise of the whole term: a wrong answer the assistant cannot
+        # see is worse than any failure it can.
+        assert config.STRUGGLE_WEIGHTS["silent"] == max(config.STRUGGLE_WEIGHTS.values())
+
+    def test_the_scorer_is_named_apart_from_the_one_it_replaced(self):
+        # Two runs scored by different rules must never be compared as if they
+        # matched, and the name is what stops that happening silently.
+        assert config.CORRECTNESS_IMPL != config.LEGACY_CORRECTNESS_IMPL
+
+
+class TestAllowanceCurve:
+    def test_within_the_allowance_scores_full_marks(self):
+        assert score._allowance(3, 3) == 1.0
+        assert score._allowance(1, 3) == 1.0
+
+    def test_twice_the_allowance_always_scores_a_half(self):
+        # The same shape at every scale — which is the point of a ratio.
+        assert score._allowance(6, 3) == pytest.approx(0.5)
+        assert score._allowance(60, 30) == pytest.approx(0.5)
+
+    def test_it_decays_instead_of_falling_off_a_cliff(self):
+        # Past the allowance every candidate must still be rankable, or GEPA
+        # loses the gradient it climbs.
+        assert score._allowance(9, 3) > score._allowance(30, 3) > 0
+
+
+class TestAnalyseCountsStruggle:
+    def test_it_counts_the_failures_before_the_first_success(self):
+        a = score.analyse(QUESTION, [failing_call(), failing_call(), call()], transcript(), 1)
+        assert a.wasted == 2
+
+    def test_a_run_that_never_worked_counts_every_failure_as_wasted(self):
+        a = score.analyse(QUESTION, [failing_call(), failing_call()], transcript(), 1)
+        assert a.wasted == 2
+
+    def test_failures_after_the_first_success_are_not_counted_as_wasted(self):
+        # It had already found its way; what it did afterwards is a different
+        # problem from not being able to get started.
+        a = score.analyse(QUESTION, [call(), failing_call()], transcript(), 1)
+        assert a.wasted == 0
+
+    def test_it_counts_the_commands_that_lied_about_succeeding(self):
+        a = score.analyse(QUESTION, [silent_call(), call()], transcript(), 1)
+        assert a.silent_failures == 1
+
+
+class TestStruggle:
+    def test_a_short_clean_completed_attempt_scores_full_marks(self):
+        a = score.analyse(QUESTION, [call()], transcript(turns=1), 1)
+        assert score.struggle([a]) == pytest.approx(1.0)
+
+    def test_an_attempt_that_never_answered_scores_nothing(self):
+        a = score.analyse(QUESTION, [call()], transcript(answer=""), 1)
+        assert score.struggle([a]) == 0.0
+
+    def test_giving_up_immediately_must_not_beat_answering(self):
+        # The reason the completion gate exists. Fewer commands and fewer turns
+        # both score better, so without the gate the winning strategy would be
+        # to run nothing and answer nothing.
+        gave_up = score.analyse(QUESTION, [], transcript(answer=""), 1)
+        worked_hard = score.analyse(QUESTION, [call()] * 5, transcript(turns=9), 1)
+        assert score.struggle([gave_up]) < score.struggle([worked_hard])
+
+    def test_a_silent_wrong_answer_is_punished_harder_than_a_loud_error(self):
+        silent = score.analyse(QUESTION, [silent_call(), call()], transcript(), 1)
+        loud = score.analyse(QUESTION, [failing_call(), call()], transcript(), 1)
+        assert score.struggle([silent]) < score.struggle([loud])
+
+    def test_fewer_wasted_commands_scores_better(self):
+        one = score.analyse(QUESTION, [failing_call(), call()], transcript(), 1)
+        three = score.analyse(
+            QUESTION, [failing_call(), failing_call(), failing_call(), call()], transcript(), 1
+        )
+        assert score.struggle([one]) > score.struggle([three])
+
+    def test_taking_more_commands_to_get_there_scores_worse(self):
+        few = score.analyse(QUESTION, [call()] * 3, transcript(turns=1), 1)
+        many = score.analyse(QUESTION, [call()] * 9, transcript(turns=1), 1)
+        assert score.struggle([few]) > score.struggle([many])
+
+    def test_taking_more_turns_to_get_there_scores_worse(self):
+        brisk = score.analyse(QUESTION, [call()], transcript(turns=2), 1)
+        laboured = score.analyse(QUESTION, [call()], transcript(turns=18), 1)
+        assert score.struggle([brisk]) > score.struggle([laboured])
+
+    def test_recovering_from_an_error_scores_better_than_staying_stuck(self):
+        recovered = score.analyse(QUESTION, [failing_call(), call()], transcript(), 1)
+        stuck = score.analyse(QUESTION, [failing_call()], transcript(), 1)
+        assert score.struggle([recovered]) > score.struggle([stuck])
+
+    def test_nothing_to_score_is_zero_not_a_crash(self):
+        assert score.struggle([]) == 0.0
+
+
+class TestFeedbackNamesTheStruggle:
+    """A number GEPA cannot read an explanation for teaches it nothing."""
+
+    def test_a_silent_wrong_answer_is_called_out_as_the_worst_problem(self):
+        a = score.analyse(QUESTION, [silent_call()], transcript(), 1)
+        assert "WORST PROBLEM" in score.feedback(QUESTION, [a])
+
+    def test_it_reports_the_effort_even_when_nothing_went_wrong(self):
+        # So a change that shortened the path is visible, not just one that
+        # fixed an outright failure.
+        a = score.analyse(QUESTION, [call()], transcript(turns=4), 1)
+        assert "Effort:" in score.feedback(QUESTION, [a])
+
+    def test_a_wasted_command_is_explained_not_just_counted(self):
+        a = score.analyse(QUESTION, [failing_call(), call()], transcript(), 1)
+        assert "before finding one that" in score.feedback(QUESTION, [a])
+
