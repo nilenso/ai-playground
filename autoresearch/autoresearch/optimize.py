@@ -29,7 +29,8 @@ from pathlib import Path
 
 import gepa.optimize_anything as oa
 
-from . import baseline, blocked, config, proposer as proposer_mod, questions as qmod
+from . import (baseline, blocked, config, proposer as proposer_mod,
+               questions as qmod, repo_context)
 from .evaluator import Evaluator
 from .worktree import Pool, head_sha
 
@@ -66,15 +67,17 @@ Things that score badly:
 Keep the file valid Python that still starts. A file that will not import
 scores zero without being tested at all.
 
-IMPORTANT — you can only edit the files listed below. The tool has other source
-files you cannot touch on this run.
+IMPORTANT — you can only EDIT the files listed below. You can SEE the rest of
+the tool: its source is included further down, read-only. Those are different
+permissions and it is worth keeping them apart in your head. Read anything;
+change only what you are given.
 
-If you work out that the real cause of a failure lives in a file you have not
-been given, do NOT paper over it somewhere else. Say so plainly in your
-reasoning and name the file, like "the actual fix belongs in core.py". We read
-your reasoning after the run and will widen the next one. A clear statement
-that you are blocked is more useful to us than a workaround that muddies the
-measurement.
+If you work out that the real cause of a failure lives in a file you can read
+but not edit, do NOT paper over it somewhere else, and do NOT copy that file's
+logic into one you can edit. Say so plainly in your reasoning and name the
+file, like "the actual fix belongs in core.py". We read your reasoning after
+the run and will widen the next one. A clear statement that you are blocked is
+more useful to us than a workaround that muddies the measurement.
 
 If what you need is a file that does not exist yet, you cannot create it — the
 set of files you can edit is fixed before you start. Ask for it instead, on its
@@ -104,7 +107,8 @@ def _objective_text(lever: str) -> str:
 def run(lever: str, budget: int, holdout: float, reflection_lm: str,
         workers: int, keep_runs: bool,
         files: tuple[str, ...] | None = None,
-        proposer: str = "api") -> None:
+        proposer: str = "api",
+        repo_context_chars: int = repo_context.DEFAULT_BUDGET_CHARS) -> None:
     started = time.time()
     subscription = proposer == "subscription"
     checks = config.preflight(needs_api_key=not subscription)
@@ -122,6 +126,22 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
     for f in files:
         print(f"[oa]   {f}")
     print("[oa] GEPA changes one of them per round, so each change stays attributable")
+
+    # Read-only sight of everything else. Editing stays as narrow as it was --
+    # only what it can *see* widens.
+    repo = Path(checks["repo"])
+    if repo_context_chars > 0:
+        context = repo_context.build(repo, files, repo_context_chars)
+        context_note = repo_context.describe(repo, files, repo_context_chars)
+        print(f"[oa] plus read-only context on the whole repo "
+              f"({context_note['chars']:,} chars, ~{context_note['chars'] // 4:,} "
+              f"tokens per proposal)")
+        for f in context_note["mapped_only"]:
+            print(f"[oa]   {f}: listed but not included")
+    else:
+        context = ""
+        context_note = {"chars": 0, "disabled": True}
+        print("[oa] no repo context — GEPA sees only the files it may edit")
     per_file = budget // max(1, len(files))
     if per_file < 8:
         print(f"[oa] warning: ~{per_file} evaluations per file. GEPA spreads its "
@@ -165,7 +185,7 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
             valset=val,          # dataset + valset = "make it generalise"
             objective=_objective_text(lever),
             background=BACKGROUND + "\n\nFiles you may edit on this run:\n"
-            + "\n".join(f"  - {f}" for f in files),
+            + "\n".join(f"  - {f}" for f in files) + context,
             config=oa.GEPAConfig(
                 engine=oa.EngineConfig(
                     max_metric_calls=budget,
@@ -234,6 +254,12 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
             "release_requested": config.requested_release(),
             "pinned": False,
             "correctness_impl": config.CORRECTNESS_IMPL,
+            "legacy_correctness_impl": config.LEGACY_CORRECTNESS_IMPL,
+            "weights": dict(config.WEIGHTS),
+            "struggle_weights": dict(config.STRUGGLE_WEIGHTS),
+            # Two runs given different views of the repo are not comparable,
+            # and without this there would be no way to tell afterwards.
+            "repo_context": context_note,
             "proposer": described,
             "budget": budget,
             "evaluations_run": evaluate.calls,
@@ -279,6 +305,13 @@ def main() -> None:
                    help="who proposes the changes: 'api' bills OPENROUTER_API_KEY, "
                         "'subscription' shells out to `claude -p` and uses your "
                         "Claude Code plan instead")
+    p.add_argument("--repo-context-chars", type=int,
+                   default=repo_context.DEFAULT_BUDGET_CHARS,
+                   help="how much read-only source of the files GEPA may NOT edit to "
+                        "include in its context, in characters. 0 turns it off, which "
+                        "is the behaviour before this existed — use that to measure "
+                        "whether the context helps (default: "
+                        f"{repo_context.DEFAULT_BUDGET_CHARS})")
     p.add_argument("--all-files", action="store_true",
                    help="evolve every eligible file in the tool. Widens the search "
                         "beyond what we already know is broken, but splits the budget "
@@ -288,7 +321,8 @@ def main() -> None:
     chosen = tuple(args.files) if args.files else (
         config.discoverable_files() if args.all_files else None)
     run(args.lever, args.budget, args.holdout, args.reflection_lm,
-        args.workers, args.keep_runs, chosen, args.proposer)
+        args.workers, args.keep_runs, chosen, args.proposer,
+        args.repo_context_chars)
 
 
 if __name__ == "__main__":

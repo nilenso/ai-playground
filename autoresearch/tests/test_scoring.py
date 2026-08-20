@@ -532,3 +532,56 @@ class TestFeedbackNamesTheStruggle:
         a = score.analyse(QUESTION, [failing_call(), call()], transcript(), 1)
         assert "before finding one that" in score.feedback(QUESTION, [a])
 
+
+
+class TestRepoContext:
+    """GEPA may now SEE more than it may EDIT. Those are different permissions
+    and the value of the whole change depends on not confusing them."""
+
+    def _repo(self, tmp_path):
+        pkg = tmp_path / "botmap"
+        pkg.mkdir()
+        (pkg / "cli.py").write_text('"""The commands."""\nCLI_MARKER = 1\n')
+        (pkg / "core.py").write_text('"""Data plumbing."""\nCORE_MARKER = 1\n')
+        (pkg / "__init__.py").write_text("VERSION = 1\n")
+        return tmp_path
+
+    def test_every_file_is_listed_even_when_its_source_is_not_included(self, tmp_path):
+        from autoresearch import repo_context
+        text = repo_context.build(self._repo(tmp_path), ("botmap/cli.py",))
+        for rel in ("botmap/cli.py", "botmap/core.py", "botmap/__init__.py"):
+            assert rel in text
+
+    def test_a_file_it_cannot_edit_has_its_source_included(self, tmp_path):
+        # The whole point: core.py was reached for 35 times and never seen.
+        from autoresearch import repo_context
+        text = repo_context.build(self._repo(tmp_path), ("botmap/cli.py",))
+        assert "CORE_MARKER" in text
+
+    def test_an_editable_file_is_not_sent_twice(self, tmp_path):
+        # GEPA already holds it as the candidate. Sending it again pays for it
+        # twice and invites an edit to the stale copy.
+        from autoresearch import repo_context
+        text = repo_context.build(self._repo(tmp_path), ("botmap/cli.py",))
+        assert "CLI_MARKER" not in text
+
+    def test_the_map_says_which_files_are_editable(self, tmp_path):
+        from autoresearch import repo_context
+        text = repo_context.build(self._repo(tmp_path), ("botmap/cli.py",))
+        cli_line = next(l for l in text.splitlines()
+                        if "botmap/cli.py" in l and "lines" in l)
+        assert "EDITABLE" in cli_line
+
+    def test_dropping_a_file_for_length_is_announced_not_silent(self, tmp_path):
+        # A truncated context reads exactly like a complete one. GEPA would
+        # draw conclusions from a gap it could not see.
+        from autoresearch import repo_context
+        text = repo_context.build(self._repo(tmp_path), ("botmap/cli.py",), budget_chars=5)
+        assert "omitted for length" in text and "botmap/core.py" in text
+        assert "CORE_MARKER" not in text
+
+    def test_it_reports_what_it_actually_sent(self, tmp_path):
+        from autoresearch import repo_context
+        note = repo_context.describe(self._repo(tmp_path), ("botmap/cli.py",))
+        assert note["read_only_sources_included"] == ["botmap/core.py"]
+        assert note["chars"] > 0
