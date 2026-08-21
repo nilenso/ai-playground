@@ -1,0 +1,47 @@
+- id: coffee-brooklyn-count
+  question: How many coffee shops are in Brooklyn?
+  tier: 1
+  download_is_legitimate: false
+  target_type: place
+  place: Brooklyn, US-NY
+  notes: 'Ideal: count -t place --in Brooklyn --category coffee_shop'
+- id: where-boston
+  question: Where is Boston, MA, and what is its bounding box?
+  tier: 1
+  download_is_legitimate: false
+  target_type: division
+  place: Boston, US-MA
+  notes: 'Ideal: where ''Boston, MA'' (optionally --json for the bbox)'
+- id: tall-buildings-manhattan
+  question: Find buildings taller than 150m in Manhattan.
+  tier: 2
+  download_is_legitimate: false
+  target_type: building
+  place: Manhattan, US-NY
+  notes: 'Ideal: buildings --in Manhattan --where ''height>150'''
+- id: hardware-near-bikepaths-alameda
+  question: Find all the hardware stores within 200m of bike paths in Alameda County.
+  tier: 5
+  download_is_legitimate: false
+  target_type:
+  - place
+  - segment
+  place: Alameda County, US-CA
+  notes: Both layers have verbs; fetch each and join in code. download -t place/segment
+    is a failure.
+  subtasks:
+  - places --in 'Alameda County' --category hardware_store
+  - roads --in 'Alameda County' (filter to cycleway / bike paths)
+  - 'spatial join: hardware stores within 200m of a bike path'
+- id: busstops-coffee-williamsburg
+  question: How many bus stops have a coffee shop within 100m in Williamsburg, Brooklyn?
+  tier: 5
+  download_is_legitimate: false
+  target_type: place
+  place: Williamsburg, US-NY
+  notes: Both layers are places; fetch each and join in code. download -t place is
+    a failure.
+  subtasks:
+  - places --in Williamsburg --category bus_stop
+  - places --in Williamsburg --category coffee_shop
+  - 'spatial join + count: bus stops with a coffee shop within 100m'
