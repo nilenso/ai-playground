@@ -221,6 +221,31 @@ def pane_vitals(name: str) -> dict:
     return {"tokens": f"{m.group(1)}k", "spend": f"${m.group(2)}"} if m else {}
 
 
+def measurement_state() -> dict | None:
+    """Current Phase 4 measurement run progress, if present."""
+    path = SHARED / "experiments/runs/agenteval-measurement-3009509/summary.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return {"state": "unreadable", "path": str(path.parent)}
+    total = int(data.get("questions_total") or 0) * int(data.get("repeats") or 0)
+    done = int(data.get("attempts_done") or 0)
+    pct = round((done / total) * 100, 1) if total else 0.0
+    return {
+        "state": "finished" if data.get("finished") else "running",
+        "done": done,
+        "total": total,
+        "pct": pct,
+        "completed": int(data.get("completed") or 0),
+        "botmap_calls": int(data.get("botmap_calls") or 0),
+        "cost": float(data.get("cost_usd") or 0.0),
+        "updated": data.get("updated") or data.get("started") or "",
+        "path": str(path.parent),
+    }
+
+
 def cached_release() -> tuple[str, list[str]]:
     if not CACHE_DIR.exists():
         return ("no cache", [])
@@ -745,8 +770,27 @@ def view_overview() -> str:
     rows = rows or "<tr><td colspan=2><i>none</i></td></tr>"
     rel_cls = "ok" if release == "2026-08-19.0" else "warn"
 
+    measurement = measurement_state()
+    if measurement:
+        measurement_card = f"""
+  <article class="card {'working' if measurement['state'] == 'running' else 'idle'}">
+    <header><span class="dot"></span><h2>Phase 4 measurement run</h2>
+      <span class="status">{esc(measurement['state'])}</span></header>
+    <div class="kv"><span>attempts</span><b>{measurement['done']} / {measurement['total']} ({measurement['pct']}%)</b></div>
+    <div class="kv"><span>completed</span><b>{measurement['completed']}</b></div>
+    <div class="kv"><span>botmap calls</span><b>{measurement['botmap_calls']}</b></div>
+    <div class="kv"><span>OpenRouter spend</span><b>${measurement['cost']:.4f}</b></div>
+    <div class="kv"><span>updated</span><i>{esc(measurement['updated'])}</i></div>
+  </article>"""
+    else:
+        measurement_card = """
+  <article class="card"><header><h2>Phase 4 measurement run</h2></header>
+    <div class="kv"><span>state</span><b>not started</b></div>
+  </article>"""
+
     return f"""<div class="grid">{''.join(cards)}</div>
 <div class="grid">
+  {measurement_card}
   <article class="card"><header><h2>Shared constraints</h2></header>
     <div class="kv"><span>OpenRouter left</span><b>{esc(openrouter_balance())}</b></div>
     <div class="kv"><span>map release cached</span><b class="{rel_cls}">{esc(release)}</b></div>
