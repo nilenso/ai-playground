@@ -68,10 +68,16 @@ def ask(question: Question, tree: Path, repeat: int, keep_dir: Path | None = Non
 
     try:
         _install_instructions(workdir, tree)
+        # Same model either way. On the fallback path it has to be named in
+        # full, because `sonnet` is the subscription's alias and OpenRouter
+        # offers several Sonnets -- picking the wrong one would measure a
+        # model difference and report it as a path difference.
+        model = (config.OPENROUTER_MODEL if config.agent_path() == "openrouter"
+                 else config.AGENT_MODEL)
         cmd = [
             "claude", "-p", question.question,
             "--output-format", "stream-json", "--verbose",
-            "--model", config.AGENT_MODEL,
+            "--model", model,
             "--permission-mode", "bypassPermissions",
             "--allowedTools", "Bash",
         ]

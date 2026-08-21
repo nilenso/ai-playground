@@ -107,10 +107,13 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
         proposer: str = "api") -> None:
     started = time.time()
     subscription = proposer == "subscription"
-    checks = config.preflight(needs_api_key=not subscription)
+    # Before preflight, because checking the cached baseline's map-data
+    # release needs to know which baseline we would be reusing.
     sha = head_sha()
+    checks = config.preflight(needs_api_key=not subscription, sha=sha)
     print(f"[oa] tool: {checks['repo']} @ {sha}")
-    print("[oa] map data: NOT pinned — the tool uses whatever is latest")
+    print(f"[oa] map data: NOT pinned — {checks['release']}")
+    print(f"[oa] link to map data: {checks['network']}")
     # Either a model name for litellm to bill, or a callable that shells out
     # to `claude -p` on the subscription. GEPA accepts both.
     proposing_lm = proposer_mod.claude_cli() if subscription else reflection_lm
@@ -134,7 +137,11 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
 
     run_dir = config.ROOT / "experiments" / "runs" / f"{lever}-{sha}-{int(started)}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    keep_dir = run_dir / "attempts" if keep_runs else None
+    # Candidates only, and only when asked: a GEPA run is hundreds of attempts
+    # and retaining them all would quietly fill the disk. The baseline keeps
+    # its own regardless -- 60 attempts, read by everything downstream -- and
+    # deliberately does NOT share this variable, so it cannot leak back here.
+    candidate_attempts = run_dir / "attempts" if keep_runs else None
 
     pool = Pool(sha, files=files)
     pool.prune()
@@ -148,11 +155,11 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
         if reference is None:
             print(f"[oa] no yardstick for {sha} yet — measuring the unchanged tool once")
             pool.reset(tree)
-            reference = baseline.measure(bank, tree, sha, keep_dir=keep_dir)
+            reference = baseline.measure(bank, tree, sha)
         else:
             print(f"[oa] reusing the yardstick measured earlier for {sha}")
 
-        evaluate = Evaluator(lever, pool, reference, keep_dir=keep_dir)
+        evaluate = Evaluator(lever, pool, reference, keep_dir=candidate_attempts)
         seed = pool.read_original(lever)
         total = sum(len(t.splitlines()) for t in seed.values())
         print(f"[oa] starting from the current files ({total} lines in total)")
@@ -234,6 +241,12 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
             "release_requested": config.requested_release(),
             "pinned": False,
             "correctness_impl": config.CORRECTNESS_IMPL,
+            # Which till answered the questions, and which host served them.
+            # A run compared against a baseline taken on another path is the
+            # same defect as one taken on another map-data release.
+            "agent_path": config.agent_path(),
+            "agent_provider": config.agent_provider(),
+            "agent_model": config.AGENT_MODEL,
             "proposer": described,
             "budget": budget,
             "evaluations_run": evaluate.calls,
