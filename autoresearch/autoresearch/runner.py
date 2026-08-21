@@ -105,6 +105,10 @@ def ask(question: Question, tree: Path, repeat: int, keep_dir: Path | None = Non
                                ("claude-stderr.log", stderr_path)):
                 if path.exists():
                     shutil.copy(path, keep / name)
+            from .agenteval.contract import write as write_record2
+            from .agenteval.record import build_record
+
+            write_record2(keep / "record-v2.json", build_record(attempt, transcript_path=transcript_path))
         return attempt
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
