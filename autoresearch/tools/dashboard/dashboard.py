@@ -189,13 +189,22 @@ def herdr_agents() -> dict[str, dict]:
         agents = json.loads(run(["herdr", "agent", "list"]))["result"]["agents"]
     except Exception:
         return {}
-    return {
+    by_name = {
         (a.get("name") or "orchestrator"): {
             "status": a.get("agent_status", "unknown"),
             "pane": a.get("pane_id", ""),
         }
         for a in agents
     }
+    # The Claude arms were replaced by Pi arms after the subscription ran out.
+    # Keep the dashboard's stable arm-a/b/c keys live by preferring pi-arm-* when
+    # those replacement sessions exist.
+    for arm in ("a", "b", "c"):
+        pi_name = f"pi-arm-{arm}"
+        arm_name = f"arm-{arm}"
+        if pi_name in by_name:
+            by_name[arm_name] = by_name[pi_name]
+    return by_name
 
 
 _STATUS_LINE = re.compile(r"\|\s*([\d.]+)k tok\s*\|.*?\|\s*\$([\d.]+)")

@@ -1,0 +1,921 @@
+{
+  "source": "experiments/runs/baseline-noise-run1-3009509/attempts",
+  "note": "Phase 3 zero-spend classifier pass over retained attempts. Differential probes were not run, so class-C subtypes are c-unknown unless evident from call text.",
+  "attempts": 60,
+  "botmap_calls": 323,
+  "class_counts": {
+    "None": 283,
+    "C": 8,
+    "B": 12,
+    "A": 20
+  },
+  "subtype_counts": {
+    "c-unknown": 8
+  },
+  "attempts_with_failures": 19,
+  "details": [
+    {
+      "attempt": "asian-restaurants-rollup__r1",
+      "botmap_calls": 14,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "place",
+            "--in",
+            "Cambridge, MA",
+            "--where",
+            "categories.primary=noodle_bar"
+          ],
+          "class": "C",
+          "subtype": "c-unknown",
+          "evidence": "empty result with no conclusive probe; reason unknown"
+        },
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "place",
+            "--in",
+            "Cambridge, MA",
+            "--where",
+            "categories.primary=pho_restaurant"
+          ],
+          "class": "C",
+          "subtype": "c-unknown",
+          "evidence": "empty result with no conclusive probe; reason unknown"
+        }
+      ]
+    },
+    {
+      "attempt": "asian-restaurants-rollup__r2",
+      "botmap_calls": 30,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "basic-category-rollup__r1",
+      "botmap_calls": 7,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "basic-category-rollup__r2",
+      "botmap_calls": 4,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "bbox-cambridge__r1",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "bbox-cambridge__r2",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "beach-accessibility-malta__r1",
+      "botmap_calls": 9,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "beach-accessibility-malta__r2",
+      "botmap_calls": 11,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        },
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        },
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        }
+      ]
+    },
+    {
+      "attempt": "bike-parking-coverage__r1",
+      "botmap_calls": 15,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "place",
+            "--in",
+            "Cambridge, MA",
+            "--where",
+            "categories.primary=bicycle_parking"
+          ],
+          "class": "C",
+          "subtype": "c-unknown",
+          "evidence": "empty result with no conclusive probe; reason unknown"
+        },
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        },
+        {
+          "argv": [
+            "download",
+            "-t",
+            "infrastructure",
+            "--in",
+            "Cambridge, MA",
+            "--where",
+            "subtype=transit",
+            "--where",
+            "class=bicycle_parking",
+            "-f",
+            "geojsonseq",
+            "-o",
+            "bike_parking.jsonl"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap download [OPTIONS]"
+        },
+        {
+          "argv": [
+            "sample",
+            "-t",
+            "segment",
+            "--in",
+            "Cambridge, MA",
+            "--where",
+            "road_flags is not null",
+            "-n",
+            "5"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap sample [OPTIONS]"
+        }
+      ]
+    },
+    {
+      "attempt": "bike-parking-coverage__r2",
+      "botmap_calls": 14,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "place",
+            "--in",
+            "Cambridge, MA",
+            "--where",
+            "categories.primary=bicycle_parking"
+          ],
+          "class": "C",
+          "subtype": "c-unknown",
+          "evidence": "empty result with no conclusive probe; reason unknown"
+        },
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        }
+      ]
+    },
+    {
+      "attempt": "brooklyn-every-building__r1",
+      "botmap_calls": 2,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "brooklyn-every-building__r2",
+      "botmap_calls": 3,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "building-parts-detail__r1",
+      "botmap_calls": 9,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "download",
+            "-t",
+            "division_area",
+            "--bbox",
+            "-71.1604,42.3524,-71.0640,42.4043",
+            "--where",
+            "subtype=locality",
+            "-f",
+            "geojsonseq",
+            "-o",
+            "cambridge_area.jsonl"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap download [OPTIONS]"
+        }
+      ]
+    },
+    {
+      "attempt": "building-parts-detail__r2",
+      "botmap_calls": 9,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        },
+        {
+          "argv": [
+            "building_part",
+            "--in",
+            "Cambridge, MA"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap [OPTIONS] COMMAND [ARGS]..."
+        },
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        }
+      ]
+    },
+    {
+      "attempt": "bus-stops-cambridge__r1",
+      "botmap_calls": 8,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "place",
+            "--in",
+            "Cambridge, US-MA",
+            "--where",
+            "categories.primary=bus_stop"
+          ],
+          "class": "C",
+          "subtype": "c-unknown",
+          "evidence": "empty result with no conclusive probe; reason unknown"
+        },
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "place",
+            "--in",
+            "Boston, US-MA",
+            "--where",
+            "categories.primary=bus_stop"
+          ],
+          "class": "C",
+          "subtype": "c-unknown",
+          "evidence": "empty result with no conclusive probe; reason unknown"
+        }
+      ]
+    },
+    {
+      "attempt": "bus-stops-cambridge__r2",
+      "botmap_calls": 6,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "place",
+            "--in",
+            "Cambridge, MA",
+            "--where",
+            "categories.primary=bus_stop"
+          ],
+          "class": "C",
+          "subtype": "c-unknown",
+          "evidence": "empty result with no conclusive probe; reason unknown"
+        },
+        {
+          "argv": [
+            "--json",
+            "schema",
+            "-t",
+            "place"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        }
+      ]
+    },
+    {
+      "attempt": "bus-stops-with-coffee__r1",
+      "botmap_calls": 7,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "bus-stops-with-coffee__r2",
+      "botmap_calls": 24,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        },
+        {
+          "argv": [
+            "--json",
+            "categories",
+            "-t",
+            "infrastructure",
+            "--in",
+            "Williamsburg, Brooklyn, NY",
+            "--top",
+            "200"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap categories [OPTIONS]"
+        },
+        {
+          "argv": [
+            "download",
+            "-t",
+            "infrastructure",
+            "--in",
+            "Williamsburg, Brooklyn, NY",
+            "--where",
+            "class=bus_stop",
+            "-f",
+            "geojsonseq",
+            "-o",
+            "busstops.jsonl"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap download [OPTIONS]"
+        },
+        {
+          "argv": [
+            "download",
+            "-t",
+            "infrastructure",
+            "--bbox",
+            "-73.96245306396484,40.70561868286133,-73.94443780517578,40.723622497558594",
+            "--where",
+            "class=bus_stop",
+            "-f",
+            "geojsonseq",
+            "-o",
+            "busstops.jsonl"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap download [OPTIONS]"
+        },
+        {
+          "argv": [
+            "places",
+            "--in",
+            "Williamsburg, Brooklyn, NY",
+            "--category",
+            "bus_stop",
+            "-f",
+            "geojsonseq"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        },
+        {
+          "argv": [
+            "download",
+            "-t",
+            "infrastructure",
+            "--in",
+            "Williamsburg, Brooklyn, NY",
+            "--where",
+            "subtype=transit",
+            "-f",
+            "geojsonseq",
+            "-o",
+            "transit.jsonl"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap download [OPTIONS]"
+        }
+      ]
+    },
+    {
+      "attempt": "clipping-polygon-qgis__r1",
+      "botmap_calls": 1,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "clipping-polygon-qgis__r2",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "ev-charging-gap__r1",
+      "botmap_calls": 8,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "schema",
+            "-t",
+            "place"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        },
+        {
+          "argv": [
+            "--json",
+            "download",
+            "-t",
+            "division",
+            "--bbox",
+            "-71.1604,42.3524,-71.0640,42.4043",
+            "--where",
+            "subtype=neighborhood"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap download [OPTIONS]"
+        }
+      ]
+    },
+    {
+      "attempt": "ev-charging-gap__r2",
+      "botmap_calls": 5,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "hardware-near-bikepaths__r1",
+      "botmap_calls": 5,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "hardware-near-bikepaths__r2",
+      "botmap_calls": 11,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "hospitals-rhode-island__r1",
+      "botmap_calls": 3,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "hospitals-rhode-island__r2",
+      "botmap_calls": 4,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "hotel-density-two-countries__r1",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "hotel-density-two-countries__r2",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "junction-density__r1",
+      "botmap_calls": 5,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "junction-density__r2",
+      "botmap_calls": 6,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "malta-highways-absent-class__r1",
+      "botmap_calls": 5,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "malta-highways-absent-class__r2",
+      "botmap_calls": 5,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "motorways-rhode-island__r1",
+      "botmap_calls": 6,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "count",
+            "-t",
+            "segment",
+            "--in",
+            "Rhode Island, US-RI",
+            "--where",
+            "class=motorway",
+            "--json"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap count [OPTIONS]"
+        }
+      ]
+    },
+    {
+      "attempt": "motorways-rhode-island__r2",
+      "botmap_calls": 6,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "nearest-pois-harvard__r1",
+      "botmap_calls": 1,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "nearest-pois-harvard__r2",
+      "botmap_calls": 1,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "pharmacies-monaco__r1",
+      "botmap_calls": 2,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "pharmacies-monaco__r2",
+      "botmap_calls": 2,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "pharmacy-near-address__r1",
+      "botmap_calls": 6,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "at",
+            "42.3663248,-71.1060534",
+            "-t",
+            "place",
+            "--category",
+            "pharmacy",
+            "-n",
+            "5"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap at [OPTIONS] LATLON"
+        }
+      ]
+    },
+    {
+      "attempt": "pharmacy-near-address__r2",
+      "botmap_calls": 4,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "at",
+            "42.3663248,-71.1060534",
+            "-t",
+            "place",
+            "--category",
+            "pharmacy",
+            "-n",
+            "5"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap at [OPTIONS] LATLON"
+        }
+      ]
+    },
+    {
+      "attempt": "residential-share-cambridge__r1",
+      "botmap_calls": 6,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "residential-share-cambridge__r2",
+      "botmap_calls": 5,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "reykjavik-diacritic__r1",
+      "botmap_calls": 4,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "where",
+            "Reykjavik"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "{\"error\":{\"code\":\"no_match\",\"message\":\"No division found for 'Reykjavik'. It may be a neighborhood not in Overture's divisions index. Try a parent locality (city \u2192 state \u2192 country), `containing LAT,LON`, or `--bbox`.\"}}"
+        }
+      ]
+    },
+    {
+      "attempt": "reykjavik-diacritic__r2",
+      "botmap_calls": 4,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "where",
+            "Reykjavik, Iceland"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "{\"error\":{\"code\":\"no_match\",\"message\":\"No division found for 'Reykjavik, Iceland'. It may be a neighborhood not in Overture's divisions index. Try a parent locality (city \u2192 state \u2192 country), `containing LAT,LON`, or `--bbox`.\"}}"
+        }
+      ]
+    },
+    {
+      "attempt": "starbucks-name-vs-brand__r1",
+      "botmap_calls": 2,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "starbucks-name-vs-brand__r2",
+      "botmap_calls": 4,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "street-canonical-form__r1",
+      "botmap_calls": 5,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "address",
+            "--in",
+            "Cambridge, MA",
+            "--street",
+            "Massachusetts Ave"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap count [OPTIONS]"
+        }
+      ]
+    },
+    {
+      "attempt": "street-canonical-form__r2",
+      "botmap_calls": 6,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "address",
+            "--in",
+            "Cambridge, MA",
+            "--where",
+            "street=Massachusetts Avenue"
+          ],
+          "class": "C",
+          "subtype": "c-unknown",
+          "evidence": "empty result with no conclusive probe; reason unknown"
+        },
+        {
+          "argv": [
+            "--json",
+            "count",
+            "-t",
+            "address",
+            "--in",
+            "Cambridge, MA",
+            "--street",
+            "Massachusetts Ave"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap count [OPTIONS]"
+        }
+      ]
+    },
+    {
+      "attempt": "tall-buildings-cambridge__r1",
+      "botmap_calls": 3,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "tall-buildings-cambridge__r2",
+      "botmap_calls": 2,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "tattoo-category-discovery__r1",
+      "botmap_calls": 2,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "tattoo-category-discovery__r2",
+      "botmap_calls": 3,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "unsupported-hours-and-ratings__r1",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "unsupported-hours-and-ratings__r2",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "waterfront-buildings-reykjavik__r1",
+      "botmap_calls": 9,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "capabilities"
+          ],
+          "class": "B",
+          "subtype": null,
+          "evidence": "tool named a recovery path for the next iteration"
+        },
+        {
+          "argv": [
+            "--json",
+            "where",
+            "Reykjavik",
+            "--all"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "{\"error\":{\"code\":\"no_match\",\"message\":\"No division found for 'Reykjavik'. It may be a neighborhood not in Overture's divisions index. Try a parent locality (city \u2192 state \u2192 country), `containing LAT,LON`, or `--bbox`.\"}}"
+        },
+        {
+          "argv": [
+            "where",
+            "Reykjav\u00edk, Iceland",
+            "--geometry",
+            "-o",
+            "/tmp/reyk_boundary.geojson"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "Usage: python -m botmap where [OPTIONS] QUERY"
+        }
+      ]
+    },
+    {
+      "attempt": "waterfront-buildings-reykjavik__r2",
+      "botmap_calls": 6,
+      "attempt_class": null,
+      "failures": [
+        {
+          "argv": [
+            "--json",
+            "where",
+            "Reykjavik, Iceland"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "{\"error\":{\"code\":\"no_match\",\"message\":\"No division found for 'Reykjavik, Iceland'. It may be a neighborhood not in Overture's divisions index. Try a parent locality (city \u2192 state \u2192 country), `containing LAT,LON`, or `--bbox`.\"}}"
+        },
+        {
+          "argv": [
+            "--json",
+            "where",
+            "Reykjavik"
+          ],
+          "class": "A",
+          "subtype": null,
+          "evidence": "{\"error\":{\"code\":\"no_match\",\"message\":\"No division found for 'Reykjavik'. It may be a neighborhood not in Overture's divisions index. Try a parent locality (city \u2192 state \u2192 country), `containing LAT,LON`, or `--bbox`.\"}}"
+        }
+      ]
+    },
+    {
+      "attempt": "which-admin-areas__r1",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "which-admin-areas__r2",
+      "botmap_calls": 0,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "williamsburg-which-one__r1",
+      "botmap_calls": 2,
+      "attempt_class": null,
+      "failures": []
+    },
+    {
+      "attempt": "williamsburg-which-one__r2",
+      "botmap_calls": 2,
+      "attempt_class": null,
+      "failures": []
+    }
+  ]
+}

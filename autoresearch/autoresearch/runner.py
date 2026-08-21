@@ -76,6 +76,7 @@ def ask(question: Question, tree: Path, repeat: int, keep_dir: Path | None = Non
                  else config.AGENT_MODEL)
         cmd = [
             "claude", "-p", question.question,
+            "--setting-sources", "project",
             "--output-format", "stream-json", "--verbose",
             "--model", model,
             "--permission-mode", "bypassPermissions",
