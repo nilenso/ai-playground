@@ -1,0 +1,403 @@
+# Agent-usability eval question bank.
+# Fields:
+#   id                     stable slug (no '__' — that delimits run dirs)
+#   question               the prompt handed verbatim to `claude -p`
+#   tier                   1..5 complexity tier
+#   download_is_legitimate true only when no convenience verb covers the type
+#   target_type            expected Overture type(s) for the answer
+#   place                  optional; resolved by the cost guard to bound query size
+#   notes                  ideal path (and, for compound, the expected decomposition)
+#   subtasks               optional; expected verb-by-verb decomposition (compound)
+#
+# Convenience-verb coverage (drives download_is_legitimate):
+#   covered   place->places  building->buildings  segment->roads  water->water
+#             land_use->landuse  address->addresses
+#   uncovered building_part  land_cover  land  connector  infrastructure
+#             division_boundary  bulk division_area
+
+# ---------------------------------------------------------------------------
+# Tier 1 — plain ask, obvious answer. The only thing under test is whether the
+# agent picks the right verb on the first try.
+# ---------------------------------------------------------------------------
+
+- id: hospitals-count-rhode-island
+  question: "How many hospitals are there in Rhode Island?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: place
+  place: "Rhode Island, US"
+  notes: >
+    count --category hospital --in "Rhode Island". One call, no fetch. Failure
+    mode is reaching for `places` and counting the output — same number, but it
+    pulls every feature to get there.
+
+- id: lakes-lake-district
+  question: "What lakes and reservoirs are in the Lake District?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: water
+  place: "Lake District, GB"
+  notes: >
+    `water --in "Lake District"`, filtered by subtype. Lakes and reservoirs are
+    subtypes of one water type, not separate types — the agent has to find that
+    out, but the question is a real ask, not a request for a catalogue.
+
+- id: reverse-geocode-point
+  question: "What administrative areas contain the point 41.8973, 12.4763?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: division
+  notes: >
+    `containing 41.8973,12.4763` — innermost admin_level first. Tests lat-first
+    ordering. Failure mode: swapping to lon,lat and reporting a point in the
+    Indian Ocean with no error, since both orderings parse fine.
+
+- id: nearest-poi-lookup
+  question: "What's the closest place to 42.3736, -71.1097?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: place
+  notes: >
+    `at 42.3736,-71.1097`. The nearest-neighbour verb exists precisely so the
+    agent doesn't download a bbox and sort it in context.
+
+- id: resolve-place-alameda
+  question: "What are the boundaries of Alameda County, California?"
+  tier: 1
+  download_is_legitimate: false
+  target_type: [division, division_area]
+  place: "Alameda County, CA, US"
+  notes: >
+    `where` for the division, `boundary` if the asker wants geometry. Tests the
+    distinction between the two: metadata vs polygon. Either is defensible here;
+    downloading division_area in bulk is not.
+
+# ---------------------------------------------------------------------------
+# Tier 2 — the right verb exists but isn't the obvious one, or the filter
+# needs something the model can't guess.
+# ---------------------------------------------------------------------------
+
+- id: cafes-cambridge-ma
+  question: "List the coffee shops in Cambridge, Massachusetts."
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Cambridge, MA, US"
+  notes: >
+    count --category cafe --in "Cambridge, MA" first, then `places` to a file.
+    Escalation discipline is what's under test: count -> sample -> full.
+
+- id: sample-before-commit
+  question: "Show me what building data looks like for Rotterdam before I download the whole thing."
+  tier: 2
+  download_is_legitimate: false
+  target_type: building
+  place: "Rotterdam, NL"
+  notes: >
+    `sample` is the intended verb and the question all but names it. Failure
+    mode: running `buildings` and truncating the output, which pays the full
+    query cost to answer a preview question.
+
+- id: category-discovery-tattoo
+  question: "Find the tattoo parlors in Portland, Oregon."
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Portland, OR, US"
+  notes: >
+    The category value can't be guessed, so `categories` has to happen mid-task
+    before `count`/`places`. Failure mode: inventing a category string, then
+    reporting the empty result from a well-formed query as a finding about
+    Portland.
+
+- id: contact-details-bruges
+  question: "I want the websites and phone numbers for restaurants in Bruges."
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  place: "Bruges, BE"
+  notes: >
+    Those fields exist but are sparsely populated. A list where most rows are
+    null is a misleading deliverable if handed over unqualified — the answer
+    should report the fill rate alongside the results.
+
+- id: street-substring-addresses
+  question: "Find every address on Fountain Street in Providence, Rhode Island."
+  tier: 2
+  download_is_legitimate: false
+  target_type: address
+  place: "Providence, RI, US"
+  notes: >
+    addresses --in "Providence, RI" --street Fountain. --street is
+    case-insensitive substring, so Fountain St / Ave / Blvd all match — the
+    answer should say so rather than presenting the set as exact. Unbounded
+    calls are refused by design; the agent must supply --in or --bbox.
+
+- id: bbox-from-boundary
+  question: "I need a clipping polygon for Brooklyn to use in QGIS."
+  tier: 2
+  download_is_legitimate: false
+  target_type: division_area
+  place: "Brooklyn, NY, US"
+  notes: >
+    `boundary "Brooklyn, NY"` emits a GeoJSON Feature on stdout. This is the
+    one case where stdout-as-data is right — a single small polygon meant for
+    piping. Failure mode: using `where`, which returns metadata, not geometry.
+
+- id: release-currency-check
+  question: "Is the Overture extract I downloaded last month still current?"
+  tier: 2
+  download_is_legitimate: false
+  target_type: null
+  notes: >
+    `releases check <file>` against `releases latest`. Failure mode: reasoning
+    about the monthly cadence in general instead of checking the actual file.
+
+# ---------------------------------------------------------------------------
+# Tier 3 — malformed, ambiguous, or aimed past the data. Success is a good
+# refusal or redirect, not a good answer. Score these on error quality.
+# ---------------------------------------------------------------------------
+
+- id: unsupported-hours-and-ratings
+  question: "Find highly rated coffee shops near me that are open right now."
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  notes: >
+    Three independent failures: no opening hours in the schema, no ratings or
+    review counts, and no origin for "near me" (`at` needs an explicit LAT,LON).
+    Ideal path names all three separately and returns nothing. Silently
+    dropping the unsupported filters returns cafés — a confident answer to a
+    different question, and the most important single case in this bank.
+
+- id: ambiguous-area-springfield
+  question: "How many restaurants are in Springfield?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  notes: >
+    `where "Springfield"` must fail with a machine-actionable candidate list —
+    GERS ID, region, country, admin_level — not prose asking the user to be
+    more specific, and never an interactive picker. Retry by GERS ID should
+    then succeed in one call.
+
+- id: theme-boundary-bus-stops
+  question: "Where are the bus stops in Boston?"
+  tier: 3
+  download_is_legitimate: true
+  target_type: infrastructure
+  place: "Boston, MA, US"
+  notes: >
+    A place is a destination, not a waypoint, so transit stops sit in
+    base/infrastructure rather than places. No convenience verb covers
+    infrastructure, so `download` bounded by a bbox from `boundary` is correct
+    once the theme is right. Tests the redirect AND that download is sometimes
+    the answer.
+
+- id: dual-theme-mountain-peaks
+  question: "How many mountain peaks are there around Chamonix?"
+  tier: 3
+  download_is_legitimate: true
+  target_type: [place, land]
+  place: "Chamonix-Mont-Blanc, FR"
+  notes: >
+    Peaks appear in BOTH places (named destinations with GERS IDs) and
+    base/land (physical features), with materially different counts. A single
+    number that doesn't say which theme produced it is wrong even when the
+    arithmetic is right. `land` has no convenience verb.
+
+- id: roads-are-not-just-roads
+  question: "Get me the pedestrian paths in central Ljubljana."
+  tier: 3
+  download_is_legitimate: false
+  target_type: segment
+  place: "Ljubljana, SI"
+  notes: >
+    `roads` is the verb, but its name under-sells it — footways and paths are
+    segments too. Failure mode: concluding the CLI can't do this because the
+    verb says "roads", then falling back to raw download.
+
+- id: address-coverage-gap
+  question: "How complete is Overture's address coverage for Portugal?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: address
+  place: "Portugal"
+  notes: >
+    `count` yields a number, and the bare number is misleading — addresses is
+    the least mature theme and coverage is country-dependent, so an unqualified
+    count reads as a completeness claim it can't support.
+
+# ---------------------------------------------------------------------------
+# Tier 4 — multi-verb. Needs a plan before the first call, and usually an
+# external tool for the join: the CLI emits, it does not join.
+# ---------------------------------------------------------------------------
+
+- id: orphan-groceries-cambridge
+  question: "Which grocery stores in Cambridge, MA are not inside any building footprint?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: [place, building]
+  place: "Cambridge, MA, US"
+  subtasks:
+    - count --category grocery_store --in "Cambridge, MA"
+    - count buildings --in "Cambridge, MA"
+    - places --category grocery_store --in "Cambridge, MA" -o groceries
+    - buildings --in "Cambridge, MA" -o buildings
+    - anti-join on containment in DuckDB
+  notes: >
+    Both counts precede both fetches. The join happens outside the CLI — no
+    verb does spatial joins. A strong answer frames the residual as a
+    data-quality finding (geocode drift, missing footprints) rather than as
+    ground truth about buildings that don't exist.
+
+- id: changelog-in-a-place
+  question: "What changed in Overture's building data for Austin since the last release?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: building
+  place: "Austin, TX, US"
+  subtasks:
+    - boundary "Austin, TX"
+    - derive bbox from that polygon
+    - changelog query --bbox=<W,S,E,N> --theme=buildings --type=building
+  notes: >
+    `changelog query` takes a bbox only — it has no --in. The agent must bridge
+    place name to bbox via `boundary`, the one composition step the CLI doesn't
+    do for it. Failure mode: hallucinating Austin's bbox instead of deriving it.
+
+- id: changelog-scope-check
+  question: "Has Overture's places data changed much globally in this release?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: place
+  notes: >
+    `changelog summary --theme=places` — the unbounded aggregate verb exists
+    for exactly this. Failure mode: attempting `changelog query` with a world
+    bbox, the expensive way to ask a cheap question.
+
+- id: motorway-length-luxembourg
+  question: "What is the total length of motorway in Luxembourg?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: segment
+  place: "Luxembourg"
+  subtasks:
+    - count roads --in Luxembourg to size the fetch
+    - roads --in Luxembourg (motorway class) -o roads
+    - boundary Luxembourg for clipping
+    - sum ST_Length on a projected CRS
+  notes: >
+    Two traps: summing lengths in EPSG:4326 degrees, and double-counting
+    segments that cross the border without clipping to the boundary polygon.
+    The answer should name the projection it used.
+
+- id: poi-density-by-district
+  question: "Which district of Lisbon has the highest density of restaurants per square kilometre?"
+  tier: 4
+  download_is_legitimate: true
+  target_type: [place, division_area]
+  place: "Lisbon, PT"
+  subtasks:
+    - where "Lisbon" to resolve the parent division
+    - download division_area for the child admin level (no bulk verb covers it)
+    - count then places --category restaurant --in Lisbon
+    - point-in-polygon aggregate, divide by ST_Area on a projected CRS
+  notes: >
+    `boundary` returns one polygon; this needs every child polygon, which only
+    raw download provides. Tests whether the agent spots that gap instead of
+    calling `boundary` once per guessed district name.
+
+# ---------------------------------------------------------------------------
+# Tier 5 — compound. The decomposition itself is the thing under test.
+# ---------------------------------------------------------------------------
+
+- id: grocery-access-gap-providence
+  question: "Identify the neighbourhoods in Providence, RI that are furthest from any grocery store."
+  tier: 5
+  download_is_legitimate: true
+  target_type: [place, division_area]
+  place: "Providence, RI, US"
+  subtasks:
+    - boundary "Providence, RI" for the outer polygon
+    - download division_area for neighbourhood-level children
+    - count then places --category grocery_store over a BUFFERED bbox
+    - distance from each neighbourhood centroid to the nearest store
+    - rank and report
+  notes: >
+    Stores just outside the city line still serve residents, so the places bbox
+    must exceed the division polygon. The answer should state its distance
+    metric — `at` is nearest-neighbour, not routing, and there is no routing
+    verb, so straight-line is the honest default if declared.
+
+- id: ev-charging-coverage-corridor
+  question: "Assess EV charging coverage along the motorway corridor in Slovenia."
+  tier: 5
+  download_is_legitimate: false
+  target_type: [place, segment]
+  place: "Slovenia"
+  subtasks:
+    - roads --in Slovenia (motorway class) -o motorways
+    - categories to confirm the charging-station value
+    - count then places --category <ev> --in Slovenia
+    - buffer segments, spatial join, compute gaps along the corridor
+  notes: >
+    Cross-theme with a buffer and an external join. Charging coverage in places
+    is thin; a strong answer caveats that observed gaps may be data gaps rather
+    than facts about the road network.
+
+- id: walkability-audit-ljubljana
+  question: "Do an audit of walkability in central Ljubljana using Overture data."
+  tier: 5
+  download_is_legitimate: false
+  target_type: [segment, place, building]
+  place: "Ljubljana, SI"
+  subtasks:
+    - state or ask for a working definition of walkability
+    - roads --in Ljubljana filtered to footway/path/pedestrian
+    - places --in Ljubljana for amenity density
+    - buildings --in Ljubljana for footprint density
+    - aggregate to a grid or to division_area
+  notes: >
+    Deliberately underspecified. Ideal path asks one scoping question or states
+    an explicit definition BEFORE fetching. Failure mode: pulling three themes
+    for the whole city and then deciding what the question meant.
+
+- id: bulk-landcover-malta
+  question: "Export the complete land cover dataset for Malta as GeoParquet."
+  tier: 5
+  download_is_legitimate: true
+  target_type: land_cover
+  place: "Malta"
+  notes: >
+    No convenience verb covers land_cover, so raw `download` bounded by a bbox
+    from `boundary` is correct. This case exists so the eval doesn't teach that
+    download is always wrong — penalising it here would be a false positive.
+
+- id: bulk-building-parts-rotterdam
+  question: "I need the raw building_part records for Rotterdam for a 3D model."
+  tier: 5
+  download_is_legitimate: true
+  target_type: building_part
+  place: "Rotterdam, NL"
+  notes: >
+    Same shape as land_cover, plus a downstream use that rules out lossy
+    output. `buildings` covers building but NOT building_part — the near-miss
+    is the trap. Agent should still count or sample before committing, and keep
+    GeoParquet rather than converting to GeoJSON.
+
+- id: connector-topology-monaco
+  question: "I want to build a routable graph from Overture road data for Monaco."
+  tier: 5
+  download_is_legitimate: true
+  target_type: [segment, connector]
+  place: "Monaco"
+  subtasks:
+    - roads --in Monaco -o segments
+    - boundary Monaco to derive a bbox
+    - download connector over that bbox (no convenience verb)
+    - join segments to connectors on connector references
+  notes: >
+    `roads` gets segments, but topology needs connectors, which have no verb.
+    Failure mode: shipping segments alone and calling it routable — the output
+    looks complete and is silently missing the graph's edges.

@@ -1,0 +1,93 @@
+# Agent-usability eval question bank.
+# Fields:
+#   id                     stable slug (no '__' — that delimits run dirs)
+#   question               the prompt handed verbatim to `claude -p`
+#   tier                   1..5 complexity tier
+#   download_is_legitimate true only when no convenience verb covers the type
+#   target_type            expected Overture type(s) for the answer
+#   place                  optional; resolved by the cost guard to bound query size
+#   notes                  ideal path (and, for compound, the expected decomposition)
+#   subtasks               optional; expected verb-by-verb decomposition (compound)
+
+# ---------------------------------------------------------------------------
+# Tier 3 — the question is malformed, ambiguous, or aimed at the wrong theme.
+# Success here is a good error, not a good answer.
+# ---------------------------------------------------------------------------
+
+- id: category-tattoo-near-me
+  question: "find tattoo parlors near me?"
+  tier: 2
+  download_is_legitimate: false
+  target_type: place
+  notes: >
+    Two independent underspecifications, both must be surfaced, not silently
+    assumed:
+      (a) origin — the CLI has no geolocation, so "me" is unresolvable;
+      (b) radius — "near" has no defined distance. Any -r value is a choice
+          the agent made and must state. 500 m is often empty even in a dense
+          metro; 5000 m returns plenty but stretches "near" past walking
+          distance. Either is acceptable IF declared.
+    Third failure: guessing the category slug. It is `tattoo_and_piercing`,
+    not `tattoo_parlors` / `tattoo` / `tattoo_studio`.
+    Ideal: --json categories -t place --in PLACE --top 500 | grep -i tattoo
+    (no category-search exists; discovery needs a top-N dump + client-side
+    text filter, and --top is itself a guess), then
+    at LAT,LON -t place --radius R --where 'categories.primary=tattoo_and_piercing' -n 15
+
+- id: unsupported-hours-and-ratings
+  question: "Find highly rated coffee shops near me that are open right now."
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  notes: >
+    Three independent failures: no opening hours in the schema, no ratings or
+    review counts, and no origin for "near me". Ideal path names all three
+    separately, offers --min-confidence as the nearest supported filter, and
+    returns NOTHING. Dropping the unsupported filters and returning cafés
+    answers a different question with full confidence.
+
+- id: ambiguous-area-springfield
+  question: "How many restaurants are in Springfield?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  notes: >
+    Must fail with a machine-actionable candidate list — division GERS IDs,
+    region, country, admin_level — not prose asking the user to be specific,
+    and not an interactive prompt. Retry with --area-id should then succeed.
+
+- id: theme-boundary-bus-stops
+  question: "Where are the bus stops in Boston?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: infrastructure
+  place: "Boston, MA, US"
+  notes: >
+    Transit stops are excluded from places by definition (a place is a
+    destination, not a waypoint) and live in base/infrastructure under subtype
+    transit. Agent will reach for places first every time; the eval is whether
+    the tool redirects it with a runnable command.
+
+- id: dual-theme-mountain-peaks
+  question: "How many mountain peaks are there around Chamonix?"
+  tier: 3
+  download_is_legitimate: false
+  target_type: [place, land]
+  place: "Chamonix-Mont-Blanc, FR"
+  notes: >
+    Peaks exist in BOTH places (as named destinations with GERS IDs) and
+    base/land (as OSM-derived physical features), with very different counts.
+    A single number without stating which theme it came from is wrong even
+    when the arithmetic is right.
+
+- id: deprecated-categories-field
+  question: "Query Overture places in Vermont where categories.primary is 'greasy_diner'."
+  tier: 3
+  download_is_legitimate: false
+  target_type: place
+  place: "Vermont, US"
+  notes: >
+    Deprecated field, removed in the September 2026 release. Ideal path warns
+    on stderr, maps to the taxonomy equivalent, and still returns results —
+    warn-and-succeed, not reject. A hard failure here burns the agent's work
+    for a problem the tool can solve itself.

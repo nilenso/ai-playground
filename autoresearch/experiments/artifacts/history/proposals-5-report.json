@@ -1,0 +1,92 @@
+[
+  {
+    "title": "Add --category to `at` (the skill documents a flag that does not exist)",
+    "target": "cli",
+    "evidence": "bad_option x2 on pharmacy-near-address (`at 42.3663248,-71.1060534 -t place --category pharmacy -n 5`) and x1 on junction-density (`at 40.7116,-73.9555 -t place --category neighborhood -n 5`). botmap/data/skill.md recipe 7 literally shows `botmap at 40.7484,-73.9857 -t place --category pharmacy --radius 250 -n 10`, but `at` (botmap/cli.py:1444-1462) only defines latlon, -t, -n, -r/--radius, --where, -f, -o, --release.",
+    "proposal": "In botmap/cli.py add `@click.option(\"--category\", required=False, type=str, help=\"Shorthand for --where categories.primary=VALUE (place type only).\")` to the `at` command, translating it to `ParsedFilter(key='categories.primary', op='=', value=category)` exactly as `places` does at cli.py:1117-1119, and reuse the `_suggest_categories` near-miss handler on a 0-row result. When `-t` is not `place`, raise a UsageError naming the right field: \"--category applies to place features; for `-t <type>` use --class (see `botmap --json schema -t <type>`)\" \u2014 which also answers the `--category neighborhood` attempt by pointing at `botmap containing LAT,LON` / the new `divisions` verb."
+  },
+  {
+    "title": "Accept --json after the subcommand, not just before it",
+    "target": "cli",
+    "evidence": "bad_option on hotel-density-two-countries (`where Luxembourg --all --json`) and bus-stops-cambridge (`sample -t place --in \"Cambridge, MA\" --where categories.primary=transportation -n 5 --json`), and the `at ... -n 5 --json` retry on pharmacy-near-address. `--json` is only a group-level option (botmap/cli.py:447) so trailing usage is \"no such option\"; the intent verbs paper over this with a hidden `json_no_op` flag that silently does nothing.",
+    "proposal": "Define a reusable `json_option = click.option(\"--json\", \"json_output\", is_flag=True, default=False, expose_value=False, is_eager=True, callback=lambda ctx, p, v: ctx.ensure_object(dict).__setitem__(\"json\", True) if v else None)` in botmap/cli.py and attach it to every subcommand (`where`, `boundary`, `count`, `sample`, `categories`, `schema`, `themes`, `types`, `containing`, `capabilities`, `download`, and all intent verbs). Delete the hidden `json_no_op` parameters (cli.py:1100, 1185, 1234, 1286, 1339, 1395, 1461) so `--json` on a feature verb means \"emit GeoJSON to stdout\" (equivalent to `-f geojson`) instead of being ignored."
+  },
+  {
+    "title": "Give `where` and `boundary` an -o/--output flag",
+    "target": "cli",
+    "evidence": "bad_option on reykjavik-diacritic: `where \"Reykjav\u00edk, Iceland\" --geometry -o /tmp/reyk.geojson`. `where` (botmap/cli.py:701-710) has `--geometry/--geojson` but no `-o`, so an agent that wants the polygon on disk either fails or falls back to shell redirection.",
+    "proposal": "Add `@click.option(\"-o\", \"--output\", required=False, type=click.Path())` to both `where` and `boundary` in botmap/cli.py and thread it into `_emit_division_geometry` (cli.py:1716) so the Feature is written to the path when given and to stdout otherwise. Mention `-o` in the `--geometry` help string so `botmap --json capabilities` advertises it."
+  },
+  {
+    "title": "Match place names diacritic-insensitively in the divisions index",
+    "target": "cli",
+    "evidence": "reykjavik-diacritic and waterfront-buildings-reykjavik: 100% error rate, 2 failures each, all from `botmap --json where \"Reykjavik, Iceland\"`. geocoding.resolve (botmap/geocoding.py:153-160) does `pc.equal(pc.utf8_lower(name_primary), name.lower())`, so the ASCII spelling never matches `Reykjav\u00edk`.",
+    "proposal": "In botmap/geocoding.py, add `_fold(s) = unicodedata.normalize('NFKD', s).encode('ascii','ignore').decode().lower()`; store a folded `name_folded` column when the index is built (botmap/cache.py `ensure_index`) and match on it. Keep exact-match rows ranked first, folded matches second. This also lets `--in \"Reykjavik, IS\"` work on every verb, since they all route through `_resolve_in_place`."
+  },
+  {
+    "title": "Fall back when a qualifier names the division's own country (microstates)",
+    "target": "cli",
+    "evidence": "pharmacies-monaco: 100% error rate, both runs failed on `places --in \"Monaco, MC\"` and `--json count -t place --in \"Monaco, MC\"`. The qualifier loop in geocoding.resolve (geocoding.py:161-172) intersects on country/region columns, which eliminates the country-level row for a city-state where name == country.",
+    "proposal": "In geocoding.resolve, if qualifier filtering empties the candidate set but the name-only match was non-empty, retry keeping rows where the normalized qualifier equals the row's own country, region, or (for `subtype='country'`) the row's own name, and emit a one-line yellow `[botmap]` note on stderr naming what was used \u2014 the same recovery shape `_resolve_in_place` already uses for parent fallback (cli.py:205-222). Add `\"MCO\": \"MC\", \"MONACO\": \"MC\", \"MLT\": \"MT\", \"MALTA\": \"MT\", \"LUX\": \"LU\", \"LUXEMBOURG\": \"LU\"` to `_COUNTRY_ALIASES` (geocoding.py:45-95), which the eval also exercised via Malta and Luxembourg."
+  },
+  {
+    "title": "Make `categories` work for non-place types instead of raising UsageError",
+    "target": "cli",
+    "evidence": "bad_option x2 on residential-share-cambridge: `--json categories -t building --in \"Cambridge, MA\" --top 20` then `--top 30`. botmap/cli.py:970-981 deliberately raises for any `type_ != \"place\"`, so the agent burned two commands and still had no value list.",
+    "proposal": "Rename the internal behaviour to \"enumerate the classifying field\": in `categories` (cli.py:958-1024) pick the column by type \u2014 `categories.primary` for place, `class` for segment/building/water/land_use/infrastructure, `subtype` for division \u2014 and emit `{\"field\": \"class\", \"values\": [{\"value\":\u2026, \"count\":\u2026}]}` so the agent learns both the field name and its values in one call. Keep the current message only for types with no classifying field."
+  },
+  {
+    "title": "Give `count` and `sample` the same convenience filters as the verbs",
+    "target": "cli",
+    "evidence": "bad_option on street-canonical-form: `--json count -t address --in \"Cambridge, MA\" --street \"Massachusetts Ave\"`. `--street`/`--number`/`--postcode` exist only on `addresses` (cli.py:1380-1386) and `--category`/`--class` only on the verbs, so an agent that learned a flag on one command cannot reuse it on `count`.",
+    "proposal": "Extract the flag\u2192ParsedFilter translation into a shared `_convenience_filters(type_, category, class_, street, number, postcode)` helper in botmap/cli.py and attach `--category`, `--class`, `--street`, `--number`, `--postcode` to `count` (cli.py:776-785) and `sample` (cli.py:816-830), raising a typed UsageError naming the correct flag when one is used against the wrong `-t` (e.g. \"--street applies to -t address; for places use --category\"). Same flag vocabulary on every command that takes `-t`."
+  },
+  {
+    "title": "Support list-of-struct paths in --where (addresses.country) or name the working alternative",
+    "target": "cli",
+    "evidence": "hotel-density-two-countries: 3 bad_option calls, all `count -t place --where categories.primary=hotel --where addresses.country=MT|LU`. `addresses` is list<struct> in the place schema, so `ParsedFilter.validate_against_schema` (botmap/filters.py:60-64) fails with \"\u2026is not a struct\" and the run degrades into a `download`.",
+    "proposal": "In botmap/filters.py, when walking a dotted path, unwrap `pa.types.is_list`/`is_large_list` to its struct value type and compile the leaf comparison with ANY-element semantics (`pc.list_element` + `pc.any` over the struct field). If ANY-semantics is out of scope, at minimum change the ValueError text to be actionable: \"`addresses.country` is a list field; filter by country with `--in \\\"Malta\\\"` (bbox + division) or `--country MT`\" \u2014 and add a `--country` option to `places`/`count` that intersects the resolved division's country instead of the record field."
+  },
+  {
+    "title": "Add a `divisions` verb so `download -t division` is never needed",
+    "target": "cli",
+    "evidence": "The only unnecessary_download cluster: ev-charging-gap x2 (`download -t division --bbox -71.1604,42.3524,-71.06397,42.40426 --where subtype=neighborhood [-f geojsonseq -o \u2026]`) and hotel-density-two-countries x1 (`download -t division --bbox 5.73,49.44,6.53,50.19 --where subtype=country -f geojsonseq`). `TYPE_TO_VERB` (cli.py:309-318) maps `division_area`\u2192`boundary` but has no entry for `division`, so `download` prints no steering tip at all for this case.",
+    "proposal": "Add `botmap divisions --in PLACE | --bbox \u2026 [--subtype neighborhood|locality|county|region|country] [-n N] [-f geojson|geojsonseq] [-o FILE]` to botmap/cli.py, listing divisions intersecting the area with `--geometry` to attach division_area polygons. Register `TYPE_TO_VERB[\"division\"] = \"divisions\"` and teach `_suggest_verb_command` (cli.py:321-345) to translate `--where subtype=X` into `--subtype X`, so any remaining `download -t division` emits a ready-to-run replacement."
+  },
+  {
+    "title": "Add an `infrastructure` verb and stop telling agents download is correct",
+    "target": "cli",
+    "evidence": "coverage_gaps.infrastructure = bike-parking-coverage, which has download_rate 1.0 across both runs (legitimate downloads \u2014 no verb exists). The download handler (cli.py:519-541) actively says \"For non-transit infrastructure, download is correct.\"",
+    "proposal": "Add `botmap infrastructure --in PLACE | --bbox \u2026 [--class bicycle_parking|bench|\u2026] [--subtype] [-n] [-f] [-o]` to botmap/cli.py modelled on `roads` (cli.py:1218-1268), map `TYPE_TO_VERB[\"infrastructure\"] = \"infrastructure\"`, and replace the \"download is correct\" hint with `Tip: try instead: botmap infrastructure --in \"\u2026\" --class bicycle_parking`. Keep the existing transit-stop redirect to `places --category bus_stop`, which the eval shows is already working (bus-stops-cambridge: 0% download rate)."
+  },
+  {
+    "title": "Add `building-parts` and make unknown commands that name an Overture type self-correcting",
+    "target": "cli",
+    "evidence": "unknown_command on building-parts-detail: `botmap building_part --in \"Cambridge, MA\" -f geojsonseq -o cambridge_parts.jsonl` \u2014 the agent guessed the Overture type name as a verb. coverage_gaps lists both `building_part` and `building` for this question, and the run still had a 0.5 download_rate and 0.5 error_rate.",
+    "proposal": "Add `botmap building-parts` (same options as `buildings`, reading type `building_part`) and set `TYPE_TO_VERB[\"building_part\"] = \"building-parts\"`. Then subclass the Click group so `resolve_command` intercepts any unknown name matching an Overture type (with `_`/`-` normalization) and raises \"`building_part` is a data type, not a command \u2014 run `botmap building-parts --in \"Cambridge, MA\" -f geojsonseq -o cambridge_parts.jsonl`\", reusing `_suggest_verb_command` to echo the user's own flags back. This converts every future type-name guess into a one-line correction rather than an unknown_command."
+  },
+  {
+    "title": "Make the no-match error machine-readable and stop it reading as a coordinate error",
+    "target": "hint",
+    "evidence": "6 of the 12 ranked error clusters (pharmacies-monaco x2, reykjavik-diacritic x2, waterfront-buildings-reykjavik x2) are classified malformed_bbox_or_coords purely because `_no_match_help` (cli.py:152-179) contains the string \"`containing LAT,LON`\", which evals/taxonomy.py:34 fingerprints as a coordinate error. The agent gets prose with three alternatives and no concrete next command.",
+    "proposal": "Change `_no_match_help` to return a structured payload emitted through `_emit_error_json(code=\"no_match\")` on every command (not just `where`), carrying `{\"query\", \"reason\", \"candidates\": [ {name, region, country, bbox} ], \"try\": [\"botmap where \\\"Reykjav\u00edk, IS\\\"\", \"botmap containing 64.1466,-21.9426\"]}`, where `candidates` comes from a folded/fuzzy name search over the index. Phrase the human line as \"No division matched \u2026 Closest names: X, Y. Run: <exact command>\" and drop the bare `LAT,LON` token in favour of a filled-in example."
+  },
+  {
+    "title": "Make every `download` invocation emit a machine-readable replacement command",
+    "target": "hint",
+    "evidence": "Steering already works where it exists (bus-stops-cambridge 0% download rate) but is silent where it doesn't: `download -t division` produced 3 unnecessary downloads, and the ev-charging-gap call `--json download -t division \u2026` was also counted as bad_option \u2014 a JSON-mode agent got a grey stderr tip it never parsed.",
+    "proposal": "In `download` (botmap/cli.py:496-541), after computing `suggestion`, always emit it \u2014 as `{\"code\": \"use_verb\", \"suggested_command\": \"\u2026\", \"reason\": \"\u2026\"}` on stdout when `ctx.obj['json']` is set, and as the current grey stderr tip otherwise \u2014 and cover the fallthrough case (no `TYPE_TO_VERB` entry) with `\"reason\": \"no convenience verb for this type\"` so the absence is explicit rather than silent. Once `divisions`, `infrastructure`, and `building-parts` exist, every type in `get_all_overture_types()` has a verb, so add a test asserting `TYPE_TO_VERB` covers all of them."
+  },
+  {
+    "title": "Lead the skill with a type\u2192verb table and fix the `at --category` example",
+    "target": "skill",
+    "evidence": "botmap/data/skill.md documents `at \u2026 --category pharmacy` (recipe 7) which does not exist, never names `division`, `infrastructure`, or `building_part`, and its troubleshooting flow says only \"don't jump straight to `download`\" without saying what to use instead \u2014 matching the three coverage_gaps and the two unnecessary_download clusters.",
+    "proposal": "In botmap/data/skill.md: (1) add a table directly under \"When to reach for this CLI\" mapping every Overture type to its verb \u2014 place\u2192`places`, building\u2192`buildings`, building_part\u2192`building-parts`, segment\u2192`roads`, address\u2192`addresses`, water\u2192`water`, land_use\u2192`landuse`, infrastructure\u2192`infrastructure`, division\u2192`divisions`, division_area\u2192`boundary` \u2014 headed \"You never need `download`; if you reach for it, you are missing a verb\"; (2) add recipes for bike parking (`infrastructure --in \"Cambridge, MA\" --class bicycle_parking`), neighbourhoods in a bbox (`divisions --bbox \u2026 --subtype neighborhood`), and building parts; (3) correct recipe 7 once `--category` lands on `at`, and add \"`--json` works before or after the subcommand\" to the Self-discovery section."
+  },
+  {
+    "title": "Document the flag vocabulary as one grid in README/SPEC and expose examples in `capabilities`",
+    "target": "docs",
+    "evidence": "7 of 12 ranked clusters are bad_option, each an agent transferring a flag it learned on one command to another (`--category` onto `at`, `--street` onto `count`, `-t building` onto `categories`, `-o` onto `where`, `--json` onto any verb). `botmap --json capabilities` \u2014 the documented self-discovery path (skill.md \"Self-discovery\") \u2014 returns params but no worked example per command.",
+    "proposal": "Add an `examples: list[str]` field to each Click command via `context_settings`/a small decorator, surface it in `_describe_command` (botmap/cli.py:284-290) so `botmap --json capabilities` returns a copy-pasteable invocation per command, and add a matching \"flag compatibility grid\" (rows = commands, columns = --in/--bbox/--category/--class/--street/--where/-n/-f/-o/--json) to README.md and SPEC.md. Add a test that every flag shown in botmap/data/skill.md examples exists on the command it is shown with, so the `at --category` class of drift cannot recur."
+  }
+]

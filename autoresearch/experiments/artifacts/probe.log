@@ -1,0 +1,6239 @@
+
+
+═══════════════════════════════════════════════════════
+== SURFACE
+═══════════════════════════════════════════════════════
+
+$ botmap --version
+botmap, version 0.1.2
+[exit=0]
+
+$ botmap --help
+Usage: botmap [OPTIONS] [COMMAND] [ARGS]...
+
+Options:
+  --version  Show the version and exit.
+  --json     Emit machine-readable JSON for metadata commands.
+  --help     Show this message and exit.
+
+Commands:
+  addresses      Find addresses in a named place or bbox.
+  at             Nearest-neighbor lookup.
+  boundary       Emit a division's polygon as a GeoJSON Feature (for...
+  buildings      Download buildings in a named place.
+  cache          Manage the on-disk divisions index.
+  capabilities   Emit a machine-readable manifest of all subcommands.
+  categories     Enumerate `categories.primary` values, sorted by count...
+  changelog      Query the GERS changelog for feature changes.
+  containing     Which divisions contain this point? Innermost (highest...
+  count          Count features for a query without downloading them.
+  download
+  gers           Query the GERS registry for a feature by its GERS ID.
+  install-skill  Install the Overture agent Skill (Claude Code / AGENTS.md).
+  landuse        Download land-use polygons (residential, commercial,...
+  places         Download POIs in a named place.
+  releases       Manage and query Overture Maps releases.
+  roads          Download road segments in a named place.
+  sample         Emit the first N features matching the query.
+  schema         Show the schema and a sample feature for an Overture type.
+  themes         List the six Overture themes.
+  types          List Overture feature types.
+  water          Download water features (oceans, lakes, rivers, ...) in...
+  where          Resolve a place name to an Overture division feature.
+[exit=0]
+
+$ botmap types
+address
+  theme: addresses
+  Address point with street, number, postcode, country code.
+
+bathymetry
+  theme: base
+  Underwater terrain features.
+
+building
+  theme: buildings
+  Building footprint with height, floor count, class, subtype.
+
+building_part
+  theme: buildings
+  Sub-component of a building when it has variable height/material.
+
+connector
+  theme: transportation
+  Junction or endpoint where segments meet.
+
+division
+  theme: divisions
+  Point representation of an administrative division (country, region, locality...).
+
+division_area
+  theme: divisions
+  Polygon area for a division.
+
+division_boundary
+  theme: divisions
+  Linear boundary between divisions.
+
+infrastructure
+  theme: base
+  Linear or point infrastructure features (bridges, tunnels, towers, etc.).
+
+land
+  theme: base
+  Natural land features (forest, beach, glacier, etc.).
+
+land_cover
+  theme: base
+  Land cover surface (forest, grassland, water, etc.).
+
+land_use
+  theme: base
+  Predominant human use of an area (commercial, residential, recreation, etc.).
+
+place
+  theme: places
+  Categorized POI with names, brand, categories, contact info.
+
+segment
+  theme: transportation
+  Road or rail segment with class, subclass, surface, speed limits.
+
+water
+  theme: base
+  Water bodies (river, lake, ocean).
+
+[exit=0]
+
+$ botmap themes
+addresses
+  Address features with street, number, postcode, and country.
+  types: address
+
+base
+  Base layers: land, water, land use/cover, infrastructure, bathymetry.
+  types: bathymetry, infrastructure, land, land_cover, land_use, water
+
+buildings
+  Building footprints with height, floors, class, and roof attributes.
+  types: building, building_part
+
+divisions
+  Administrative divisions (countries, regions, counties, localities) and their polygons.
+  types: division, division_area, division_boundary
+
+places
+  Categorized point features for businesses, services, and amenities (POIs).
+  types: place
+
+transportation
+  Road network as segments with class, surface, speed limits, and connector junctions.
+  types: connector, segment
+
+[exit=0]
+
+
+═══ CAPABILITIES (flag matrix) ═══
+download: --bbox[opt], --in[opt], --where[opt], -f[REQ]=geojson|geojsonseq|geoparquet, -o/--output[opt], -t/--type[REQ]=address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water, -r/--release[opt], --stac[opt], --connect_timeout[opt], --request_timeout[opt]
+gers: ARG:gers_id[REQ], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], --connect_timeout[opt], --request_timeout[opt]
+where: ARG:query[REQ], --all[opt], --geometry/--geojson[opt]
+boundary: ARG:query[REQ]
+count: -t/--type[REQ]=address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water, --bbox[opt], --in[opt], --where[opt], -r/--release[opt]
+sample: -t/--type[REQ]=address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water, --bbox[opt], --in[opt], --where[opt], -n[opt], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], -r/--release[opt]
+themes: 
+types: --theme[opt]
+schema: -t/--type[REQ]=address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water, -r/--release[opt]
+categories: -t/--type[opt], --bbox[opt], --in[opt], --top[opt], -r/--release[opt]
+capabilities: 
+cache info: 
+cache clear: 
+cache build: 
+places: --in[opt], --bbox[opt], --category[opt], --where[opt], -n/--limit[opt], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], -r/--release[opt], --json[opt]
+buildings: --in[opt], --bbox[opt], --where[opt], -n/--limit[opt], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], -r/--release[opt], --json[opt]
+roads: --in[opt], --bbox[opt], --class[opt], --where[opt], -n/--limit[opt], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], -r/--release[opt], --json[opt]
+water: --in[opt], --bbox[opt], --class[opt], --where[opt], -n/--limit[opt], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], -r/--release[opt], --json[opt]
+landuse: --in[opt], --bbox[opt], --class[opt], --where[opt], -n/--limit[opt], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], -r/--release[opt], --json[opt]
+addresses: --in[opt], --bbox[opt], --street[opt], --number[opt], --postcode[opt], --where[opt], -n/--limit[opt], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], -r/--release[opt], --json[opt]
+at: ARG:latlon[REQ], -t/--type[opt]=address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water, -n[opt], -r/--radius[opt], --where[opt], -f[opt]=geojson|geojsonseq|geoparquet, -o/--output[opt], --release[opt], --json[opt]
+containing: ARG:latlon[REQ]
+install-skill: --target[opt]=claude-user|claude-project|agents-md, --yes[opt]
+releases list: 
+releases latest: 
+releases check: -o/--output[REQ]
+releases exists: ARG:release[REQ]
+changelog query: --bbox[REQ], --theme[opt], --type[opt], -r/--release[opt]
+changelog summary: --theme[opt], --type[opt], -r/--release[opt]
+
+
+═══ PER-COMMAND --help ═══
+
+────────── botmap download --help ──────────
+Usage: botmap download [OPTIONS]
+
+Options:
+  --bbox BBOX
+  --in TEXT                       Resolve a place name to a bbox via the
+                                  divisions index.
+  --where TEXT                    Attribute filter K OP V (repeatable).
+                                  Example: --where height>50
+  -f [geojson|geojsonseq|geoparquet]
+                                  [required]
+  -o, --output PATH
+  -t, --type [address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water]
+                                  [required]
+  -r, --release TEXT              Release version (defaults to latest)
+  --stac / --no-stac              By default, uses the STAC catalog to limit
+                                  which Parquet files are downloaded. Pass
+                                  --no-stac to skip the catalog and read the
+                                  full S3 dataset directly.
+  --connect_timeout INTEGER
+  --request_timeout INTEGER
+  --help                          Show this message and exit.
+
+────────── botmap gers --help ──────────
+Usage: botmap gers [OPTIONS] GERS_ID
+
+  Query the GERS registry for a feature by its GERS ID.
+
+  By default, this command only queries the registry and displays information
+  about the feature (version, filepath, bbox, etc.) without downloading the
+  feature data.
+
+  To download the actual feature data, specify an output format using
+  -f/--format.
+
+Options:
+  -f [geojson|geojsonseq|geoparquet]
+                                  Output format. If not specified, only
+                                  registry information will be displayed.
+  -o, --output PATH
+  --connect_timeout INTEGER
+  --request_timeout INTEGER
+  --help                          Show this message and exit.
+
+────────── botmap where --help ──────────
+Usage: botmap where [OPTIONS] QUERY
+
+  Resolve a place name to an Overture division feature.
+
+Options:
+  --all                  Show all matching divisions, not just the best one.
+  --geometry, --geojson  Emit the division's polygon as a GeoJSON Feature on
+                         stdout (for clipping/spatial joins). Replaces
+                         `download -t division_area`.
+  --help                 Show this message and exit.
+
+────────── botmap boundary --help ──────────
+Usage: botmap boundary [OPTIONS] QUERY
+
+  Emit a division's polygon as a GeoJSON Feature (for clipping/spatial joins).
+
+  QUERY is a place name, e.g. 'Alameda County, CA' or 'Brooklyn, NY'. Outputs
+  the division_area polygon on stdout — pipe to files or spatial tools.
+
+Options:
+  --help  Show this message and exit.
+
+────────── botmap count --help ──────────
+Usage: botmap count [OPTIONS]
+
+  Count features for a query without downloading them.
+
+Options:
+  -t, --type [address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water]
+                                  [required]
+  --bbox BBOX
+  --in TEXT
+  --where TEXT
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap sample --help ──────────
+Usage: botmap sample [OPTIONS]
+
+  Emit the first N features matching the query.
+
+Options:
+  -t, --type [address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water]
+                                  [required]
+  --bbox BBOX
+  --in TEXT
+  --where TEXT
+  -n INTEGER                      Maximum number of features to emit.
+                                  [default: 10]
+  -f [geojson|geojsonseq|geoparquet]
+                                  [default: geojsonseq]
+  -o, --output PATH
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap themes --help ──────────
+Usage: botmap themes [OPTIONS]
+
+  List the six Overture themes.
+
+Options:
+  --help  Show this message and exit.
+
+────────── botmap types --help ──────────
+Usage: botmap types [OPTIONS]
+
+  List Overture feature types.
+
+Options:
+  --theme TEXT  Filter to types belonging to this theme.
+  --help        Show this message and exit.
+
+────────── botmap schema --help ──────────
+Usage: botmap schema [OPTIONS]
+
+  Show the schema and a sample feature for an Overture type.
+
+  Uses a tiny bbox over a known-populated area to keep this fast.
+
+Options:
+  -t, --type [address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water]
+                                  [required]
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap categories --help ──────────
+Usage: botmap categories [OPTIONS]
+
+  Enumerate `categories.primary` values, sorted by count desc.
+
+Options:
+  -t, --type TEXT     Feature type to enumerate. Only `place` is supported;
+                      other types use `class` — see `botmap schema -t TYPE`.
+                      [default: place]
+  --bbox BBOX
+  --in TEXT
+  --top INTEGER       [default: 20]
+  -r, --release TEXT
+  --help              Show this message and exit.
+
+────────── botmap capabilities --help ──────────
+Usage: botmap capabilities [OPTIONS]
+
+  Emit a machine-readable manifest of all subcommands.
+
+Options:
+  --help  Show this message and exit.
+
+────────── botmap places --help ──────────
+Usage: botmap places [OPTIONS]
+
+  Download POIs in a named place. Filter by --category for common asks.
+
+Options:
+  --in TEXT                       Resolve a place name to a bbox via the
+                                  divisions index.
+  --bbox BBOX                     Bounding box xmin,ymin,xmax,ymax. Mutually
+                                  exclusive with --in.
+  --category TEXT                 Shortcut for --where categories.primary=VAL
+  --where TEXT
+  -n, --limit INTEGER             Maximum number of features to emit (default:
+                                  all matches).
+  -f [geojson|geojsonseq|geoparquet]
+                                  [default: geojsonseq]
+  -o, --output PATH
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap buildings --help ──────────
+Usage: botmap buildings [OPTIONS]
+
+  Download buildings in a named place.
+
+Options:
+  --in TEXT                       Resolve a place name to a bbox via the
+                                  divisions index.
+  --bbox BBOX                     Bounding box xmin,ymin,xmax,ymax. Mutually
+                                  exclusive with --in.
+  --where TEXT
+  -n, --limit INTEGER             Maximum number of features to emit (default:
+                                  all matches).
+  -f [geojson|geojsonseq|geoparquet]
+                                  [default: geojsonseq]
+  -o, --output PATH
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap roads --help ──────────
+Usage: botmap roads [OPTIONS]
+
+  Download road segments in a named place.
+
+Options:
+  --in TEXT                       Resolve a place name to a bbox via the
+                                  divisions index.
+  --bbox BBOX                     Bounding box xmin,ymin,xmax,ymax. Mutually
+                                  exclusive with --in.
+  --class TEXT                    Shortcut for --where class=VAL (e.g.
+                                  motorway, primary)
+  --where TEXT
+  -n, --limit INTEGER             Maximum number of features to emit (default:
+                                  all matches).
+  -f [geojson|geojsonseq|geoparquet]
+                                  [default: geojsonseq]
+  -o, --output PATH
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap water --help ──────────
+Usage: botmap water [OPTIONS]
+
+  Download water features (oceans, lakes, rivers, ...) in a named place.
+
+Options:
+  --in TEXT                       Resolve a place name to a bbox via the
+                                  divisions index.
+  --bbox BBOX                     Bounding box xmin,ymin,xmax,ymax. Mutually
+                                  exclusive with --in.
+  --class TEXT                    Shortcut for --where class=VAL (e.g. ocean,
+                                  lake, river, stream)
+  --where TEXT
+  -n, --limit INTEGER             Maximum number of features to emit (default:
+                                  all matches).
+  -f [geojson|geojsonseq|geoparquet]
+                                  [default: geojsonseq]
+  -o, --output PATH
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap landuse --help ──────────
+Usage: botmap landuse [OPTIONS]
+
+  Download land-use polygons (residential, commercial, ...) in a named place.
+
+Options:
+  --in TEXT                       Resolve a place name to a bbox via the
+                                  divisions index.
+  --bbox BBOX                     Bounding box xmin,ymin,xmax,ymax. Mutually
+                                  exclusive with --in.
+  --class TEXT                    Shortcut for --where class=VAL (e.g.
+                                  commercial, residential, recreation,
+                                  agriculture)
+  --where TEXT
+  -n, --limit INTEGER             Maximum number of features to emit (default:
+                                  all matches).
+  -f [geojson|geojsonseq|geoparquet]
+                                  [default: geojsonseq]
+  -o, --output PATH
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap addresses --help ──────────
+Usage: botmap addresses [OPTIONS]
+
+  Find addresses in a named place or bbox.
+
+  --street uses case-insensitive substring match ("Fountain" matches "Fountain
+  St", "Fountain Ave", "E Fountain Blvd"). --number and --postcode are exact.
+  For other fields, use --where.
+
+  Requires --in or --bbox to keep queries bounded; the global address dataset
+  is too large to scan unfiltered.
+
+Options:
+  --in TEXT                       Resolve a place name to a bbox via the
+                                  divisions index.
+  --bbox BBOX                     Bounding box xmin,ymin,xmax,ymax. Mutually
+                                  exclusive with --in.
+  --street TEXT                   Street name (case-insensitive substring).
+                                  Example: --street Fountain
+  --number TEXT                   House/building number (exact match; field is
+                                  a string, so "1208" or "1208A").
+  --postcode TEXT                 Postal code (exact match).
+  --where TEXT
+  -n, --limit INTEGER             Maximum number of features to emit (default:
+                                  all matches).
+  -f [geojson|geojsonseq|geoparquet]
+                                  [default: geojsonseq]
+  -o, --output PATH
+  -r, --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap at --help ──────────
+Usage: botmap at [OPTIONS] LATLON
+
+  Nearest-neighbor lookup. LATLON is 'LAT,LON' (lat first, geographic).
+
+Options:
+  -t, --type [address|bathymetry|building|building_part|division|division_area|division_boundary|place|segment|connector|infrastructure|land|land_cover|land_use|water]
+                                  [default: place]
+  -n INTEGER                      [default: 10]
+  -r, --radius INTEGER            Radius in meters; defaults per type.
+  --where TEXT                    Attribute filter K OP V (repeatable).
+                                  Example: --where
+                                  categories.primary=coffee_shop
+  -f [geojson|geojsonseq|geoparquet]
+                                  [default: geojsonseq]
+  -o, --output PATH
+  --release TEXT
+  --help                          Show this message and exit.
+
+────────── botmap containing --help ──────────
+Usage: botmap containing [OPTIONS] LATLON
+
+  Which divisions contain this point? Innermost (highest admin_level) first.
+
+Options:
+  --help  Show this message and exit.
+
+────────── botmap install-skill --help ──────────
+Usage: botmap install-skill [OPTIONS]
+
+  Install the Overture agent Skill (Claude Code / AGENTS.md).
+
+Options:
+  --target [claude-user|claude-project|agents-md]
+                                  Target to install to. Repeat for multiple.
+                                  Omit to be prompted.
+  --yes                           Skip overwrite confirmations.
+  --help                          Show this message and exit.
+
+────────── botmap cache info --help ──────────
+Usage: botmap [OPTIONS] [COMMAND] [ARGS]...
+Try 'botmap --help' for help.
+
+Error: No such command 'cache info'. Did you mean 'cache'?
+
+────────── botmap cache build --help ──────────
+Usage: botmap [OPTIONS] [COMMAND] [ARGS]...
+Try 'botmap --help' for help.
+
+Error: No such command 'cache build'. Did you mean 'cache'?
+
+────────── botmap releases list --help ──────────
+Usage: botmap [OPTIONS] [COMMAND] [ARGS]...
+Try 'botmap --help' for help.
+
+Error: No such command 'releases list'. Did you mean 'releases'?
+
+────────── botmap changelog query --help ──────────
+Usage: botmap [OPTIONS] [COMMAND] [ARGS]...
+Try 'botmap --help' for help.
+
+Error: No such command 'changelog query'. Did you mean 'changelog'?
+
+────────── botmap changelog summary --help ──────────
+Usage: botmap [OPTIONS] [COMMAND] [ARGS]...
+Try 'botmap --help' for help.
+
+Error: No such command 'changelog summary'. Did you mean 'changelog'?
+
+
+═══ VOCABULARY: categories (no --in) ═══
+
+
+═══ VOCABULARY: categories global refusal ═══
+$ botmap --json categories --top 50
+Usage: botmap categories [OPTIONS]
+Try 'botmap categories --help' for help.
+
+Error: Provide --bbox or --in; global enumeration is too costly.
+
+
+═══ VOCABULARY: categories --in "Boston, MA" --top 400 ═══
+[
+  {
+    "value": "real_estate_agent",
+    "count": 1183
+  },
+  {
+    "value": "restaurant",
+    "count": 1116
+  },
+  {
+    "value": "community_services_non_profits",
+    "count": 1089
+  },
+  {
+    "value": "landmark_and_historical_building",
+    "count": 1044
+  },
+  {
+    "value": "professional_services",
+    "count": 718
+  },
+  {
+    "value": "church_cathedral",
+    "count": 697
+  },
+  {
+    "value": "park",
+    "count": 639
+  },
+  {
+    "value": "hair_salon",
+    "count": 632
+  },
+  {
+    "value": "college_university",
+    "count": 611
+  },
+  {
+    "value": "atms",
+    "count": 599
+  },
+  {
+    "value": "doctor",
+    "count": 562
+  },
+  {
+    "value": "bank_credit_union",
+    "count": 513
+  },
+  {
+    "value": "pizza_restaurant",
+    "count": 500
+  },
+  {
+    "value": "real_estate",
+    "count": 499
+  },
+  {
+    "value": "coffee_shop",
+    "count": 498
+  },
+  {
+    "value": "beauty_salon",
+    "count": 488
+  },
+  {
+    "value": "gym",
+    "count": 472
+  },
+  {
+    "value": "hospital",
+    "count": 404
+  },
+  {
+    "value": "financial_service",
+    "count": 385
+  },
+  {
+    "value": "grocery_store",
+    "count": 385
+  },
+  {
+    "value": "corporate_office",
+    "count": 371
+  },
+  {
+    "value": "convenience_store",
+    "count": 370
+  },
+  {
+    "value": "clothing_store",
+    "count": 369
+  },
+  {
+    "value": "lawyer",
+    "count": 366
+  },
+  {
+    "value": "dentist",
+    "count": 360
+  },
+  {
+    "value": "software_development",
+    "count": 336
+  },
+  {
+    "value": "barber",
+    "count": 331
+  },
+  {
+    "value": "italian_restaurant",
+    "count": 319
+  },
+  {
+    "value": "parking",
+    "count": 315
+  },
+  {
+    "value": "jewelry_store",
+    "count": 310
+  },
+  {
+    "value": "automotive_repair",
+    "count": 305
+  },
+  {
+    "value": "cafe",
+    "count": 300
+  },
+  {
+    "value": "bakery",
+    "count": 300
+  },
+  {
+    "value": "nail_salon",
+    "count": 297
+  },
+  {
+    "value": "american_restaurant",
+    "count": 295
+  },
+  {
+    "value": "contractor",
+    "count": 293
+  },
+  {
+    "value": "legal_services",
+    "count": 286
+  },
+  {
+    "value": "accommodation",
+    "count": 284
+  },
+  {
+    "value": "hotel",
+    "count": 275
+  },
+  {
+    "value": "art_gallery",
+    "count": 274
+  },
+  {
+    "value": "property_management",
+    "count": 260
+  },
+  {
+    "value": "public_and_government_association",
+    "count": 258
+  },
+  {
+    "value": "event_planning",
+    "count": 256
+  },
+  {
+    "value": "money_transfer_services",
+    "count": 250
+  },
+  {
+    "value": "bar",
+    "count": 250
+  },
+  {
+    "value": "mexican_restaurant",
+    "count": 236
+  },
+  {
+    "value": "liquor_store",
+    "count": 236
+  },
+  {
+    "value": "gas_station",
+    "count": 232
+  },
+  {
+    "value": "chinese_restaurant",
+    "count": 232
+  },
+  {
+    "value": "insurance_agency",
+    "count": 226
+  },
+  {
+    "value": "religious_organization",
+    "count": 221
+  },
+  {
+    "value": "social_service_organizations",
+    "count": 220
+  },
+  {
+    "value": "campus_building",
+    "count": 220
+  },
+  {
+    "value": "womens_clothing_store",
+    "count": 216
+  },
+  {
+    "value": "medical_center",
+    "count": 215
+  },
+  {
+    "value": "library",
+    "count": 211
+  },
+  {
+    "value": "home_service",
+    "count": 209
+  },
+  {
+    "value": "elementary_school",
+    "count": 204
+  },
+  {
+    "value": "school",
+    "count": 200
+  },
+  {
+    "value": "mobile_phone_store",
+    "count": 192
+  },
+  {
+    "value": "fast_food_restaurant",
+    "count": 192
+  },
+  {
+    "value": "seafood_restaurant",
+    "count": 192
+  },
+  {
+    "value": "information_technology_company",
+    "count": 190
+  },
+  {
+    "value": "physical_therapy",
+    "count": 190
+  },
+  {
+    "value": "counseling_and_mental_health",
+    "count": 187
+  },
+  {
+    "value": "flowers_and_gifts_shop",
+    "count": 186
+  },
+  {
+    "value": "advertising_agency",
+    "count": 181
+  },
+  {
+    "value": "pharmacy",
+    "count": 181
+  },
+  {
+    "value": "furniture_store",
+    "count": 180
+  },
+  {
+    "value": "sandwich_shop",
+    "count": 178
+  },
+  {
+    "value": "marketing_agency",
+    "count": 173
+  },
+  {
+    "value": "spas",
+    "count": 166
+  },
+  {
+    "value": "employment_agencies",
+    "count": 163
+  },
+  {
+    "value": "interior_design",
+    "count": 162
+  },
+  {
+    "value": "massage",
+    "count": 162
+  },
+  {
+    "value": "general_dentistry",
+    "count": 159
+  },
+  {
+    "value": "preschool",
+    "count": 158
+  },
+  {
+    "value": "retail",
+    "count": 156
+  },
+  {
+    "value": "health_and_medical",
+    "count": 155
+  },
+  {
+    "value": "printing_services",
+    "count": 155
+  },
+  {
+    "value": "architectural_designer",
+    "count": 155
+  },
+  {
+    "value": "key_and_locksmith",
+    "count": 154
+  },
+  {
+    "value": "donuts",
+    "count": 148
+  },
+  {
+    "value": "shoe_store",
+    "count": 145
+  },
+  {
+    "value": "martial_arts_club",
+    "count": 141
+  },
+  {
+    "value": "banks",
+    "count": 140
+  },
+  {
+    "value": "dance_school",
+    "count": 138
+  },
+  {
+    "value": "post_office",
+    "count": 138
+  },
+  {
+    "value": "japanese_restaurant",
+    "count": 136
+  },
+  {
+    "value": "public_service_and_government",
+    "count": 136
+  },
+  {
+    "value": "education",
+    "count": 136
+  },
+  {
+    "value": "yoga_studio",
+    "count": 135
+  },
+  {
+    "value": "courier_and_delivery_services",
+    "count": 134
+  },
+  {
+    "value": "dry_cleaning",
+    "count": 134
+  },
+  {
+    "value": "arts_and_entertainment",
+    "count": 134
+  },
+  {
+    "value": "playground",
+    "count": 132
+  },
+  {
+    "value": "chiropractor",
+    "count": 129
+  },
+  {
+    "value": "sushi_restaurant",
+    "count": 128
+  },
+  {
+    "value": "home_cleaning",
+    "count": 127
+  },
+  {
+    "value": "retirement_home",
+    "count": 125
+  },
+  {
+    "value": "train_station",
+    "count": 125
+  },
+  {
+    "value": "electronics",
+    "count": 124
+  },
+  {
+    "value": "auto_body_shop",
+    "count": 122
+  },
+  {
+    "value": "construction_services",
+    "count": 122
+  },
+  {
+    "value": "optometrist",
+    "count": 120
+  },
+  {
+    "value": "cosmetic_and_beauty_supplies",
+    "count": 119
+  },
+  {
+    "value": "car_rental_agency",
+    "count": 119
+  },
+  {
+    "value": "community_center",
+    "count": 119
+  },
+  {
+    "value": "home_health_care",
+    "count": 119
+  },
+  {
+    "value": "charity_organization",
+    "count": 119
+  },
+  {
+    "value": "car_dealer",
+    "count": 117
+  },
+  {
+    "value": "pediatrician",
+    "count": 117
+  },
+  {
+    "value": "apartments",
+    "count": 117
+  },
+  {
+    "value": "catholic_church",
+    "count": 116
+  },
+  {
+    "value": "youth_organizations",
+    "count": 114
+  },
+  {
+    "value": "day_care_preschool",
+    "count": 113
+  },
+  {
+    "value": "beauty_and_spa",
+    "count": 112
+  },
+  {
+    "value": "building_supply_store",
+    "count": 111
+  },
+  {
+    "value": "accountant",
+    "count": 110
+  },
+  {
+    "value": "laundromat",
+    "count": 110
+  },
+  {
+    "value": "business_management_services",
+    "count": 110
+  },
+  {
+    "value": "ice_cream_shop",
+    "count": 109
+  },
+  {
+    "value": "travel_services",
+    "count": 109
+  },
+  {
+    "value": "medical_spa",
+    "count": 108
+  },
+  {
+    "value": "it_service_and_computer_repair",
+    "count": 108
+  },
+  {
+    "value": "pub",
+    "count": 107
+  },
+  {
+    "value": "acupuncture",
+    "count": 107
+  },
+  {
+    "value": "shopping",
+    "count": 106
+  },
+  {
+    "value": "music_school",
+    "count": 104
+  },
+  {
+    "value": "mortgage_lender",
+    "count": 104
+  },
+  {
+    "value": "mens_clothing_store",
+    "count": 103
+  },
+  {
+    "value": "boutique",
+    "count": 103
+  },
+  {
+    "value": "bookstore",
+    "count": 102
+  },
+  {
+    "value": "educational_research_institute",
+    "count": 102
+  },
+  {
+    "value": "biotechnology_company",
+    "count": 102
+  },
+  {
+    "value": "indian_restaurant",
+    "count": 101
+  },
+  {
+    "value": "trusts",
+    "count": 100
+  },
+  {
+    "value": "burger_restaurant",
+    "count": 99
+  },
+  {
+    "value": "supermarket",
+    "count": 99
+  },
+  {
+    "value": "financial_advising",
+    "count": 99
+  },
+  {
+    "value": "landscaping",
+    "count": 97
+  },
+  {
+    "value": "florist",
+    "count": 97
+  },
+  {
+    "value": "medical_research_and_development",
+    "count": 97
+  },
+  {
+    "value": "criminal_defense_law",
+    "count": 95
+  },
+  {
+    "value": "museum",
+    "count": 95
+  },
+  {
+    "value": "thai_restaurant",
+    "count": 94
+  },
+  {
+    "value": "personal_injury_law",
+    "count": 93
+  },
+  {
+    "value": "transportation",
+    "count": 92
+  },
+  {
+    "value": "mediterranean_restaurant",
+    "count": 89
+  },
+  {
+    "value": "plumbing",
+    "count": 88
+  },
+  {
+    "value": "business_consulting",
+    "count": 88
+  },
+  {
+    "value": "shopping_center",
+    "count": 87
+  },
+  {
+    "value": "naturopathic_holistic",
+    "count": 87
+  },
+  {
+    "value": "freight_and_cargo_service",
+    "count": 86
+  },
+  {
+    "value": "shipping_center",
+    "count": 86
+  },
+  {
+    "value": "investing",
+    "count": 85
+  },
+  {
+    "value": "dance_club",
+    "count": 85
+  },
+  {
+    "value": "fire_department",
+    "count": 84
+  },
+  {
+    "value": "painting",
+    "count": 84
+  },
+  {
+    "value": "bar_and_grill_restaurant",
+    "count": 83
+  },
+  {
+    "value": "funeral_services_and_cemeteries",
+    "count": 83
+  },
+  {
+    "value": "attractions_and_activities",
+    "count": 83
+  },
+  {
+    "value": "theatre",
+    "count": 81
+  },
+  {
+    "value": "topic_concert_venue",
+    "count": 81
+  },
+  {
+    "value": "music_venue",
+    "count": 81
+  },
+  {
+    "value": "performing_arts",
+    "count": 79
+  },
+  {
+    "value": "high_school",
+    "count": 79
+  },
+  {
+    "value": "hvac_services",
+    "count": 79
+  },
+  {
+    "value": "monument",
+    "count": 79
+  },
+  {
+    "value": "beach",
+    "count": 79
+  },
+  {
+    "value": "roofing",
+    "count": 78
+  },
+  {
+    "value": "veterinarian",
+    "count": 78
+  },
+  {
+    "value": "bubble_tea",
+    "count": 78
+  },
+  {
+    "value": "web_designer",
+    "count": 77
+  },
+  {
+    "value": "lounge",
+    "count": 77
+  },
+  {
+    "value": "event_photography",
+    "count": 76
+  },
+  {
+    "value": "day_spa",
+    "count": 75
+  },
+  {
+    "value": "smoothie_juice_bar",
+    "count": 74
+  },
+  {
+    "value": "immigration_law",
+    "count": 74
+  },
+  {
+    "value": "engineering_services",
+    "count": 72
+  },
+  {
+    "value": "asian_restaurant",
+    "count": 72
+  },
+  {
+    "value": "arts_and_crafts",
+    "count": 72
+  },
+  {
+    "value": "eyewear_and_optician",
+    "count": 72
+  },
+  {
+    "value": "hardware_store",
+    "count": 71
+  },
+  {
+    "value": "travel",
+    "count": 71
+  },
+  {
+    "value": "limo_services",
+    "count": 71
+  },
+  {
+    "value": "music_production",
+    "count": 71
+  },
+  {
+    "value": "broadcasting_media_production",
+    "count": 71
+  },
+  {
+    "value": "self_storage_facility",
+    "count": 70
+  },
+  {
+    "value": "electrician",
+    "count": 70
+  },
+  {
+    "value": "pilates_studio",
+    "count": 69
+  },
+  {
+    "value": "massage_therapy",
+    "count": 69
+  },
+  {
+    "value": "tattoo_and_piercing",
+    "count": 69
+  },
+  {
+    "value": "farmers_market",
+    "count": 68
+  },
+  {
+    "value": "delicatessen",
+    "count": 68
+  },
+  {
+    "value": "orthopedist",
+    "count": 68
+  },
+  {
+    "value": "baptist_church",
+    "count": 68
+  },
+  {
+    "value": "fashion_accessories_store",
+    "count": 67
+  },
+  {
+    "value": "private_school",
+    "count": 67
+  },
+  {
+    "value": "architect",
+    "count": 66
+  },
+  {
+    "value": "credit_union",
+    "count": 66
+  },
+  {
+    "value": "real_estate_service",
+    "count": 65
+  },
+  {
+    "value": "tobacco_shop",
+    "count": 64
+  },
+  {
+    "value": "discount_store",
+    "count": 63
+  },
+  {
+    "value": "active_life",
+    "count": 63
+  },
+  {
+    "value": "mortgage_broker",
+    "count": 63
+  },
+  {
+    "value": "venue_and_event_space",
+    "count": 63
+  },
+  {
+    "value": "psychologist",
+    "count": 63
+  },
+  {
+    "value": "pet_store",
+    "count": 61
+  },
+  {
+    "value": "home_improvement_store",
+    "count": 61
+  },
+  {
+    "value": "labor_union",
+    "count": 61
+  },
+  {
+    "value": "caterer",
+    "count": 61
+  },
+  {
+    "value": "skin_care",
+    "count": 60
+  },
+  {
+    "value": "sporting_goods",
+    "count": 60
+  },
+  {
+    "value": "rental_services",
+    "count": 60
+  },
+  {
+    "value": "gift_shop",
+    "count": 59
+  },
+  {
+    "value": "language_school",
+    "count": 59
+  },
+  {
+    "value": "commercial_real_estate",
+    "count": 58
+  },
+  {
+    "value": "cocktail_bar",
+    "count": 57
+  },
+  {
+    "value": "sports_and_recreation_venue",
+    "count": 56
+  },
+  {
+    "value": "antique_store",
+    "count": 56
+  },
+  {
+    "value": "vietnamese_restaurant",
+    "count": 56
+  },
+  {
+    "value": "brewery",
+    "count": 56
+  },
+  {
+    "value": "package_locker",
+    "count": 55
+  },
+  {
+    "value": "sports_bar",
+    "count": 55
+  },
+  {
+    "value": "masonry_concrete",
+    "count": 54
+  },
+  {
+    "value": "educational_services",
+    "count": 54
+  },
+  {
+    "value": "topic_publisher",
+    "count": 54
+  },
+  {
+    "value": "home_developer",
+    "count": 53
+  },
+  {
+    "value": "tutoring_center",
+    "count": 53
+  },
+  {
+    "value": "history_museum",
+    "count": 53
+  },
+  {
+    "value": "bed_and_breakfast",
+    "count": 53
+  },
+  {
+    "value": "clinical_laboratories",
+    "count": 53
+  },
+  {
+    "value": "plastic_surgeon",
+    "count": 52
+  },
+  {
+    "value": "art_school",
+    "count": 52
+  },
+  {
+    "value": "desserts",
+    "count": 52
+  },
+  {
+    "value": "laboratory_testing",
+    "count": 52
+  },
+  {
+    "value": "abuse_and_addiction_treatment",
+    "count": 52
+  },
+  {
+    "value": "bridge",
+    "count": 52
+  },
+  {
+    "value": "public_relations",
+    "count": 52
+  },
+  {
+    "value": "middle_school",
+    "count": 51
+  },
+  {
+    "value": "breakfast_and_brunch_restaurant",
+    "count": 51
+  },
+  {
+    "value": "gastropub",
+    "count": 51
+  },
+  {
+    "value": "carpet_cleaning",
+    "count": 51
+  },
+  {
+    "value": "chicken_restaurant",
+    "count": 51
+  },
+  {
+    "value": "specialty_grocery_store",
+    "count": 51
+  },
+  {
+    "value": "organization",
+    "count": 50
+  },
+  {
+    "value": "french_restaurant",
+    "count": 50
+  },
+  {
+    "value": "public_school",
+    "count": 50
+  },
+  {
+    "value": "truck_rentals",
+    "count": 49
+  },
+  {
+    "value": "tax_services",
+    "count": 49
+  },
+  {
+    "value": "auto_insurance",
+    "count": 49
+  },
+  {
+    "value": "public_plaza",
+    "count": 49
+  },
+  {
+    "value": "tours",
+    "count": 49
+  },
+  {
+    "value": "department_store",
+    "count": 48
+  },
+  {
+    "value": "cannabis_dispensary",
+    "count": 48
+  },
+  {
+    "value": "structure_and_geography",
+    "count": 48
+  },
+  {
+    "value": "home_goods_store",
+    "count": 48
+  },
+  {
+    "value": "cosmetic_dentist",
+    "count": 48
+  },
+  {
+    "value": "pet_services",
+    "count": 47
+  },
+  {
+    "value": "steakhouse",
+    "count": 47
+  },
+  {
+    "value": "beer_wine_and_spirits",
+    "count": 47
+  },
+  {
+    "value": "diner",
+    "count": 47
+  },
+  {
+    "value": "sports_club_and_league",
+    "count": 47
+  },
+  {
+    "value": "auto_detailing",
+    "count": 47
+  },
+  {
+    "value": "storage_facility",
+    "count": 46
+  },
+  {
+    "value": "thrift_store",
+    "count": 46
+  },
+  {
+    "value": "latin_american_restaurant",
+    "count": 46
+  },
+  {
+    "value": "bicycle_shop",
+    "count": 45
+  },
+  {
+    "value": "housing_authorities",
+    "count": 45
+  },
+  {
+    "value": "internal_medicine",
+    "count": 45
+  },
+  {
+    "value": "cancer_treatment_center",
+    "count": 45
+  },
+  {
+    "value": "luggage_storage",
+    "count": 45
+  },
+  {
+    "value": "ev_charging_station",
+    "count": 44
+  },
+  {
+    "value": "media_news_company",
+    "count": 44
+  },
+  {
+    "value": "divorce_and_family_law",
+    "count": 43
+  },
+  {
+    "value": "towing_service",
+    "count": 43
+  },
+  {
+    "value": "music_and_dvd_store",
+    "count": 43
+  },
+  {
+    "value": "garage_door_service",
+    "count": 42
+  },
+  {
+    "value": "barbecue_restaurant",
+    "count": 42
+  },
+  {
+    "value": "automotive",
+    "count": 42
+  },
+  {
+    "value": "synagogue",
+    "count": 42
+  },
+  {
+    "value": "neurologist",
+    "count": 42
+  },
+  {
+    "value": "salad_bar",
+    "count": 41
+  },
+  {
+    "value": "bridal_shop",
+    "count": 41
+  },
+  {
+    "value": "automotive_parts_and_accessories",
+    "count": 41
+  },
+  {
+    "value": "carpet_store",
+    "count": 41
+  },
+  {
+    "value": "tire_dealer_and_repair",
+    "count": 41
+  },
+  {
+    "value": "bagel_shop",
+    "count": 41
+  },
+  {
+    "value": "family_practice",
+    "count": 41
+  },
+  {
+    "value": "psychotherapist",
+    "count": 41
+  },
+  {
+    "value": "pet_groomer",
+    "count": 41
+  },
+  {
+    "value": "police_department",
+    "count": 41
+  },
+  {
+    "value": "korean_restaurant",
+    "count": 41
+  },
+  {
+    "value": "graphic_designer",
+    "count": 41
+  },
+  {
+    "value": "marina",
+    "count": 41
+  },
+  {
+    "value": "used_car_dealer",
+    "count": 40
+  },
+  {
+    "value": "psychiatrist",
+    "count": 40
+  },
+  {
+    "value": "photography_store_and_services",
+    "count": 40
+  },
+  {
+    "value": "irish_pub",
+    "count": 40
+  },
+  {
+    "value": "pentecostal_church",
+    "count": 40
+  },
+  {
+    "value": "coworking_space",
+    "count": 40
+  },
+  {
+    "value": "obstetrician_and_gynecologist",
+    "count": 39
+  },
+  {
+    "value": "cinema",
+    "count": 39
+  },
+  {
+    "value": "car_wash",
+    "count": 39
+  },
+  {
+    "value": "condominium",
+    "count": 39
+  },
+  {
+    "value": "marketing_consultant",
+    "count": 39
+  },
+  {
+    "value": "online_shop",
+    "count": 39
+  },
+  {
+    "value": "courthouse",
+    "count": 38
+  },
+  {
+    "value": "stadium_arena",
+    "count": 38
+  },
+  {
+    "value": "diagnostic_imaging",
+    "count": 38
+  },
+  {
+    "value": "butcher_shop",
+    "count": 38
+  },
+  {
+    "value": "baseball_field",
+    "count": 37
+  },
+  {
+    "value": "fitness_trainer",
+    "count": 37
+  },
+  {
+    "value": "caribbean_restaurant",
+    "count": 37
+  },
+  {
+    "value": "telecommunications_company",
+    "count": 36
+  },
+  {
+    "value": "senior_citizen_services",
+    "count": 36
+  },
+  {
+    "value": "dermatologist",
+    "count": 36
+  },
+  {
+    "value": "greek_restaurant",
+    "count": 36
+  },
+  {
+    "value": "orthodontist",
+    "count": 36
+  },
+  {
+    "value": "asian_fusion_restaurant",
+    "count": 36
+  },
+  {
+    "value": "cardiologist",
+    "count": 36
+  },
+  {
+    "value": "airport",
+    "count": 36
+  },
+  {
+    "value": "telecommunications",
+    "count": 35
+  },
+  {
+    "value": "appliance_store",
+    "count": 35
+  },
+  {
+    "value": "movers",
+    "count": 35
+  },
+  {
+    "value": "wholesale_store",
+    "count": 35
+  },
+  {
+    "value": "travel_agents",
+    "count": 35
+  },
+  {
+    "value": "laundry_services",
+    "count": 35
+  },
+  {
+    "value": "radio_station",
+    "count": 35
+  },
+  {
+    "value": "pediatric_cardiology",
+    "count": 35
+  },
+  {
+    "value": "specialty_school",
+    "count": 34
+  },
+  {
+    "value": "auto_parts_and_supply_store",
+    "count": 34
+  },
+  {
+    "value": "industrial_equipment",
+    "count": 34
+  },
+  {
+    "value": "embassy",
+    "count": 34
+  },
+  {
+    "value": "garbage_collection_service",
+    "count": 33
+  },
+  {
+    "value": "nutritionist",
+    "count": 33
+  },
+  {
+    "value": "wine_bar",
+    "count": 33
+  },
+  {
+    "value": "homeless_shelter",
+    "count": 33
+  },
+  {
+    "value": "vitamins_and_supplements",
+    "count": 32
+  },
+  {
+    "value": "sewing_and_alterations",
+    "count": 32
+  },
+  {
+    "value": "childrens_clothing_store",
+    "count": 31
+  },
+  {
+    "value": "ice_cream_and_frozen_yoghurt",
+    "count": 31
+  },
+  {
+    "value": "hair_supply_stores",
+    "count": 31
+  },
+  {
+    "value": "carpenter",
+    "count": 31
+  },
+  {
+    "value": "musical_instrument_store",
+    "count": 31
+  },
+  {
+    "value": "real_estate_investment",
+    "count": 31
+  },
+  {
+    "value": "business_advertising",
+    "count": 31
+  },
+  {
+    "value": "middle_eastern_restaurant",
+    "count": 31
+  },
+  {
+    "value": "life_coach",
+    "count": 30
+  },
+  {
+    "value": "medical_service_organizations",
+    "count": 30
+  },
+  {
+    "value": "rental_kiosks",
+    "count": 30
+  },
+  {
+    "value": "festival",
+    "count": 30
+  },
+  {
+    "value": "bus_station",
+    "count": 30
+  },
+  {
+    "value": "drugstore",
+    "count": 30
+  },
+  {
+    "value": "chocolatier",
+    "count": 30
+  },
+  {
+    "value": "b2b_science_and_technology",
+    "count": 30
+  },
+  {
+    "value": "tennis_court",
+    "count": 29
+  },
+  {
+    "value": "taco_restaurant",
+    "count": 29
+  },
+  {
+    "value": "home_decor",
+    "count": 29
+  },
+  {
+    "value": "swimming_pool",
+    "count": 29
+  },
+  {
+    "value": "cultural_center",
+    "count": 29
+  },
+  {
+    "value": "airline",
+    "count": 29
+  },
+  {
+    "value": "pet_boarding",
+    "count": 28
+  },
+  {
+    "value": "toy_store",
+    "count": 28
+  },
+  {
+    "value": "business_to_business",
+    "count": 28
+  },
+  {
+    "value": "medical_supply",
+    "count": 28
+  },
+  {
+    "value": "vocational_and_technical_school",
+    "count": 28
+  },
+  {
+    "value": "surgeon",
+    "count": 28
+  },
+  {
+    "value": "pediatric_dentist",
+    "count": 28
+  },
+  {
+    "value": "party_and_event_planning",
+    "count": 27
+  },
+  {
+    "value": "countertop_installation",
+    "count": 27
+  },
+  {
+    "value": "sports_wear",
+    "count": 27
+  },
+  {
+    "value": "fashion",
+    "count": 27
+  },
+  {
+    "value": "business_manufacturing_and_supply",
+    "count": 27
+  },
+  {
+    "value": "flooring_contractors",
+    "count": 27
+  },
+  {
+    "value": "food_delivery_service",
+    "count": 27
+  },
+  {
+    "value": "dominican_restaurant",
+    "count": 27
+  },
+  {
+    "value": "theatrical_productions",
+    "count": 27
+  },
+  {
+    "value": "auditorium",
+    "count": 27
+  },
+  {
+    "value": "pharmaceutical_companies",
+    "count": 27
+  },
+  {
+    "value": "laser_hair_removal",
+    "count": 26
+  },
+  {
+    "value": "t_shirt_store",
+    "count": 26
+  },
+  {
+    "value": "waxing",
+    "count": 26
+  },
+  {
+    "value": "child_care_and_day_care",
+    "count": 26
+  },
+  {
+    "value": "wedding_planning",
+    "count": 26
+  },
+  {
+    "value": "threading_service",
+    "count": 26
+  },
+  {
+    "value": "pest_control_service",
+    "count": 26
+  },
+  {
+    "value": "metro_station",
+    "count": 26
+  },
+  {
+    "value": "vegan_restaurant",
+    "count": 26
+  },
+  {
+    "value": "taxi_service",
+    "count": 26
+  },
+  {
+    "value": "print_media",
+    "count": 26
+  },
+  {
+    "value": "amusement_park",
+    "count": 25
+  },
+  {
+    "value": "central_government_office",
+    "count": 25
+  },
+  {
+    "value": "automotive_dealer",
+    "count": 25
+  },
+  {
+    "value": "nursery_and_gardening",
+    "count": 25
+  },
+  {
+    "value": "rental_service",
+    "count": 25
+  },
+  {
+    "value": "computer_store",
+    "count": 25
+  },
+  {
+    "value": "pan_asian_restaurant",
+    "count": 25
+  },
+  {
+    "value": "driving_school",
+    "count": 25
+  }
+]
+
+
+═══ SCHEMA: every type ═══
+
+───── schema -t address ─────
+
+───── schema -t bathymetry ─────
+
+───── schema -t building ─────
+
+───── schema -t building_part ─────
+
+───── schema -t division ─────
+
+───── schema -t division_area ─────
+
+───── schema -t division_boundary ─────
+
+───── schema -t place ─────
+
+───── schema -t segment ─────
+
+───── schema -t connector ─────
+
+───── schema -t infrastructure ─────
+
+───── schema -t land ─────
+
+───── schema -t land_cover ─────
+
+───── schema -t land_use ─────
+
+───── schema -t water ─────
+
+
+═══ --where DIALECT (bbox -71.068,42.353,-71.058,42.363) ═══
+
+--- equality
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where categories.primary=coffee_shop
+{
+  "type": "place",
+  "bbox": [
+    -71.068,
+    42.353,
+    -71.058,
+    42.363
+  ],
+  "where": [
+    {
+      "key": "categories.primary",
+      "op": "=",
+      "value": "coffee_shop"
+    }
+  ],
+  "release": "2026-07-22.0",
+  "count": 25
+}
+[exit=0]
+
+--- equality-nomatch
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where categories.primary=zzz_not_real
+{
+  "type": "place",
+  "bbox": [
+    -71.068,
+    42.353,
+    -71.058,
+    42.363
+  ],
+  "where": [
+    {
+      "key": "categories.primary",
+      "op": "=",
+      "value": "zzz_not_real"
+    }
+  ],
+  "release": "2026-07-22.0",
+  "count": 0
+}
+[exit=0]
+
+--- numeric-gt
+$ botmap --json count -t building --bbox -71.068,42.353,-71.058,42.363 --where height>100
+{
+  "type": "building",
+  "bbox": [
+    -71.068,
+    42.353,
+    -71.058,
+    42.363
+  ],
+  "where": [
+    {
+      "key": "height",
+      "op": ">",
+      "value": 100
+    }
+  ],
+  "release": "2026-07-22.0",
+  "count": 13
+}
+[exit=0]
+
+--- numeric-gte
+$ botmap --json count -t building --bbox -71.068,42.353,-71.058,42.363 --where height>=100
+{
+  "type": "building",
+  "bbox": [
+    -71.068,
+    42.353,
+    -71.058,
+    42.363
+  ],
+  "where": [
+    {
+      "key": "height",
+      "op": ">=",
+      "value": 100
+    }
+  ],
+  "release": "2026-07-22.0",
+  "count": 13
+}
+[exit=0]
+
+--- in-list
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where categories.primary in [coffee_shop,cafe]
+{
+  "type": "place",
+  "bbox": [
+    -71.068,
+    42.353,
+    -71.058,
+    42.363
+  ],
+  "where": [
+    {
+      "key": "categories.primary",
+      "op": "in",
+      "value": [
+        "coffee_shop",
+        "cafe"
+      ]
+    }
+  ],
+  "release": "2026-07-22.0",
+  "count": 38
+}
+[exit=0]
+
+--- not-equal
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where confidence!=1.0
+{
+  "type": "place",
+  "bbox": [
+    -71.068,
+    42.353,
+    -71.058,
+    42.363
+  ],
+  "where": [
+    {
+      "key": "confidence",
+      "op": "!=",
+      "value": 1.0
+    }
+  ],
+  "release": "2026-07-22.0",
+  "count": 2440
+}
+[exit=0]
+
+--- nested-path
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where brand.names.primary=Starbucks
+{
+  "type": "place",
+  "bbox": [
+    -71.068,
+    42.353,
+    -71.058,
+    42.363
+  ],
+  "where": [
+    {
+      "key": "brand.names.primary",
+      "op": "=",
+      "value": "Starbucks"
+    }
+  ],
+  "release": "2026-07-22.0",
+  "count": 3
+}
+[exit=0]
+
+--- tilde-substring
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where names.primary~Star
+Usage: botmap count [OPTIONS]
+Try 'botmap count --help' for help.
+
+Error: Filter 'names.primary~Star' has no operator. Use K OP V, e.g. --where 'height>150'. If you typed an unquoted > or <, your shell redirected it to a file — wrap the whole expression in single quotes.
+[exit=2]
+
+--- LIKE-substring
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where names.primary LIKE %Star%
+Usage: botmap count [OPTIONS]
+Try 'botmap count --help' for help.
+
+Error: Filter 'names.primary LIKE %Star%' has no operator. Use K OP V, e.g. --where 'height>150'. If you typed an unquoted > or <, your shell redirected it to a file — wrap the whole expression in single quotes.
+[exit=2]
+
+--- contains-op
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where names.primary contains Star
+Usage: botmap count [OPTIONS]
+Try 'botmap count --help' for help.
+
+Error: Filter 'names.primary contains Star' has no operator. Use K OP V, e.g. --where 'height>150'. If you typed an unquoted > or <, your shell redirected it to a file — wrap the whole expression in single quotes.
+[exit=2]
+
+--- nonexistent-field
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where nonexistent_field=7
+Usage: botmap count [OPTIONS]
+Try 'botmap count --help' for help.
+
+Error: Unknown field 'nonexistent_field'. Available fields: addresses, basic_category, bbox, brand, categories, confidence, emails, geometry, id, names, operating_status, phones, socials, sources, taxonomy, version, websites
+[exit=2]
+
+--- malformed-no-op
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where categories.primary
+Usage: botmap count [OPTIONS]
+Try 'botmap count --help' for help.
+
+Error: Filter 'categories.primary' has no operator. Use K OP V, e.g. --where 'height>150'. If you typed an unquoted > or <, your shell redirected it to a file — wrap the whole expression in single quotes.
+[exit=2]
+
+--- malformed-garbage
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where ==
+Usage: botmap count [OPTIONS]
+Try 'botmap count --help' for help.
+
+Error: --where expression has empty key: '=='
+[exit=2]
+
+--- wrong-type-field
+$ botmap --json count -t place --bbox -71.068,42.353,-71.058,42.363 --where height>10
+Usage: botmap count [OPTIONS]
+Try 'botmap count --help' for help.
+
+Error: Unknown field 'height'. Available fields: addresses, basic_category, bbox, brand, categories, confidence, emails, geometry, id, names, operating_status, phones, socials, sources, taxonomy, version, websites
+[exit=2]
+
+
+═══ ZERO-RESULT HINT COVERAGE ═══
+
+$ botmap count -t place --bbox BB --where categories.primary=zzz_not_real  [stderr]
+Usage: botmap [OPTIONS] [COMMAND] [ARGS]...
+Try 'botmap --help' for help.
+
+Error: No such command 'count -t place'.
+
+$ botmap sample -t place -n 5 --bbox BB --where categories.primary=zzz_not_real  [stderr]
+Usage: botmap [OPTIONS] [COMMAND] [ARGS]...
+Try 'botmap --help' for help.
+
+Error: No such command 'sample -t place -n 5'.
+
+$ botmap places --bbox BB --where categories.primary=zzz_not_real  [stderr]
+[botmap] 0 rows. No place has categories.primary='zzz_not_real' in this bbox. Did you mean: commercial_real_estate, real_estate, real_estate_agent? Run `botmap categories -t place --bbox …` to see the full list.
+
+
+═══ PLACE RESOLUTION ═══
+
+$ botmap --json where "Malta"
+{
+  "id": "e1974350-8bc7-4769-9bf6-4291b7b196b8",
+  "name": "Malta",
+  "subtype": "country",
+  "country": "MT",
+  "region": null,
+  "admin_level": 0,
+  "population": 423282,
+  "parent_division_id": null,
+  "bbox": [
+    13.936042785644531,
+    35.585365295410156,
+    14.822786331176758,
+    36.28254699707031
+  ],
+  "candidates": [
+    {
+      "id": "e1974350-8bc7-4769-9bf6-4291b7b196b8",
+      "name": "Malta",
+      "subtype": "country",
+      "country": "MT",
+      "region": null,
+      "admin_level": 0,
+      "population": 423282,
+      "parent_division_id": null,
+      "bbox": [
+        13.936042785644531,
+        35.585365295410156,
+        14.822786331176758,
+        36.28254699707031
+      ]
+    },
+    {
+      "id": "ecc7f6f1-be5f-425c-bfda-07f69909da90",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NY",
+      "admin_level": null,
+      "population": 17130,
+      "parent_division_id": "402bae51-bbac-4ad0-9b45-779c24dc55ca",
+      "bbox": [
+        -73.83700561523438,
+        42.92089080810547,
+        -73.72547149658203,
+        43.043914794921875
+      ]
+    },
+    {
+      "id": "80711bd9-6f96-4c29-a296-5cee20654ffe",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "BR",
+      "region": "BR-PB",
+      "admin_level": null,
+      "population": 6046,
+      "parent_division_id": "053ed27b-d193-4375-afa3-f33d43209c26",
+      "bbox": [
+        -37.58271408081055,
+        -7.001619338989258,
+        -37.453094482421875,
+        -6.769464492797852
+      ]
+    },
+    {
+      "id": "151b2e7a-3b04-4127-aa86-4f6da1997269",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MT",
+      "admin_level": null,
+      "population": 2120,
+      "parent_division_id": "cd7eda7a-95f5-4e37-97bb-1abeda0a6889",
+      "bbox": [
+        -107.88741302490234,
+        48.344085693359375,
+        -107.85667419433594,
+        48.36495590209961
+      ]
+    },
+    {
+      "id": "69fcaa45-af9a-45db-8266-3b9177b287ca",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "PT",
+      "region": "PT-13",
+      "admin_level": null,
+      "population": 1385,
+      "parent_division_id": "b6246948-77ad-4aad-b9f0-5b10b83be855",
+      "bbox": [
+        -8.674696922302246,
+        41.29323196411133,
+        -8.651569366455078,
+        41.31343460083008
+      ]
+    },
+    {
+      "id": "69e937ea-5c72-494b-a1e2-1e050dce5893",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IL",
+      "admin_level": null,
+      "population": 1069,
+      "parent_division_id": "e73c1dc8-7326-4c58-b727-84b2f22ad1d1",
+      "bbox": [
+        -88.94183349609375,
+        41.89176940917969,
+        -88.8280258178711,
+        41.97958755493164
+      ]
+    },
+    {
+      "id": "6eca3fb9-9fe1-4811-a08c-8d05974a5285",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-OH",
+      "admin_level": null,
+      "population": 559,
+      "parent_division_id": "9d961be2-c124-461a-b4bd-ead356fe519d",
+      "bbox": [
+        -81.93817138671875,
+        39.59554672241211,
+        -81.81201934814453,
+        39.705894470214844
+      ]
+    },
+    {
+      "id": "3e1db2fd-e121-42fa-b950-c9a050e3a162",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "TR",
+      "region": "TR-63",
+      "admin_level": null,
+      "population": 490,
+      "parent_division_id": "24a23bd2-7568-4483-85f4-4b10616f2f6e",
+      "bbox": [
+        39.6349323425293,
+        37.03697091674805,
+        39.65293615722656,
+        37.05497854614258
+      ]
+    },
+    {
+      "id": "fdb0f6f1-47e8-4282-901a-8bd42c49ec5a",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "PL",
+      "region": "PL-08",
+      "admin_level": null,
+      "population": 181,
+      "parent_division_id": "09cc80b6-814d-42b8-b11e-ad082b85d04a",
+      "bbox": [
+        14.994384590148925,
+        52.60155374145508,
+        15.012386497497559,
+        52.61956137084961
+      ]
+    },
+    {
+      "id": "2c967de4-4f7f-4fc3-8e61-a24dc4214792",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-ID",
+      "admin_level": null,
+      "population": 174,
+      "parent_division_id": "21f63214-acf1-4a3d-bd52-617b18de4c28",
+      "bbox": [
+        -113.37925720214844,
+        42.2974853515625,
+        -113.35945129394531,
+        42.31743240356445
+      ]
+    },
+    {
+      "id": "308c4b39-c257-408a-b132-283393eaf7db",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-TX",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "0ed3a53a-2fc5-4a96-9d0b-cb877431d8ae",
+      "bbox": [
+        -94.53116339111328,
+        33.4791706237793,
+        -94.51314813232422,
+        33.49717443847656
+      ]
+    },
+    {
+      "id": "3f657100-0075-4816-853e-baf3297d1904",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-AL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "62a38b1b-ed9a-4657-a1ed-9ee121ec009e",
+      "bbox": [
+        -87.46370428466797,
+        31.01590234375,
+        -87.4456890258789,
+        31.033906158447266
+      ]
+    },
+    {
+      "id": "79bbfcba-e5d0-4a61-ab76-dca6d29cad0e",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-SC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "f2ce09f7-1bd5-4b18-8ab1-1dc40c7c5f6d",
+      "bbox": [
+        -80.59297674560547,
+        33.86809426879883,
+        -80.5749614868164,
+        33.88610189819336
+      ]
+    },
+    {
+      "id": "fd55e1cf-403e-4e34-a5d0-9f5369f743fa",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-PA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "84f36e81-f1a9-409b-8932-5466f7062cc9",
+      "bbox": [
+        -76.91814916992188,
+        40.60885888671875,
+        -76.90014154052734,
+        40.626862701416016
+      ]
+    },
+    {
+      "id": "317555c8-9cad-42be-8bee-10da77da1f7b",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "PT",
+      "region": "PT-09",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "009da719-09a7-4b38-a9da-aca96038f2d7",
+      "bbox": [
+        -7.105568584442139,
+        40.73216516113281,
+        -7.087567630767822,
+        40.750172790527344
+      ]
+    },
+    {
+      "id": "eaeab39b-7ab4-4328-a2af-37f647893004",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "PT",
+      "region": "PT-04",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "d0391338-2e69-4591-a976-74ef5403961a",
+      "bbox": [
+        -6.922679122924805,
+        41.47389489746094,
+        -6.904678169250488,
+        41.4918987121582
+      ]
+    },
+    {
+      "id": "b48f544d-9625-4a6a-9204-f0a299cf86cf",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "ME",
+      "region": "ME-08",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "2fef2405-1b81-4244-9d6c-0af2cf1420ee",
+      "bbox": [
+        18.441551986694336,
+        42.48826486206055,
+        18.45955389404297,
+        42.50627249145508
+      ]
+    },
+    {
+      "id": "3aed2415-35ae-4987-95fc-dadc52f13f40",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "AT",
+      "region": "AT-2",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "dde42ef8-0468-4d98-885c-8df3695a073b",
+      "bbox": [
+        13.239387512207031,
+        46.913394927978516,
+        13.545821189880371,
+        47.09889221191406
+      ]
+    },
+    {
+      "id": "d5f54b32-0ecd-41f8-8825-3081bace122c",
+      "name": "Malta",
+      "subtype": "neighborhood",
+      "country": "BA",
+      "region": "BA-BIH",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "e1427b44-60e0-428e-a58b-2332e80fa101",
+      "bbox": [
+        17.00341111755371,
+        43.81323892211914,
+        17.021414932250977,
+        43.83124655151367
+      ]
+    },
+    {
+      "id": "91fba61e-dbb9-4a7b-bdc1-0bc341520be1",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "HR",
+      "region": "HR-09",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "928f2658-6c67-4f68-b097-ca843afd9272",
+      "bbox": [
+        15.974036041259765,
+        44.52544671630859,
+        15.992037948608399,
+        44.543454345703125
+      ]
+    },
+    {
+      "id": "6d9c3724-47d8-49f1-a146-a904977d0541",
+      "name": "Malta",
+      "subtype": "neighborhood",
+      "country": "BA",
+      "region": "BA-BIH",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "ffd3167e-732c-4e07-b3cd-de5139252e2b",
+      "bbox": [
+        18.37812042236328,
+        43.8509635925293,
+        18.385770797729492,
+        43.85491180419922
+      ]
+    },
+    {
+      "id": "78457e61-16cb-4e23-85bd-c12b4f782b96",
+      "name": "Malta",
+      "subtype": "neighborhood",
+      "country": "BA",
+      "region": "BA-SRP",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "63a45e7e-cab1-465f-aad9-165156aa0fbd",
+      "bbox": [
+        17.194845977783203,
+        44.77510339355469,
+        17.212847885131836,
+        44.79311102294922
+      ]
+    },
+    {
+      "id": "96693d12-f213-48e5-bcac-40cd474b5a77",
+      "name": "Malta",
+      "subtype": "microhood",
+      "country": "NL",
+      "region": "NL-ZE",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "180a2ed6-e9bc-48f6-a183-4914792b3444",
+      "bbox": [
+        3.918886247634888,
+        51.64265328979492,
+        3.936886724472046,
+        51.66066091918945
+      ]
+    },
+    {
+      "id": "d64380ac-23fb-4e75-8d76-b6cd0802c8fb",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "NL",
+      "region": "NL-ZH",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "4741d629-3dd1-4dbc-9222-8e215fc62f17",
+      "bbox": [
+        4.559081378936767,
+        51.70860940551758,
+        4.577081855773926,
+        51.72661703491211
+      ]
+    },
+    {
+      "id": "77986647-30bb-4d82-a205-1be55aa564c5",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "PL",
+      "region": "PL-18",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "519a3798-aa86-4d69-9e75-d4aac33cd5e3",
+      "bbox": [
+        22.1400421295166,
+        50.10821420288086,
+        22.158045944213868,
+        50.12622183227539
+      ]
+    },
+    {
+      "id": "20478d6a-e7d3-4d31-9c7d-02adae5a18e0",
+      "name": "Malta",
+      "subtype": "neighborhood",
+      "country": "SE",
+      "region": "SE-S",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "4cbb5e33-c523-4642-8723-de4c78b2e223",
+      "bbox": [
+        13.711616340637207,
+        60.05656701660156,
+        13.72961824798584,
+        60.074574645996094
+      ]
+    },
+    {
+      "id": "ad91fa11-385d-49e9-84b9-1ed8f99e8d90",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "LV",
+      "region": "LV-077",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "1b6f22a6-a5ab-4cdf-9bed-d62d1cd6be0e",
+      "bbox": [
+        26.90683251953125,
+        56.562109771728515,
+        26.924836334228516,
+        56.58011740112305
+      ]
+    },
+    {
+      "id": "be89ec32-3f80-469e-b700-4d73b9b6ecab",
+      "name": "Malta",
+      "subtype": "locality",
+      "country": "LV",
+      "region": "LV-077",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "cdd80736-2869-4741-a9df-5f1c10965d0f",
+      "bbox": [
+        27.13777732849121,
+        56.33137893676758,
+        27.192792892456055,
+        56.36475372314453
+      ]
+    },
+    {
+      "id": "d8d28b79-ee3d-4396-8e4f-b6c6afd23fd3",
+      "name": "Malta",
+      "subtype": "macrohood",
+      "country": "TR",
+      "region": "TR-41",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "55d1fc7f-0bac-4d7d-a4bd-6d5246f7dfa1",
+      "bbox": [
+        29.936993423461914,
+        40.784941497802734,
+        29.95499723815918,
+        40.8029453125
+      ]
+    },
+    {
+      "id": "ec6f1a39-7942-448e-a322-8dd71093bf85",
+      "name": "Malta",
+      "subtype": "microhood",
+      "country": "TR",
+      "region": "TR-34",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "5ab71638-f221-403f-954e-7d37457a10d3",
+      "bbox": [
+        28.848337951660156,
+        41.01417428588867,
+        28.866341766357422,
+        41.03217810058594
+      ]
+    },
+    {
+      "id": "bd3abb93-0cd7-46dd-80a0-4ce6ad6d723c",
+      "name": "malta",
+      "subtype": "locality",
+      "country": "IN",
+      "region": "IN-UK",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "9c2d3be7-ab49-4b32-9a3b-0922e710f8ff",
+      "bbox": [
+        79.70381433105469,
+        29.556998077392578,
+        79.72182958984375,
+        29.575001892089844
+      ]
+    },
+    {
+      "id": "3b42ad5f-6668-4433-9e55-938394cff865",
+      "name": "malta",
+      "subtype": "locality",
+      "country": "IN",
+      "region": "IN-UK",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "e5aa0ae0-d5e1-423e-9036-27e861cd47df",
+      "bbox": [
+        79.78634149169922,
+        29.805889907836914,
+        79.80434912109375,
+        29.82389372253418
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Luxembourg"
+{
+  "id": "77dcbd75-7b54-43b2-91aa-ac70e8c91e08",
+  "name": "Luxembourg",
+  "subtype": "locality",
+  "country": "LU",
+  "region": "LU-LU",
+  "admin_level": null,
+  "population": 122273,
+  "parent_division_id": "fa900e94-c3fd-4698-b141-6b4c01b45de9",
+  "bbox": [
+    6.120798889160156,
+    49.602270904541015,
+    6.138799842834473,
+    49.62027853393555
+  ],
+  "candidates": [
+    {
+      "id": "77dcbd75-7b54-43b2-91aa-ac70e8c91e08",
+      "name": "Luxembourg",
+      "subtype": "locality",
+      "country": "LU",
+      "region": "LU-LU",
+      "admin_level": null,
+      "population": 122273,
+      "parent_division_id": "fa900e94-c3fd-4698-b141-6b4c01b45de9",
+      "bbox": [
+        6.120798889160156,
+        49.602270904541015,
+        6.138799842834473,
+        49.62027853393555
+      ]
+    },
+    {
+      "id": "7ded4357-b318-4df7-ab64-3ad2355beb92",
+      "name": "Luxembourg",
+      "subtype": "county",
+      "country": "BE",
+      "region": "BE-WAL",
+      "admin_level": 2,
+      "population": null,
+      "parent_division_id": "35a36044-ac48-4742-8ee0-e97e63af28eb",
+      "bbox": [
+        4.968552112579346,
+        49.49697494506836,
+        6.034388542175293,
+        50.43061447143555
+      ]
+    },
+    {
+      "id": "fa900e94-c3fd-4698-b141-6b4c01b45de9",
+      "name": "Luxembourg",
+      "subtype": "county",
+      "country": "LU",
+      "region": "LU-LU",
+      "admin_level": 2,
+      "population": null,
+      "parent_division_id": "5e0f81d5-dc14-47c4-925b-25e70168951c",
+      "bbox": [
+        6.069169998168945,
+        49.56098175048828,
+        6.203649997711182,
+        49.654869079589844
+      ]
+    },
+    {
+      "id": "8e5c7cd5-f934-4a78-a641-a1ea52c3b89b",
+      "name": "Luxembourg",
+      "subtype": "locality",
+      "country": "FR",
+      "region": "FR-PDL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "998160aa-ae57-4115-8908-d0fcf3d34f1f",
+      "bbox": [
+        0.4384380910396576,
+        47.71668893432617,
+        0.4564381506443024,
+        47.7346965637207
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Monaco"
+{
+  "id": "0448061a-a127-41a6-9a6f-3b41cf684b25",
+  "name": "Monaco",
+  "subtype": "region",
+  "country": "MC",
+  "region": null,
+  "admin_level": 1,
+  "population": 39050,
+  "parent_division_id": "8c379db3-e741-4766-95c9-ee2a7d92d984",
+  "bbox": [
+    7.409027099609375,
+    43.72475814819336,
+    7.439871311187744,
+    43.75191879272461
+  ],
+  "candidates": [
+    {
+      "id": "0448061a-a127-41a6-9a6f-3b41cf684b25",
+      "name": "Monaco",
+      "subtype": "region",
+      "country": "MC",
+      "region": null,
+      "admin_level": 1,
+      "population": 39050,
+      "parent_division_id": "8c379db3-e741-4766-95c9-ee2a7d92d984",
+      "bbox": [
+        7.409027099609375,
+        43.72475814819336,
+        7.439871311187744,
+        43.75191879272461
+      ]
+    },
+    {
+      "id": "8c379db3-e741-4766-95c9-ee2a7d92d984",
+      "name": "Monaco",
+      "subtype": "country",
+      "country": "MC",
+      "region": null,
+      "admin_level": 0,
+      "population": 39050,
+      "parent_division_id": null,
+      "bbox": [
+        7.409027099609375,
+        43.51652908325195,
+        7.532991886138916,
+        43.75191879272461
+      ]
+    },
+    {
+      "id": "0ce8ff8d-833e-41e1-8d30-f95ea95f1423",
+      "name": "Monaco",
+      "subtype": "locality",
+      "country": "MC",
+      "region": null,
+      "admin_level": null,
+      "population": 39050,
+      "parent_division_id": "0448061a-a127-41a6-9a6f-3b41cf684b25",
+      "bbox": [
+        7.4119589958190915,
+        43.72201043701172,
+        7.4299599494934085,
+        43.74001806640625
+      ]
+    },
+    {
+      "id": "84d998fd-5b9e-4809-ad82-c445b76cfdfb",
+      "name": "Monaco",
+      "subtype": "macrohood",
+      "country": "NZ",
+      "region": "NZ-NSN",
+      "admin_level": null,
+      "population": 425,
+      "parent_division_id": "44c33c55-a2e6-4bd8-828b-166eec3a5d37",
+      "bbox": [
+        173.20477294921875,
+        -41.307918548583984,
+        173.22508239746094,
+        -41.30249786376953
+      ]
+    },
+    {
+      "id": "b185e9c8-b33c-40d8-86ef-3b7429d9bb07",
+      "name": "Monaco",
+      "subtype": "locality",
+      "country": "BO",
+      "region": "BO-N",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "f898c315-4034-4db9-8cba-5abb5580fefd",
+      "bbox": [
+        -68.2769443359375,
+        -11.777160820007325,
+        -68.25893670654297,
+        -11.759158912658691
+      ]
+    },
+    {
+      "id": "2f87e1f6-602c-420f-9bfc-6664196868a3",
+      "name": "Monaco",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-CA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "4dfe650c-2104-44b0-b0be-90f8ff7798f6",
+      "bbox": [
+        -118.3682529296875,
+        33.86406976318359,
+        -118.35023767089844,
+        33.88207357788086
+      ]
+    },
+    {
+      "id": "3eb9dbe2-f8eb-4f31-9c70-f767fcfdbaf9",
+      "name": "Monaco",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-FL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "86bcc0cb-fa2c-4067-a61a-bad8923ad527",
+      "bbox": [
+        -81.77431982421875,
+        26.350159469604492,
+        -81.75631219482422,
+        26.368163284301758
+      ]
+    },
+    {
+      "id": "24ee3774-7251-43c4-a72e-55620193c116",
+      "name": "Monaco",
+      "subtype": "locality",
+      "country": "FR",
+      "region": "FR-GES",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "fe7d53e4-308d-49c0-b9f8-4d45020e52c8",
+      "bbox": [
+        5.521729293823242,
+        47.98754006958008,
+        5.539730247497559,
+        48.00554769897461
+      ]
+    },
+    {
+      "id": "88198f34-04a4-4fbd-84ba-cae9db6fa4ef",
+      "name": "Monaco",
+      "subtype": "locality",
+      "country": "RE",
+      "region": null,
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "728c48d9-d738-49f1-b7c5-4db16f26586a",
+      "bbox": [
+        55.58106881713867,
+        -20.93877523803711,
+        55.5990764465332,
+        -20.920771423339843
+      ]
+    },
+    {
+      "id": "476e506d-ffb8-4a19-93e7-d4cad10845a5",
+      "name": "Monaco",
+      "subtype": "neighborhood",
+      "country": "ID",
+      "region": "ID-BT",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "d7b24006-d013-426e-908c-b9aa5d74a7ea",
+      "bbox": [
+        106.6474838256836,
+        -6.206920623779297,
+        106.64866638183594,
+        -6.204983711242676
+      ]
+    },
+    {
+      "id": "68ba3408-88e9-4460-9bc7-e628b2e40d11",
+      "name": "Monaco",
+      "subtype": "neighborhood",
+      "country": "ID",
+      "region": "ID-JB",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "b940e7ca-4989-4967-95a7-79fd6024f9c5",
+      "bbox": [
+        106.94749450683594,
+        -6.38941764831543,
+        106.95610046386719,
+        -6.3854522705078125
+      ]
+    },
+    {
+      "id": "ba4cfa17-1892-4451-ab94-1d587ffcc722",
+      "name": "Monaco",
+      "subtype": "neighborhood",
+      "country": "ID",
+      "region": "ID-JB",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "18d02a69-726f-4a05-90ce-9ee051d3374f",
+      "bbox": [
+        107.18499755859375,
+        -6.283732891082764,
+        107.18637084960938,
+        -6.280930042266846
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Rhode Island, US"
+{
+  "id": "8ac997bb-ef19-4612-b817-3a2a407ab6f5",
+  "name": "Rhode Island",
+  "subtype": "region",
+  "country": "US",
+  "region": "US-RI",
+  "admin_level": 1,
+  "population": 1112308,
+  "parent_division_id": "f39eb4af-5206-481b-b19e-bd784ded3f05",
+  "bbox": [
+    -71.90743255615234,
+    41.09583282470703,
+    -71.08856964111328,
+    42.01893615722656
+  ],
+  "candidates": [
+    {
+      "id": "8ac997bb-ef19-4612-b817-3a2a407ab6f5",
+      "name": "Rhode Island",
+      "subtype": "region",
+      "country": "US",
+      "region": "US-RI",
+      "admin_level": 1,
+      "population": 1112308,
+      "parent_division_id": "f39eb4af-5206-481b-b19e-bd784ded3f05",
+      "bbox": [
+        -71.90743255615234,
+        41.09583282470703,
+        -71.08856964111328,
+        42.01893615722656
+      ]
+    },
+    {
+      "id": "80b24509-3b19-4d72-ba69-bf264839b749",
+      "name": "Rhode Island",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-TX",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "15edd973-3e61-4cfe-a8da-23db0b8bb557",
+      "bbox": [
+        -96.24037664794922,
+        31.806439224243164,
+        -96.22236138916016,
+        31.82444303894043
+      ]
+    },
+    {
+      "id": "2cd8f61c-4a70-4c73-8de6-42d468fb69d9",
+      "name": "Rhode Island",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NY",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "a056b49e-393a-4c15-b8d4-0767e5fcdb20",
+      "bbox": [
+        -75.80863684082031,
+        42.669955078125,
+        -75.79062921142578,
+        42.68796270751953
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Cambridge, MA"
+{
+  "id": "e66a9243-9cc5-40a8-a44e-363f9721113f",
+  "name": "Cambridge",
+  "subtype": "locality",
+  "country": "US",
+  "region": "US-MA",
+  "admin_level": null,
+  "population": 105162,
+  "parent_division_id": "7c39658e-5b54-4e31-98f9-7ecf729bfb6a",
+  "bbox": [
+    -71.160400390625,
+    42.35240173339844,
+    -71.06397247314453,
+    42.40426254272461
+  ],
+  "candidates": [
+    {
+      "id": "e66a9243-9cc5-40a8-a44e-363f9721113f",
+      "name": "Cambridge",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MA",
+      "admin_level": null,
+      "population": 105162,
+      "parent_division_id": "7c39658e-5b54-4e31-98f9-7ecf729bfb6a",
+      "bbox": [
+        -71.160400390625,
+        42.35240173339844,
+        -71.06397247314453,
+        42.40426254272461
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Alameda, CA"
+{
+  "id": "300e4c3b-3aa8-47c2-8f0f-010e8937d1ad",
+  "name": "Alameda",
+  "subtype": "locality",
+  "country": "US",
+  "region": "US-CA",
+  "admin_level": null,
+  "population": 77624,
+  "parent_division_id": "9695a507-d4d5-4230-91e3-604f70c9315f",
+  "bbox": [
+    -122.33975219726562,
+    37.70819854736328,
+    -122.22395324707031,
+    37.80000686645508
+  ],
+  "candidates": [
+    {
+      "id": "300e4c3b-3aa8-47c2-8f0f-010e8937d1ad",
+      "name": "Alameda",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-CA",
+      "admin_level": null,
+      "population": 77624,
+      "parent_division_id": "9695a507-d4d5-4230-91e3-604f70c9315f",
+      "bbox": [
+        -122.33975219726562,
+        37.70819854736328,
+        -122.22395324707031,
+        37.80000686645508
+      ]
+    },
+    {
+      "id": "7e876577-712c-4854-a6b7-6b6566a25550",
+      "name": "Alameda",
+      "subtype": "county",
+      "country": "CA",
+      "region": "CA-SK",
+      "admin_level": 2,
+      "population": null,
+      "parent_division_id": "53485ca0-05bb-472a-b8df-ae1e01c2bfab",
+      "bbox": [
+        -102.29793548583984,
+        49.26081085205078,
+        -102.27527618408203,
+        49.27555847167969
+      ]
+    },
+    {
+      "id": "425f9718-2953-4c36-a315-5323204a8b93",
+      "name": "Alameda",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-CA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "f04642a4-b145-4543-936e-076c0739d650",
+      "bbox": [
+        -119.01228826904297,
+        35.22881967163086,
+        -118.9942730102539,
+        35.246823486328125
+      ]
+    },
+    {
+      "id": "56ac118a-c1b8-4ce2-8204-b8311314ed24",
+      "name": "Alameda",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-SK",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "7e876577-712c-4854-a6b7-6b6566a25550",
+      "bbox": [
+        -102.29065435791016,
+        49.25621682739258,
+        -102.2726390991211,
+        49.27422445678711
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Alameda, US-CA"
+{
+  "id": "300e4c3b-3aa8-47c2-8f0f-010e8937d1ad",
+  "name": "Alameda",
+  "subtype": "locality",
+  "country": "US",
+  "region": "US-CA",
+  "admin_level": null,
+  "population": 77624,
+  "parent_division_id": "9695a507-d4d5-4230-91e3-604f70c9315f",
+  "bbox": [
+    -122.33975219726562,
+    37.70819854736328,
+    -122.22395324707031,
+    37.80000686645508
+  ],
+  "candidates": [
+    {
+      "id": "300e4c3b-3aa8-47c2-8f0f-010e8937d1ad",
+      "name": "Alameda",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-CA",
+      "admin_level": null,
+      "population": 77624,
+      "parent_division_id": "9695a507-d4d5-4230-91e3-604f70c9315f",
+      "bbox": [
+        -122.33975219726562,
+        37.70819854736328,
+        -122.22395324707031,
+        37.80000686645508
+      ]
+    },
+    {
+      "id": "425f9718-2953-4c36-a315-5323204a8b93",
+      "name": "Alameda",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-CA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "f04642a4-b145-4543-936e-076c0739d650",
+      "bbox": [
+        -119.01228826904297,
+        35.22881967163086,
+        -118.9942730102539,
+        35.246823486328125
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Boston, MA"
+{
+  "id": "5df2793f-5a0a-4fcf-bd3c-7edb8cc495d8",
+  "name": "Boston",
+  "subtype": "locality",
+  "country": "US",
+  "region": "US-MA",
+  "admin_level": null,
+  "population": 675647,
+  "parent_division_id": "e74073cb-eba1-44f8-bf2d-b93f419a24ef",
+  "bbox": [
+    -71.19124603271484,
+    42.227909088134766,
+    -70.80448150634766,
+    42.3969841003418
+  ],
+  "candidates": [
+    {
+      "id": "5df2793f-5a0a-4fcf-bd3c-7edb8cc495d8",
+      "name": "Boston",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MA",
+      "admin_level": null,
+      "population": 675647,
+      "parent_division_id": "e74073cb-eba1-44f8-bf2d-b93f419a24ef",
+      "bbox": [
+        -71.19124603271484,
+        42.227909088134766,
+        -70.80448150634766,
+        42.3969841003418
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Brooklyn"
+{
+  "id": "d6bbeae3-72bd-402d-8374-db153a63597b",
+  "name": "Brooklyn",
+  "subtype": "locality",
+  "country": "US",
+  "region": "US-NY",
+  "admin_level": null,
+  "population": 2736074,
+  "parent_division_id": "a4c73b33-ce85-45ac-99e5-44abe35b6732",
+  "bbox": [
+    -74.05669403076172,
+    40.55033874511719,
+    -73.83293914794922,
+    40.739437103271484
+  ],
+  "candidates": [
+    {
+      "id": "d6bbeae3-72bd-402d-8374-db153a63597b",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NY",
+      "admin_level": null,
+      "population": 2736074,
+      "parent_division_id": "a4c73b33-ce85-45ac-99e5-44abe35b6732",
+      "bbox": [
+        -74.05669403076172,
+        40.55033874511719,
+        -73.83293914794922,
+        40.739437103271484
+      ]
+    },
+    {
+      "id": "be92636b-6c0d-4327-ba08-1544b77f468b",
+      "name": "Brooklyn",
+      "subtype": "macrohood",
+      "country": "US",
+      "region": "US-NY",
+      "admin_level": null,
+      "population": 2736074,
+      "parent_division_id": "d6bbeae3-72bd-402d-8374-db153a63597b",
+      "bbox": [
+        -73.95872229003906,
+        40.6435993347168,
+        -73.94071466064453,
+        40.66160696411133
+      ]
+    },
+    {
+      "id": "3914aa43-e079-4463-b467-3868b7195045",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-OH",
+      "admin_level": null,
+      "population": 11022,
+      "parent_division_id": "f583fcfc-4f6d-48e4-b29a-1e2cf0814196",
+      "bbox": [
+        -81.76966094970703,
+        41.418399810791016,
+        -81.72852325439453,
+        41.462520599365234
+      ]
+    },
+    {
+      "id": "fc7aa9cd-8824-4e15-a727-f0e864083fdc",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-CT",
+      "admin_level": null,
+      "population": 8450,
+      "parent_division_id": "3d8eeeeb-8d09-4e79-a4b1-f025adfc3426",
+      "bbox": [
+        -72.02297973632812,
+        41.74222946166992,
+        -71.88581848144531,
+        41.82680130004883
+      ]
+    },
+    {
+      "id": "d33069a4-df00-4f0f-9ca0-bdd0c2463043",
+      "name": "Brooklyn",
+      "subtype": "macrohood",
+      "country": "NZ",
+      "region": "NZ-WGN",
+      "admin_level": null,
+      "population": 6902,
+      "parent_division_id": "1cb6cd06-b1c9-4dd1-8ed7-11c22a0c7fdd",
+      "bbox": [
+        174.69252014160156,
+        -41.358882904052734,
+        174.7701416015625,
+        -41.297176361083984
+      ]
+    },
+    {
+      "id": "9c53e2ca-4d29-4c41-bdb8-d31c0a6c5003",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MS",
+      "admin_level": null,
+      "population": 2458,
+      "parent_division_id": "00669f46-305c-4104-bfbe-5324a0c589ae",
+      "bbox": [
+        -89.19827764892578,
+        31.048689666748047,
+        -89.18026239013672,
+        31.066693481445313
+      ]
+    },
+    {
+      "id": "6c1b4a99-ebb3-4abb-8ea8-87cde8c78e02",
+      "name": "Brooklyn",
+      "subtype": "macrohood",
+      "country": "AU",
+      "region": "AU-VIC",
+      "admin_level": null,
+      "population": 1856,
+      "parent_division_id": "7000476d-2044-4faf-9bed-d25a4f3da214",
+      "bbox": [
+        144.82081604003906,
+        -37.826011657714844,
+        144.85984802246094,
+        -37.80227279663086
+      ]
+    },
+    {
+      "id": "71da741c-8fec-42b8-be61-a6284948e2c8",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IN",
+      "admin_level": null,
+      "population": 1538,
+      "parent_division_id": "389d77f3-6697-453b-a11b-9fea32a11ce2",
+      "bbox": [
+        -86.3783950805664,
+        39.53195571899414,
+        -86.35490417480469,
+        39.55105972290039
+      ]
+    },
+    {
+      "id": "5543c54d-fc54-4734-95ec-679141bcadb4",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IA",
+      "admin_level": null,
+      "population": 1502,
+      "parent_division_id": "91ccd363-caf0-45c3-afe7-1aef44e33769",
+      "bbox": [
+        -92.4551010131836,
+        41.720680236816406,
+        -92.43350982666016,
+        41.750328063964844
+      ]
+    },
+    {
+      "id": "dfef49e4-1b40-464e-939f-71c9951ef301",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MI",
+      "admin_level": null,
+      "population": 1376,
+      "parent_division_id": "e78cad31-efbf-407a-94b5-07448f8b88f5",
+      "bbox": [
+        -84.25982666015625,
+        42.09662628173828,
+        -84.23944854736328,
+        42.11368179321289
+      ]
+    },
+    {
+      "id": "1961e501-32e9-4901-8670-67a460786217",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-PA",
+      "admin_level": null,
+      "population": 900,
+      "parent_division_id": "ece7c4d6-d8a3-4b17-a447-4bc98ba64da6",
+      "bbox": [
+        -75.84671020507812,
+        41.71721649169922,
+        -75.75018310546875,
+        41.813629150390625
+      ]
+    },
+    {
+      "id": "4b6b669d-d757-4dfb-98d9-a4b1bbd947af",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "NZ",
+      "region": "NZ-TAS",
+      "admin_level": null,
+      "population": 765,
+      "parent_division_id": "0be413e0-2a59-40b1-a176-e5cdcad80ea0",
+      "bbox": [
+        172.83047485351562,
+        -41.13673782348633,
+        172.99974060058594,
+        -41.07520294189453
+      ]
+    },
+    {
+      "id": "7f13f20a-0fb2-4cfd-90c7-9a389763fec3",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "AU",
+      "region": "AU-NSW",
+      "admin_level": null,
+      "population": 737,
+      "parent_division_id": "76129bb5-96bb-4432-bebf-0d2167092342",
+      "bbox": [
+        151.159912109375,
+        -33.62811279296875,
+        151.28480529785156,
+        -33.533348083496094
+      ]
+    },
+    {
+      "id": "7e86c32f-12dc-446c-881a-a863e4a196a8",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IL",
+      "admin_level": null,
+      "population": 649,
+      "parent_division_id": "d506aa22-7dc5-42ed-9d2b-c058cbfe3287",
+      "bbox": [
+        -90.177734375,
+        38.6462516784668,
+        -90.1573486328125,
+        38.6606559753418
+      ]
+    },
+    {
+      "id": "2577c3a5-9064-43c1-80a2-ba9e218a3669",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-WI",
+      "admin_level": null,
+      "population": 462,
+      "parent_division_id": "47918692-5f6e-4298-b253-e21e5b955c4b",
+      "bbox": [
+        -89.38336181640625,
+        42.845035552978516,
+        -89.35600280761719,
+        42.861297607421875
+      ]
+    },
+    {
+      "id": "9c5d1911-5a13-4ac4-83dd-0c4bfff96bbc",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IL",
+      "admin_level": null,
+      "population": 207,
+      "parent_division_id": "89739dc5-659e-4eb5-a5cf-1a07775f949f",
+      "bbox": [
+        -90.77219885253906,
+        40.21687203979492,
+        -90.75418359375,
+        40.23487966918945
+      ]
+    },
+    {
+      "id": "5757652d-cbb2-408d-9f1d-7cd97f5a055e",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MS",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "c32afbef-f362-497f-87d1-f431f9550cb0",
+      "bbox": [
+        -90.49548071289063,
+        33.16362268066406,
+        -90.47746545410156,
+        33.18162649536133
+      ]
+    },
+    {
+      "id": "e0c640e6-3594-46ad-9665-7762fe4c8628",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-AL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "af8c5610-e671-44fd-ba73-03e3ed41afa5",
+      "bbox": [
+        -86.78008764648438,
+        31.253670516967773,
+        -86.76207238769531,
+        31.27167433166504
+      ]
+    },
+    {
+      "id": "8e14fc76-b22b-457b-9333-586ac0008d51",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NY",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "34bfa373-340c-4f89-beff-893810ace74a",
+      "bbox": [
+        -78.75737493896484,
+        42.4241169128418,
+        -78.73935968017578,
+        42.44212454223633
+      ]
+    },
+    {
+      "id": "59508df6-ee7c-45ed-a03d-b35378ec7f4f",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-WV",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "7a6f9587-6494-474f-8737-00927c710f05",
+      "bbox": [
+        -80.87243383789063,
+        39.626353088378906,
+        -80.8544262084961,
+        39.64436071777344
+      ]
+    },
+    {
+      "id": "a4ecc6b4-38fe-4973-a08f-213dd6725693",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-AL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "1ac48646-a920-4702-bffc-aab729d31ab3",
+      "bbox": [
+        -86.62427252197266,
+        34.216929260253906,
+        -86.6062572631836,
+        34.23493307495117
+      ]
+    },
+    {
+      "id": "fa282e9c-51c5-46ef-a43a-13b10e287230",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-KY",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "470c1ab6-9357-413b-8d27-77b612b30676",
+      "bbox": [
+        -86.58538549804688,
+        37.280764404296875,
+        -86.56737023925781,
+        37.29877203369141
+      ]
+    },
+    {
+      "id": "ce196511-de97-449d-a375-267383cda455",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-VA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "d79d120c-b38f-4567-85f6-d924a6975eef",
+      "bbox": [
+        -80.56934851074219,
+        37.1422336730957,
+        -80.55133325195312,
+        37.16023748779297
+      ]
+    },
+    {
+      "id": "18b82e67-128c-4dcc-a3a8-63273e1a500e",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-SC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "1be1a29f-90a2-463c-927d-a1dadefb4a77",
+      "bbox": [
+        -81.2218677368164,
+        34.68974954223633,
+        -81.20386010742187,
+        34.707753356933594
+      ]
+    },
+    {
+      "id": "c431ae79-ff27-46c5-abdf-783acdb14597",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-SC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "130ed6b9-be7c-4742-9bbb-79f6f8a86156",
+      "bbox": [
+        -81.93467443847656,
+        35.17167169189453,
+        -81.9166591796875,
+        35.1896755065918
+      ]
+    },
+    {
+      "id": "c282c32c-f736-40ec-96a2-cd02697374bf",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NY",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "6d9d9005-4e7a-4e6a-905a-2bfbc392a43e",
+      "bbox": [
+        -74.19601934814453,
+        41.314638916015625,
+        -74.17801171875,
+        41.33264273071289
+      ]
+    },
+    {
+      "id": "1d6075c7-825c-4a64-aa63-645d18d025e6",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-PA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "4727e150-bc6d-4c39-96ac-d0fe225ec23e",
+      "bbox": [
+        -77.15037268066406,
+        41.900236907958984,
+        -77.132357421875,
+        41.91824072265625
+      ]
+    },
+    {
+      "id": "01ec995b-d4c1-4ede-b1ab-cf4804cf2513",
+      "name": "Brooklyn",
+      "subtype": "neighborhood",
+      "country": "BS",
+      "region": "BS-NP",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "e4c3af49-e4f1-4e5f-8b8f-43fc457eb4b6",
+      "bbox": [
+        -77.31515502929688,
+        25.057796478271484,
+        -77.30980682373047,
+        25.062461853027344
+      ]
+    },
+    {
+      "id": "6dd37f3c-c990-4eef-b6bc-9ef34bf08ab4",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "ee3683de-87b0-4317-ad95-cc267c9bd83a",
+      "bbox": [
+        -77.94943731689453,
+        34.238432708740234,
+        -77.93142205810547,
+        34.2564365234375
+      ]
+    },
+    {
+      "id": "3be5687e-d0c0-4fe1-8697-70e351e19e37",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-VA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "3df61a94-92b2-4500-bde1-9bc9f11d51e2",
+      "bbox": [
+        -79.16707342529297,
+        36.66391259765625,
+        -79.14906579589844,
+        36.681916412353516
+      ]
+    },
+    {
+      "id": "ba35eb1e-48ba-42d5-ac86-a9362f1f45cb",
+      "name": "Brooklyn",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-MD",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "3329e4b2-e908-42ed-bf96-3320a9f4d0bf",
+      "bbox": [
+        -76.61783599853516,
+        39.22134780883789,
+        -76.5934066772461,
+        39.2409553527832
+      ]
+    },
+    {
+      "id": "73131ef7-1992-4ab4-a79a-be7f250720b7",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-AL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "4098672d-73e1-4469-9b91-c5ba43139c65",
+      "bbox": [
+        -86.18006628417969,
+        31.303942504882812,
+        -86.16205865478516,
+        31.32194631958008
+      ]
+    },
+    {
+      "id": "a1ae8dbd-0ef6-4f8f-8875-91d5a29c0b01",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-GA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "9e1a37f1-3213-458f-88fb-36abaf855202",
+      "bbox": [
+        -84.71753424072266,
+        32.164763275146484,
+        -84.6995189819336,
+        32.18276708984375
+      ]
+    },
+    {
+      "id": "fb88f73c-ba1d-448a-b122-317b6536621e",
+      "name": "Brooklyn",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-FL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "57ef4d0e-588d-498e-b080-9c259902314c",
+      "bbox": [
+        -81.68138885498047,
+        30.316390991210938,
+        -81.6663589477539,
+        30.326791763305664
+      ]
+    },
+    {
+      "id": "bfe449b7-070a-4e47-bc35-e6a9c9344654",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-FL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "57ef4d0e-588d-498e-b080-9c259902314c",
+      "bbox": [
+        -81.68355291748047,
+        30.314572158813476,
+        -81.6655376586914,
+        30.332575973510743
+      ]
+    },
+    {
+      "id": "17e1fa39-a503-451c-8e23-6c47dd892a17",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-SD",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "073f8147-e3a9-4586-aadf-199fc92038e0",
+      "bbox": [
+        -96.92402648925781,
+        43.08366012573242,
+        -96.80567932128906,
+        43.17082977294922
+      ]
+    },
+    {
+      "id": "f0a66e27-9a13-4ace-a776-69539e45760b",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MO",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "f8ebd1fb-46ea-4573-8790-597aace5194c",
+      "bbox": [
+        -94.04978674316406,
+        40.3893268737793,
+        -94.031771484375,
+        40.40733450317383
+      ]
+    },
+    {
+      "id": "1b9ecc4e-1674-4ae0-9bb8-d311d8e0da9b",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "20093470-023b-4084-81fd-2d80dd4d6d41",
+      "bbox": [
+        -89.1678695678711,
+        41.626712799072266,
+        -89.052001953125,
+        41.716156005859375
+      ]
+    },
+    {
+      "id": "ce5f9040-7117-466e-8361-60951de8df4e",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "JM",
+      "region": "JM-05",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "a262c6b6-d69e-43c7-b66c-d0df8830c99d",
+      "bbox": [
+        -76.92683905029297,
+        18.373728576660156,
+        -76.9088237915039,
+        18.39173048400879
+      ]
+    },
+    {
+      "id": "c31d037e-0a02-4376-9395-0b82478192f0",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "HT",
+      "region": "HT-OU",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "644e5e78-c20e-446a-88f3-cb0e66e69be9",
+      "bbox": [
+        -72.34392279052734,
+        18.56738931274414,
+        -72.32591516113281,
+        18.585393127441407
+      ]
+    },
+    {
+      "id": "d465476b-f314-4184-b15e-2d255903689d",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-WV",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "00b7b56e-132f-4618-83d4-454409c43677",
+      "bbox": [
+        -81.05771368408203,
+        37.981943908691406,
+        -81.03969842529297,
+        37.99995153808594
+      ]
+    },
+    {
+      "id": "f3bd8e13-ff9d-4c91-b92c-f3c5bf7dd4b0",
+      "name": "Brooklyn",
+      "subtype": "macrohood",
+      "country": "ZA",
+      "region": "ZA-WC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "115fe00f-bf17-446a-9245-df4d3a252ce2",
+      "bbox": [
+        18.47604751586914,
+        -33.91787338256836,
+        18.49060821533203,
+        -33.9015007019043
+      ]
+    },
+    {
+      "id": "70af87b2-5da1-4355-ae91-3e66c5e83309",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NY",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "e11afab8-0eee-4d03-b6a5-6c2d54e23140",
+      "bbox": [
+        -75.17944830322266,
+        42.335242095947265,
+        -75.16144067382812,
+        42.3532497253418
+      ]
+    },
+    {
+      "id": "f3b2d7aa-993c-46ad-b0d1-28fe873a264c",
+      "name": "Brooklyn",
+      "subtype": "neighborhood",
+      "country": "LR",
+      "region": "LR-BG",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "d01d8ca3-13bd-4b86-b133-25ed7b54cf7b",
+      "bbox": [
+        -9.489571571350098,
+        7.0060319900512695,
+        -9.452062606811523,
+        7.044429779052734
+      ]
+    },
+    {
+      "id": "119b9084-74e9-4ed6-a35f-6a5d6f27a32f",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MN",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "70564e87-9ee2-4260-926b-43833f231e5c",
+      "bbox": [
+        -92.93003576660156,
+        47.43064767456055,
+        -92.9120205078125,
+        47.44865530395508
+      ]
+    },
+    {
+      "id": "db3de6db-0530-44b5-8eb1-af126eb715cb",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-WA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "249e0be6-2772-4a2d-8663-482907917b40",
+      "bbox": [
+        -123.51889532470703,
+        46.76721078491211,
+        -123.50088006591797,
+        46.78521841430664
+      ]
+    },
+    {
+      "id": "59811d94-fb8b-4402-9aa5-bf899c86f8eb",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MI",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "c6dbbd88-0c9f-40e7-a29e-ac49c5db6c4c",
+      "bbox": [
+        -88.63808172607422,
+        47.05090982055664,
+        -88.62006646728516,
+        47.06891744995117
+      ]
+    },
+    {
+      "id": "891ba362-872c-4a14-aa21-c82fcc71dac2",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-PE",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "5847d360-c128-4cf2-a16a-173e4adf4f48",
+      "bbox": [
+        -64.14929962158203,
+        46.76548767089844,
+        -64.05525970458984,
+        46.81612014770508
+      ]
+    },
+    {
+      "id": "8b1e9650-0079-48e1-b02a-77a2dc53eeb5",
+      "name": "Brooklyn",
+      "subtype": "macrohood",
+      "country": "US",
+      "region": "US-OR",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "20669090-f207-47bc-94de-ae92daac592f",
+      "bbox": [
+        -122.669921875,
+        45.47518539428711,
+        -122.63957214355469,
+        45.5015869140625
+      ]
+    },
+    {
+      "id": "05d9b94e-50f9-425c-bca0-bcd9fedc7cac",
+      "name": "Brooklyn",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-WI",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "fc6ee62c-8b46-4967-b842-5bb495b23dec",
+      "bbox": [
+        -89.97572058105469,
+        44.907481018066406,
+        -89.95770532226562,
+        44.92548864746094
+      ]
+    },
+    {
+      "id": "81c6221b-119e-4b21-b87e-2ed3308e48b3",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-NS",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "61e67c7a-bb2f-470f-b206-d96303298e6d",
+      "bbox": [
+        -65.1496353149414,
+        44.92230987548828,
+        -65.07684326171875,
+        44.97125244140625
+      ]
+    },
+    {
+      "id": "683432d7-5f3b-4bd5-8b91-08be30f6adef",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-NS",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "03763c54-5b2d-475d-8f88-b6dc4e2eb2b6",
+      "bbox": [
+        -64.04421997070312,
+        44.97603988647461,
+        -63.98428726196289,
+        45.02699279785156
+      ]
+    },
+    {
+      "id": "fd242b34-3789-4b98-8db4-a8e71f5234f2",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-NS",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "5df7b74f-6717-49c7-ae7a-c84c6cbbc578",
+      "bbox": [
+        -64.72975158691406,
+        44.03591537475586,
+        -64.65576171875,
+        44.13898849487305
+      ]
+    },
+    {
+      "id": "513c68ee-c0bd-4825-b28e-8123f4681035",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-NS",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "40cb5527-7931-470f-9218-486214ac36af",
+      "bbox": [
+        -66.10968017578125,
+        43.838462829589844,
+        -66.03323364257812,
+        43.90648651123047
+      ]
+    },
+    {
+      "id": "a36c2769-66a9-4b65-93de-8624eef555c9",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-PE",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "842b4be8-2acb-4a6e-8f06-2f406c53fdd6",
+      "bbox": [
+        -62.72141647338867,
+        46.07474136352539,
+        -62.6440544128418,
+        46.108211517333984
+      ]
+    },
+    {
+      "id": "d2209dc5-72df-44f1-807c-cbb94abdae96",
+      "name": "Brooklyn",
+      "subtype": "locality",
+      "country": "GB",
+      "region": "GB-ENG",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "6f1d38ab-9440-452f-b42c-0c0737f479c4",
+      "bbox": [
+        -1.4669298496246337,
+        50.97466546630859,
+        -1.4489296112060548,
+        50.992673095703125
+      ]
+    },
+    {
+      "id": "fc54bce4-8948-4ef0-9ee0-25e234d8d41e",
+      "name": "Brooklyn",
+      "subtype": "neighborhood",
+      "country": "HR",
+      "region": "HR-05",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "02ff0ee2-31d7-4c2c-9b23-639a3cc018b3",
+      "bbox": [
+        16.342472854614257,
+        46.298926177978515,
+        16.36047476196289,
+        46.31693380737305
+      ]
+    },
+    {
+      "id": "054df648-ae8c-4384-baae-816f006946b4",
+      "name": "Brooklyn",
+      "subtype": "macrohood",
+      "country": "ZA",
+      "region": "ZA-GP",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "b2226c18-1d3b-4026-b6ee-0760467f0cd5",
+      "bbox": [
+        28.230721298217773,
+        -25.77455633544922,
+        28.24872511291504,
+        -25.756552520751953
+      ]
+    },
+    {
+      "id": "4e305bc2-c805-4992-a783-38a0b143eff5",
+      "name": "Brooklyn",
+      "subtype": "macrohood",
+      "country": "ZA",
+      "region": "ZA-MP",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "049de4dd-3052-4c2d-b9e4-0690929eb5ce",
+      "bbox": [
+        30.991555038452148,
+        -24.603722747802735,
+        31.009558853149414,
+        -24.58571893310547
+      ]
+    },
+    {
+      "id": "92008c36-733e-4574-8aca-7224bc0a59de",
+      "name": "Brooklyn",
+      "subtype": "macrohood",
+      "country": "AU",
+      "region": "AU-TAS",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "a1839ff8-b5ca-47d6-a530-ed298a46429f",
+      "bbox": [
+        145.90225219726562,
+        -41.0758171081543,
+        145.91131591796875,
+        -41.06715774536133
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Vancouver, BC"
+{
+  "id": "934bf9c5-f0ab-478f-8a1a-73c9427eb784",
+  "name": "Vancouver",
+  "subtype": "locality",
+  "country": "CA",
+  "region": "CA-BC",
+  "admin_level": null,
+  "population": 631486,
+  "parent_division_id": "7180f0f4-0f9d-4874-b651-c1b5c4729bc0",
+  "bbox": [
+    -123.2249755859375,
+    49.19892883300781,
+    -123.02323913574219,
+    49.31617736816406
+  ],
+  "candidates": [
+    {
+      "id": "934bf9c5-f0ab-478f-8a1a-73c9427eb784",
+      "name": "Vancouver",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-BC",
+      "admin_level": null,
+      "population": 631486,
+      "parent_division_id": "7180f0f4-0f9d-4874-b651-c1b5c4729bc0",
+      "bbox": [
+        -123.2249755859375,
+        49.19892883300781,
+        -123.02323913574219,
+        49.31617736816406
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Williamsburg"
+{
+  "id": "c884ea76-ddf0-4b06-86af-a7d699149bd1",
+  "name": "Williamsburg",
+  "subtype": "locality",
+  "country": "US",
+  "region": "US-VA",
+  "admin_level": null,
+  "population": 15861,
+  "parent_division_id": "665b7aef-fad4-46a7-b5c6-efe6bfdef91c",
+  "bbox": [
+    -76.71488684082031,
+    37.26196939086914,
+    -76.69687158203125,
+    37.27997320556641
+  ],
+  "candidates": [
+    {
+      "id": "c884ea76-ddf0-4b06-86af-a7d699149bd1",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-VA",
+      "admin_level": null,
+      "population": 15861,
+      "parent_division_id": "665b7aef-fad4-46a7-b5c6-efe6bfdef91c",
+      "bbox": [
+        -76.71488684082031,
+        37.26196939086914,
+        -76.69687158203125,
+        37.27997320556641
+      ]
+    },
+    {
+      "id": "665b7aef-fad4-46a7-b5c6-efe6bfdef91c",
+      "name": "Williamsburg",
+      "subtype": "county",
+      "country": "US",
+      "region": "US-VA",
+      "admin_level": 2,
+      "population": 15425,
+      "parent_division_id": "126924d9-2351-49ff-a99f-52e802c8d876",
+      "bbox": [
+        -76.74299621582031,
+        37.24746322631836,
+        -76.664306640625,
+        37.31012725830078
+      ]
+    },
+    {
+      "id": "6ab48177-de0d-4aaa-96b3-bd187f3be7db",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-FL",
+      "admin_level": null,
+      "population": 7908,
+      "parent_division_id": "427bbfe7-c50a-4982-b2ee-556f0de651f0",
+      "bbox": [
+        -81.46615600585938,
+        28.37863540649414,
+        -81.42952728271484,
+        28.420812606811523
+      ]
+    },
+    {
+      "id": "783d5ce2-02d0-4050-8ab6-4537d6e900af",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-KY",
+      "admin_level": null,
+      "population": 5163,
+      "parent_division_id": "2b431486-c42a-482f-abdd-03cccba6d1e2",
+      "bbox": [
+        -84.18841552734375,
+        36.717594146728516,
+        -84.14339447021484,
+        36.76216125488281
+      ]
+    },
+    {
+      "id": "ff3408c8-4050-4760-9fc6-ea667487a1c2",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IA",
+      "admin_level": null,
+      "population": 3346,
+      "parent_division_id": "6c88fd41-2130-4b95-8e2a-b19b1784ccfd",
+      "bbox": [
+        -92.03691101074219,
+        41.6500244140625,
+        -91.9883804321289,
+        41.69503402709961
+      ]
+    },
+    {
+      "id": "9cf12dc4-0f3e-4d7b-8f6c-630f4138dbc0",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-OH",
+      "admin_level": null,
+      "population": 2490,
+      "parent_division_id": "e22b1935-9882-4b8b-ba28-10c2771b9b85",
+      "bbox": [
+        -84.12776184082031,
+        38.9837532043457,
+        -84.01072692871094,
+        39.091468811035156
+      ]
+    },
+    {
+      "id": "c9f2fb91-15cd-4568-b7ab-833bdb70aaa0",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MA",
+      "admin_level": null,
+      "population": 2482,
+      "parent_division_id": "7ab710a9-8241-41ea-80eb-86cf2b7413ed",
+      "bbox": [
+        -72.77714538574219,
+        42.358238220214844,
+        -72.66913604736328,
+        42.45292663574219
+      ]
+    },
+    {
+      "id": "638f0583-9539-41ca-a868-764a2e9f0f85",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-PA",
+      "admin_level": null,
+      "population": 1270,
+      "parent_division_id": "a3e15b95-1628-4641-ba3b-d5e89537e1b9",
+      "bbox": [
+        -78.2137680053711,
+        40.45684051513672,
+        -78.19483184814453,
+        40.47046661376953
+      ]
+    },
+    {
+      "id": "8b1a8c5a-41c7-4746-a614-2e5f61c171ed",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-CO",
+      "admin_level": null,
+      "population": 731,
+      "parent_division_id": "83957829-ecde-46e7-a8e2-f5ffb46d3036",
+      "bbox": [
+        -105.19963073730469,
+        38.366886138916016,
+        -105.13531494140625,
+        38.40732955932617
+      ]
+    },
+    {
+      "id": "6ddec255-1824-4275-bd89-a41ed95d47ff",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NM",
+      "admin_level": null,
+      "population": 487,
+      "parent_division_id": "a29c8f4a-2210-4bd0-a939-50d79ec84a0c",
+      "bbox": [
+        -107.30309295654297,
+        33.104949951171875,
+        -107.2841796875,
+        33.12109375
+      ]
+    },
+    {
+      "id": "1114bcc2-7d17-4215-87e8-1ba10051c574",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-KS",
+      "admin_level": null,
+      "population": 359,
+      "parent_division_id": "ae6bdde9-28de-4862-9b7f-77a57d06abba",
+      "bbox": [
+        -95.47972869873047,
+        38.47505187988281,
+        -95.46025085449219,
+        38.492488861083984
+      ]
+    },
+    {
+      "id": "a9080c80-4413-40a7-acd8-57f9d1b2e90d",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "CR",
+      "region": "CR-L",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "13cc5e9d-ff57-4ebc-be18-5aee6d83aa3a",
+      "bbox": [
+        -83.59534185791016,
+        10.150987449645996,
+        -83.5773265991211,
+        10.16898935699463
+      ]
+    },
+    {
+      "id": "38fb753f-2de1-4df8-a304-c333372034f9",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-TX",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "724c91e0-6972-4a3b-bd89-1650a2993da1",
+      "bbox": [
+        -96.96815222167969,
+        29.380410018920898,
+        -96.95013696289062,
+        29.398413833618164
+      ]
+    },
+    {
+      "id": "ac67c4dd-1583-4c6b-8f97-a9132537a802",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-TX",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "33c983a3-4946-4e46-a28f-a64ed14b61d9",
+      "bbox": [
+        -96.39497375488281,
+        32.917816162109375,
+        -96.370361328125,
+        32.92843246459961
+      ]
+    },
+    {
+      "id": "2d8fbfcf-c0c4-4087-8f37-0ab99304911b",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-OK",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "57c7a25c-7109-40f8-8b93-9229db12de56",
+      "bbox": [
+        -95.96384161376953,
+        36.054724517822265,
+        -95.94582635498047,
+        36.07272833251953
+      ]
+    },
+    {
+      "id": "44a8725c-6aed-439a-acda-d00c436a6037",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-IL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "4b4bb1c2-ef9c-4689-b11b-da762c8a790b",
+      "bbox": [
+        -88.02435034179688,
+        42.05296594238281,
+        -88.00633508300781,
+        42.070973571777344
+      ]
+    },
+    {
+      "id": "84055c4a-2792-4faa-8131-e3cb1341c52b",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-PA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "d8d08d25-6c25-41e5-a95b-28c0bb9357ef",
+      "bbox": [
+        -79.40432470703125,
+        41.17050439453125,
+        -79.38630944824219,
+        41.188508209228516
+      ]
+    },
+    {
+      "id": "7ce3ff8a-68d0-4f39-ab3b-1a3e6a970295",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-PA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "2a7cde73-924d-4045-b73e-63fd9aaefede",
+      "bbox": [
+        -79.53370397949219,
+        40.80271798706055,
+        -79.51569635009766,
+        40.82072180175781
+      ]
+    },
+    {
+      "id": "b945303d-b0d1-4b37-8e43-a7bac3619bb9",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MD",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "bfee0172-73b9-4b32-a548-4a7a6125af51",
+      "bbox": [
+        -76.07755773925781,
+        38.71361047363281,
+        -76.05955010986328,
+        38.731618103027344
+      ]
+    },
+    {
+      "id": "c7119b98-3ec9-4914-8828-13c2ba689e20",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MD",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "2f3aadbe-9043-4b2a-8017-bc314ef2a35c",
+      "bbox": [
+        -75.8381015625,
+        38.64888650512695,
+        -75.82009393310547,
+        38.666894134521485
+      ]
+    },
+    {
+      "id": "3d499205-9564-49c4-b333-b59f51421138",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "GY",
+      "region": "GY-EB",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "af297267-06e6-4757-8274-83e80855387c",
+      "bbox": [
+        -57.3697063293457,
+        6.250511470794677,
+        -57.35169869995117,
+        6.2685124244689945
+      ]
+    },
+    {
+      "id": "9e3cbea5-4f85-43f9-86a6-a7efeb5e1856",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IN",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "aab06069-49c6-4d66-9291-bdd7865669b5",
+      "bbox": [
+        -85.00535314941406,
+        39.94187814331055,
+        -84.98734552001953,
+        39.95988577270508
+      ]
+    },
+    {
+      "id": "a6448970-b795-4383-a1b4-444167dd0cd6",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MS",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "2a802707-3a7c-43f5-b21b-beff105be9cf",
+      "bbox": [
+        -89.61962622070313,
+        31.610329452514648,
+        -89.6016185913086,
+        31.628333267211914
+      ]
+    },
+    {
+      "id": "9c2f202a-96d4-4a75-a353-c5f580065a80",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-AL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "1d1d3171-5c82-490e-b442-c605f703f5c4",
+      "bbox": [
+        -87.06233709716797,
+        33.60554772949219,
+        -87.04432946777344,
+        33.62355154418945
+      ]
+    },
+    {
+      "id": "1f74f7d7-c508-417c-8b1c-8fe8ed9033a4",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-TN",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "5e7ef2cf-8282-4320-8c15-19b2131745d3",
+      "bbox": [
+        -84.53838842773438,
+        35.34496194458008,
+        -84.52037316894531,
+        35.362965759277344
+      ]
+    },
+    {
+      "id": "4d09a009-1733-49fe-b476-f73d272f745c",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-TN",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "7e0da012-c69b-499e-9be8-6f9c503c3b67",
+      "bbox": [
+        -86.48038214111328,
+        35.91356164550781,
+        -86.46237451171875,
+        35.93156546020508
+      ]
+    },
+    {
+      "id": "cf684123-cf1e-4aa5-a8a0-478e5d9c04ea",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-TN",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "1d885c43-1567-4c38-a3f7-44aec49f862d",
+      "bbox": [
+        -83.5177890625,
+        35.77525216674805,
+        -83.49977380371094,
+        35.79325979614258
+      ]
+    },
+    {
+      "id": "79ed5038-6d05-41f2-8016-8b4cc1136245",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "2e04d7c6-41c1-4494-bc86-931cce8177a7",
+      "bbox": [
+        -79.6065341796875,
+        36.27390939331055,
+        -79.58852655029297,
+        36.29191320800781
+      ]
+    },
+    {
+      "id": "3ea399b9-4774-432b-8513-ea9ca113945f",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-NC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "7b1b5759-6124-4cee-a96a-59785df0e079",
+      "bbox": [
+        -80.82268255615234,
+        35.97474557495117,
+        -80.80466729736328,
+        35.99274938964844
+      ]
+    },
+    {
+      "id": "40187027-8f3d-4f63-9f73-b0bc06228160",
+      "name": "Williamsburg",
+      "subtype": "microhood",
+      "country": "US",
+      "region": "US-NY",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "d6bbeae3-72bd-402d-8374-db153a63597b",
+      "bbox": [
+        -73.96245306396484,
+        40.70561868286133,
+        -73.94443780517578,
+        40.723622497558594
+      ]
+    },
+    {
+      "id": "510c6803-c6da-4b3d-bd32-1e91e9b071de",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-DE",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "04d8101f-623a-42cb-a551-100d2fb5d81a",
+      "bbox": [
+        -75.69338720703125,
+        39.57638818359375,
+        -75.67537194824219,
+        39.59439581298828
+      ]
+    },
+    {
+      "id": "1734df61-6213-4874-9d9a-0ee1d8459bf4",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-AL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "3212c29a-320e-418b-9178-e56c2a4a3bfe",
+      "bbox": [
+        -86.7931567993164,
+        33.39027291870117,
+        -86.77514154052734,
+        33.40827673339844
+      ]
+    },
+    {
+      "id": "2faa9545-cda4-44b3-8b4e-1448ab349eab",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-GA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "ab453fab-e824-4086-be2f-8cf83cd313fb",
+      "bbox": [
+        -84.60698431396484,
+        31.45506364440918,
+        -84.58896905517578,
+        31.473067459106446
+      ]
+    },
+    {
+      "id": "221b8121-308d-40e8-8b9d-a011bf9ea4e9",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-GA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "1da877cc-60d8-47f1-8db9-6a5ebe59b11b",
+      "bbox": [
+        -84.90199011230469,
+        32.532805267333984,
+        -84.88397485351562,
+        32.55080908203125
+      ]
+    },
+    {
+      "id": "54a4f349-0ce1-427d-b7c9-48f97e2ee399",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-GA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "ae7ef69e-e11d-45c9-9946-8f11b2cee4c5",
+      "bbox": [
+        -84.12419622802734,
+        31.489228073120117,
+        -84.10618096923828,
+        31.507231887817383
+      ]
+    },
+    {
+      "id": "2f0a67ff-c145-4113-9453-cabf2ca5b0cc",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-GA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "6d11a20a-624d-4987-95b5-2297de030555",
+      "bbox": [
+        -82.52163427734375,
+        30.773716751098632,
+        -82.50361901855469,
+        30.7917205657959
+      ]
+    },
+    {
+      "id": "51abe954-bf98-435d-80c9-ba3bc0eb133b",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-GA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "575978f6-ab4e-4700-85b2-31656bfa1021",
+      "bbox": [
+        -81.23232000732422,
+        32.26991540527344,
+        -81.21430474853516,
+        32.2879192199707
+      ]
+    },
+    {
+      "id": "c5ecbe7a-1ee2-49d2-9639-9f836d4ec24c",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MO",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "c9c86cdc-5b53-423f-bd65-ab33c23e0211",
+      "bbox": [
+        -91.7105609741211,
+        38.91131478881836,
+        -91.69254571533203,
+        38.929318603515625
+      ]
+    },
+    {
+      "id": "66583854-8b91-49bd-b9e1-755709572bff",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-WI",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "8509b87b-c5b6-42d0-a03d-b81b561d46fa",
+      "bbox": [
+        -89.20648956298828,
+        43.18675231933594,
+        -89.2041015625,
+        43.18803787231445
+      ]
+    },
+    {
+      "id": "cd0840c0-38d3-4078-84fb-f408c24f0c7c",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "1ceb54db-cb49-4e19-afb2-cfa80dfe4f45",
+      "bbox": [
+        -88.58100622558594,
+        39.708533111572265,
+        -88.56299096679687,
+        39.72653692626953
+      ]
+    },
+    {
+      "id": "e2fa2557-ff97-4ea6-a695-f81452ecc71a",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-IL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "0d65eb01-fec4-421a-b63f-118ab19010cf",
+      "bbox": [
+        -89.06768530273438,
+        38.218821350097656,
+        -89.04967004394531,
+        38.23682897949219
+      ]
+    },
+    {
+      "id": "5833e5bd-0441-4f86-b7aa-cfbcad895d20",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-WV",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "84e111c7-aff9-4073-a10a-67f18c7c284a",
+      "bbox": [
+        -80.5013095703125,
+        37.96111947631836,
+        -80.48330194091797,
+        37.979123291015625
+      ]
+    },
+    {
+      "id": "72f13ca2-8707-4291-b2c3-9d00bac75ff6",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-MT",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "dd8c1517-a9b2-4693-850d-6848ac39a030",
+      "bbox": [
+        -112.56625860595703,
+        45.98286325073242,
+        -112.54824334716797,
+        46.00087088012695
+      ]
+    },
+    {
+      "id": "a92de071-263d-437e-97cf-eed74788f6ea",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "CA",
+      "region": "CA-NB",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "554db74f-57ca-42c6-8897-a13e4862780a",
+      "bbox": [
+        -66.91055297851562,
+        46.30666732788086,
+        -66.71611022949219,
+        46.416263580322266
+      ]
+    },
+    {
+      "id": "c8fb4987-9d0f-45d5-9591-ba7dba79d67e",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-ME",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "414a46c0-254b-40e1-b6f5-cc242d005795",
+      "bbox": [
+        -69.16128540039062,
+        45.288490295410156,
+        -69.05211639404297,
+        45.405792236328125
+      ]
+    },
+    {
+      "id": "ad1b1771-68bd-4d44-bea0-2ce92aa31ba3",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "CA",
+      "region": "CA-ON",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "02db6385-ddc5-4d44-9333-4f734d862db9",
+      "bbox": [
+        -75.25266760253906,
+        44.965857330322265,
+        -75.23465997314453,
+        44.9838649597168
+      ]
+    },
+    {
+      "id": "2314bcd8-f664-47cd-87e8-78d61a5f428a",
+      "name": "Williamsburg",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-MI",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "262512fa-33ad-4449-9b31-50b46e621219",
+      "bbox": [
+        -85.41296881103516,
+        44.76461297607422,
+        -85.3949535522461,
+        44.78262060546875
+      ]
+    },
+    {
+      "id": "67c60e48-cbad-4bab-9252-679dd70a8b8d",
+      "name": "Williamsburg",
+      "subtype": "neighborhood",
+      "country": "CA",
+      "region": "CA-ON",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "16e09897-a972-462e-8db7-2c600a3a6b52",
+      "bbox": [
+        -80.50554388427734,
+        43.392737213134765,
+        -80.48752862548828,
+        43.4107448425293
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Reykjavik"
+{"error":{"code":"no_match","message":"No division found for 'Reykjavik'. It may be a neighborhood not in Overture's divisions index. Try a parent locality (city → state → country), `containing LAT,LON`, or `--bbox`."}}
+
+$ botmap --json where "Reykjavík"
+{
+  "id": "bc4247c1-deba-438e-bb36-788fec678333",
+  "name": "Reykjavík",
+  "subtype": "locality",
+  "country": "IS",
+  "region": "IS-1",
+  "admin_level": null,
+  "population": 139804,
+  "parent_division_id": "e2bf91fe-1be8-4aa4-97dd-37a899650947",
+  "bbox": [
+    -21.95123976135254,
+    64.13698083496094,
+    -21.933235946655273,
+    64.15498846435547
+  ],
+  "candidates": [
+    {
+      "id": "bc4247c1-deba-438e-bb36-788fec678333",
+      "name": "Reykjavík",
+      "subtype": "locality",
+      "country": "IS",
+      "region": "IS-1",
+      "admin_level": null,
+      "population": 139804,
+      "parent_division_id": "e2bf91fe-1be8-4aa4-97dd-37a899650947",
+      "bbox": [
+        -21.95123976135254,
+        64.13698083496094,
+        -21.933235946655273,
+        64.15498846435547
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "San Marino"
+{
+  "id": "b25f1541-0e46-45fe-81a0-25432ef4a86a",
+  "name": "San Marino",
+  "subtype": "country",
+  "country": "SM",
+  "region": null,
+  "admin_level": 0,
+  "population": 33600,
+  "parent_division_id": null,
+  "bbox": [
+    12.40243148803711,
+    43.89363098144531,
+    12.516959190368652,
+    43.992042541503906
+  ],
+  "candidates": [
+    {
+      "id": "b25f1541-0e46-45fe-81a0-25432ef4a86a",
+      "name": "San Marino",
+      "subtype": "country",
+      "country": "SM",
+      "region": null,
+      "admin_level": 0,
+      "population": 33600,
+      "parent_division_id": null,
+      "bbox": [
+        12.40243148803711,
+        43.89363098144531,
+        12.516959190368652,
+        43.992042541503906
+      ]
+    },
+    {
+      "id": "ae6eb3bf-44ff-4642-aa06-681a673531a8",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "US",
+      "region": "US-CA",
+      "admin_level": null,
+      "population": 13147,
+      "parent_division_id": "9b3d1c83-d266-4c67-b21f-6ff37f4d6ccb",
+      "bbox": [
+        -118.14216613769531,
+        34.1049919128418,
+        -118.08794403076172,
+        34.13731002807617
+      ]
+    },
+    {
+      "id": "4d7e7e6d-57c1-4b77-a664-53e36a166e7c",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "IT",
+      "region": "IT-55",
+      "admin_level": null,
+      "population": 200,
+      "parent_division_id": "378d1bc8-7a59-4fc1-85fd-9e9d6e1cb63b",
+      "bbox": [
+        12.37499600982666,
+        43.132963958740234,
+        12.392997917175293,
+        43.1509677734375
+      ]
+    },
+    {
+      "id": "7e3357d3-b0d8-42d3-9383-7bdee73b8219",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "BO",
+      "region": "BO-S",
+      "admin_level": null,
+      "population": 142,
+      "parent_division_id": "80e5a774-1e6a-411f-ad9b-772ef36dd77a",
+      "bbox": [
+        -63.02885818481445,
+        -17.224201202392578,
+        -63.02579879760742,
+        -17.220157623291016
+      ]
+    },
+    {
+      "id": "e7f9a726-4ebc-45bf-a736-b1f6cf8c809b",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "IT",
+      "region": "IT-55",
+      "admin_level": null,
+      "population": 36,
+      "parent_division_id": "924ecf2f-915b-4259-98e7-0452e5ac9f61",
+      "bbox": [
+        12.159916702270507,
+        42.815005126953125,
+        12.177918609619141,
+        42.83300894165039
+      ]
+    },
+    {
+      "id": "98d5c431-77b9-4e21-8374-40c84193caa9",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "IT",
+      "region": "IT-45",
+      "admin_level": null,
+      "population": 28,
+      "parent_division_id": "5a051f58-1db2-4498-9461-49d8b6f278ec",
+      "bbox": [
+        12.221962753295898,
+        43.955054107666015,
+        12.239964660644532,
+        43.97306173706055
+      ]
+    },
+    {
+      "id": "b42c2f22-9fa7-467c-a9e1-d26a51660b24",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "IT",
+      "region": "IT-45",
+      "admin_level": null,
+      "population": 21,
+      "parent_division_id": "74aebdb9-3c97-4ca5-b646-d8c7ef35b5bf",
+      "bbox": [
+        12.24882299041748,
+        43.79285317993164,
+        12.266824897766114,
+        43.81085699462891
+      ]
+    },
+    {
+      "id": "de798425-2c62-44ba-b393-1385461d3dfe",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "PE",
+      "region": "PE-CUS",
+      "admin_level": null,
+      "population": 6,
+      "parent_division_id": "b1f134e8-9ddc-4523-952e-853eb2558d89",
+      "bbox": [
+        -72.65701025390625,
+        -13.01255625152588,
+        -72.63900262451172,
+        -12.994554344177246
+      ]
+    },
+    {
+      "id": "f5ea8c6d-d290-4e0c-8fd0-fc2d21e6227e",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "CL",
+      "region": "CL-CO",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "8f7b441b-ea4a-4fd8-99ad-bd11ad6ddcbb",
+      "bbox": [
+        -71.31654089355469,
+        -29.974665817260743,
+        -71.29853326416016,
+        -29.956662002563476
+      ]
+    },
+    {
+      "id": "de822159-49e2-43eb-a4c6-a7279d33009c",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "CO",
+      "region": "CO-VAC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "902e7505-01e7-4369-aca8-9d8f28d98879",
+      "bbox": [
+        -76.49052429199219,
+        3.458775520324707,
+        -76.4864273071289,
+        3.462036609649658
+      ]
+    },
+    {
+      "id": "b766a980-5f09-4cd6-b26e-57ecb0372611",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "CO",
+      "region": "CO-HUI",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "33128857-ddac-4433-bff1-35a11174b71d",
+      "bbox": [
+        -74.87350958251953,
+        3.2112582359313966,
+        -74.855501953125,
+        3.2292587127685546
+      ]
+    },
+    {
+      "id": "2a08d85b-a8c9-4a76-b995-57e8009fcc25",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "AR",
+      "region": "AR-S",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "d8e1dada-2410-486e-9e6a-59363f9c642d",
+      "bbox": [
+        -60.82785415649414,
+        -32.929691314697266,
+        -60.82052993774414,
+        -32.92375183105469
+      ]
+    },
+    {
+      "id": "76442ab1-e577-4626-8cf9-9dea7e0e0900",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "CO",
+      "region": "CO-ATL",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "88c200b4-ccd7-4d92-90cd-0ecf2086441e",
+      "bbox": [
+        -74.81702917480469,
+        11.015920463562011,
+        -74.79902154541016,
+        11.033922370910645
+      ]
+    },
+    {
+      "id": "8e4af749-5aaa-4c42-ac55-29f11f507a04",
+      "name": "San Marino",
+      "subtype": "microhood",
+      "country": "MX",
+      "region": "MX-GUA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "a356f178-9b41-4bd1-988e-e287b6159b8c",
+      "bbox": [
+        -101.36771124267578,
+        20.710970703125,
+        -101.34969598388672,
+        20.728972610473633
+      ]
+    },
+    {
+      "id": "b356a499-6ab4-4184-bc10-32a924ae22d3",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "GT",
+      "region": "GT-05",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "2d86ae25-5506-407d-a323-f7496fce556c",
+      "bbox": [
+        -90.78436010742188,
+        13.920328918457031,
+        -90.76634484863281,
+        13.938330825805664
+      ]
+    },
+    {
+      "id": "908f320a-2dbb-4cf1-8838-99b08869fd66",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "CR",
+      "region": "CR-SJ",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "5dec8c82-6c16-4c0d-9981-e866315b56c3",
+      "bbox": [
+        -84.04327124023438,
+        9.932922187805175,
+        -84.02525598144531,
+        9.950923141479493
+      ]
+    },
+    {
+      "id": "7cb1a613-c62c-4506-8ef6-eecd4de536ed",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-CA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "b8e63822-97e8-4357-83f5-e6a32015cee9",
+      "bbox": [
+        -117.09906768798828,
+        33.48768997192383,
+        -117.09555053710938,
+        33.49128341674805
+      ]
+    },
+    {
+      "id": "f06fbfd3-f6b7-426d-bc6b-7763c3a82405",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "MX",
+      "region": "MX-BCN",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "a7f1d946-e495-457f-a976-b7b49e86f347",
+      "bbox": [
+        -117.10062902832031,
+        32.4024990234375,
+        -117.08261376953125,
+        32.420502838134766
+      ]
+    },
+    {
+      "id": "a71df347-9d13-46cd-8d75-f9c5f4a37485",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "VE",
+      "region": "VE-M",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "69869340-2c13-4195-8d3a-d6a41319c62a",
+      "bbox": [
+        -66.86690252685547,
+        10.488622489929199,
+        -66.84889489746094,
+        10.506624397277832
+      ]
+    },
+    {
+      "id": "ca59dfe8-bb39-4697-aaeb-5caf68db42fd",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "BR",
+      "region": "BR-PR",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "ab58a207-4b5f-45f9-b35a-51b0366bdb2a",
+      "bbox": [
+        -53.85405731201172,
+        -24.277801513671875,
+        -53.84855270385742,
+        -24.277008056640625
+      ]
+    },
+    {
+      "id": "4f624a11-3284-4ee9-9894-e68a10987d76",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-NC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "f02e71db-8472-4e10-9505-2d979537be0e",
+      "bbox": [
+        -78.38348388671875,
+        35.64908981323242,
+        -78.3718490600586,
+        35.657569885253906
+      ]
+    },
+    {
+      "id": "1d4d8832-b4d8-4fd7-838a-6d81dbf1ce34",
+      "name": "San Marino",
+      "subtype": "macrohood",
+      "country": "BR",
+      "region": "BR-MG",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "2f21a7a4-de81-47c3-8535-bd70204ae0b4",
+      "bbox": [
+        -44.08807485961914,
+        -19.839623626708985,
+        -44.07006723022461,
+        -19.82161981201172
+      ]
+    },
+    {
+      "id": "901061e5-f5ce-428c-9ffa-7a6cea20338b",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "BR",
+      "region": "BR-SP",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "4ebbe813-01ea-4b0d-84f2-ef0f62f57685",
+      "bbox": [
+        -47.27572250366211,
+        -23.297527313232422,
+        -47.27365493774414,
+        -23.29531478881836
+      ]
+    },
+    {
+      "id": "8ae815cc-486a-4e0c-a73a-de4c20b29e6e",
+      "name": "San Marino",
+      "subtype": "neighborhood",
+      "country": "BR",
+      "region": "BR-MG",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "16c153d6-ff69-4ce6-b99e-e2faf131b31d",
+      "bbox": [
+        -45.45707702636719,
+        -21.533153533935547,
+        -45.45233154296875,
+        -21.5257568359375
+      ]
+    },
+    {
+      "id": "66756fd7-d9b1-4c7d-8c2a-ca65b0a58069",
+      "name": "San Marino",
+      "subtype": "locality",
+      "country": "IT",
+      "region": "IT-34",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "6b8fcfb4-ee34-4265-bb7d-1fe26e04907b",
+      "bbox": [
+        11.683779541015625,
+        45.88935739135742,
+        11.701781448364258,
+        45.90736502075195
+      ]
+    }
+  ]
+}
+
+$ botmap --json where "Andorra"
+{
+  "id": "c8ddabc7-8bd8-4a96-afe1-853d2c1fdb7d",
+  "name": "Andorra",
+  "subtype": "country",
+  "country": "AD",
+  "region": null,
+  "admin_level": 0,
+  "population": 83888,
+  "parent_division_id": null,
+  "bbox": [
+    1.407799482345581,
+    42.42881774902344,
+    1.7868664264678955,
+    42.65593719482422
+  ],
+  "candidates": [
+    {
+      "id": "c8ddabc7-8bd8-4a96-afe1-853d2c1fdb7d",
+      "name": "Andorra",
+      "subtype": "country",
+      "country": "AD",
+      "region": null,
+      "admin_level": 0,
+      "population": 83888,
+      "parent_division_id": null,
+      "bbox": [
+        1.407799482345581,
+        42.42881774902344,
+        1.7868664264678955,
+        42.65593719482422
+      ]
+    },
+    {
+      "id": "261a890e-1f08-4cb4-8287-52b5a74d47dc",
+      "name": "Andorra",
+      "subtype": "locality",
+      "country": "ES",
+      "region": "ES-AR",
+      "admin_level": null,
+      "population": 7192,
+      "parent_division_id": "9ea2611b-5b8e-41dd-b035-2d9c4be72efa",
+      "bbox": [
+        -0.5273562073707581,
+        40.94300842285156,
+        -0.3418765962123871,
+        41.08770751953125
+      ]
+    },
+    {
+      "id": "a80e9647-c095-4a2f-8e3a-d1ba8466d0f8",
+      "name": "Andorra",
+      "subtype": "neighborhood",
+      "country": "CL",
+      "region": "CL-VS",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "e6bec8bb-077c-4828-82cd-478971df7846",
+      "bbox": [
+        -71.59241217041016,
+        -33.08716696166992,
+        -71.57440454101562,
+        -33.069163146972656
+      ]
+    },
+    {
+      "id": "d421da2e-5b05-408f-b614-33a43976df25",
+      "name": "Andorra",
+      "subtype": "neighborhood",
+      "country": "US",
+      "region": "US-PA",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "dafbf977-aedb-47f8-be22-dc04314ee36e",
+      "bbox": [
+        -75.2433090209961,
+        40.06113815307617,
+        -75.22467041015625,
+        40.0836296081543
+      ]
+    },
+    {
+      "id": "08603547-a53c-4df2-b5d2-625298942478",
+      "name": "Andorra",
+      "subtype": "locality",
+      "country": "FR",
+      "region": "FR-OCC",
+      "admin_level": null,
+      "population": null,
+      "parent_division_id": "a2f68543-bf9d-445f-a962-3988fbd5d7ce",
+      "bbox": [
+        2.0877817306518556,
+        42.60579568481445,
+        2.1057819690704345,
+        42.623803314208985
+      ]
+    }
+  ]
+}
+
+
+═══ PREMISE TESTS / BUGS ═══
+
+$ botmap --json count -t place --in "Cambridge, MA" --where categories.alternate=restaurant
+Traceback (most recent call last):
+  File "/Users/priyangapkini/.local/bin/botmap", line 10, in <module>
+    sys.exit(cli())
+             ^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 1569, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 1490, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 1970, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 1353, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 907, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/decorators.py", line 34, in new_func
+    return f(get_current_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/workspace/botmap/botmap/cli.py", line 800, in count
+    n = _safe_count(
+        ^^^^^^^^^^^^
+  File "/Users/priyangapkini/workspace/botmap/botmap/cli.py", line 53, in _safe_count
+    return count_rows(type_, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/workspace/botmap/botmap/core.py", line 302, in count_rows
+    return dataset.count_rows(filter=filter_expr)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "pyarrow/_dataset.pyx", line 805, in pyarrow._dataset.Dataset.count_rows
+  File "pyarrow/_dataset.pyx", line 415, in pyarrow._dataset.Dataset.scanner
+  File "pyarrow/_dataset.pyx", line 3706, in pyarrow._dataset.Scanner.from_dataset
+  File "pyarrow/_dataset.pyx", line 3619, in pyarrow._dataset.Scanner._make_scan_options
+  File "pyarrow/_dataset.pyx", line 3549, in pyarrow._dataset._populate_builder
+  File "pyarrow/_compute.pyx", line 2989, in pyarrow._compute._bind
+  File "pyarrow/error.pxi", line 155, in pyarrow.lib.pyarrow_internal_check_status
+  File "pyarrow/error.pxi", line 92, in pyarrow.lib.check_status
+pyarrow.lib.ArrowNotImplementedError: Function 'equal' has no kernel matching input types (list<element: string>, string)
+[exit=1]
+
+$ botmap --json count -t segment --in "Monaco" --where road_surface=paved
+[botmap] Ambiguous --in 'Monaco': picked Monaco (region, MC, pop 39,050) over Monaco (country, MC, pop 39,050) (+10 more). Run `botmap where 'Monaco' --all` to see all.
+Traceback (most recent call last):
+  File "/Users/priyangapkini/.local/bin/botmap", line 10, in <module>
+    sys.exit(cli())
+             ^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 1569, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 1490, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 1970, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 1353, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/core.py", line 907, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/.local/share/uv/tools/botmap/lib/python3.11/site-packages/click/decorators.py", line 34, in new_func
+    return f(get_current_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/workspace/botmap/botmap/cli.py", line 800, in count
+    n = _safe_count(
+        ^^^^^^^^^^^^
+  File "/Users/priyangapkini/workspace/botmap/botmap/cli.py", line 53, in _safe_count
+    return count_rows(type_, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/priyangapkini/workspace/botmap/botmap/core.py", line 302, in count_rows
+    return dataset.count_rows(filter=filter_expr)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "pyarrow/_dataset.pyx", line 805, in pyarrow._dataset.Dataset.count_rows
+  File "pyarrow/_dataset.pyx", line 415, in pyarrow._dataset.Dataset.scanner
+  File "pyarrow/_dataset.pyx", line 3706, in pyarrow._dataset.Scanner.from_dataset
+  File "pyarrow/_dataset.pyx", line 3619, in pyarrow._dataset.Scanner._make_scan_options
+  File "pyarrow/_dataset.pyx", line 3549, in pyarrow._dataset._populate_builder
+  File "pyarrow/_compute.pyx", line 2989, in pyarrow._compute._bind
+  File "pyarrow/error.pxi", line 155, in pyarrow.lib.pyarrow_internal_check_status
+  File "pyarrow/error.pxi", line 92, in pyarrow.lib.check_status
+pyarrow.lib.ArrowNotImplementedError: Function 'equal' has no kernel matching input types (list<element: struct<value: string, between: list<element: double>>>, string)
+[exit=1]
+
+
+═══ SPATIAL / DISCOVERY VERBS ═══
+[1] Alameda, US-CA
+  subtype: locality
+  bbox: -122.3398, 37.7082, -122.2240, 37.8000
+  population: 77,624
+  id: 300e4c3b-3aa8-47c2-8f0f-010e8937d1ad
+[2] Alameda, CA-SK
+  subtype: county
+  bbox: -102.2979, 49.2608, -102.2753, 49.2756
+  id: 7e876577-712c-4854-a6b7-6b6566a25550
+[3] Alameda, US-CA
+  subtype: locality
+  bbox: -119.0123, 35.2288, -118.9943, 35.2468
+
+
+═══ SPATIAL / METADATA VERBS ═══
+[1] Cambridge, US-MA
+  subtype: locality
+  bbox: -71.1604, 42.3524, -71.0640, 42.4043
+  population: 105,162
+  id: e66a9243-9cc5-40a8-a44e-363f9721113f
+
+
+═══════════════════════════════════════════════════════
+== PHASE 1 SUMMARY TABLES (all values measured, release 2026-07-22.0)
+═══════════════════════════════════════════════════════
+
+--- PLACE RESOLUTION (botmap --json where "X") ---
+Malta              -> Malta      country  MT       pop 423,282    cands 32
+Luxembourg         -> Luxembourg locality LU/LU-LU pop 122,273    cands 4
+Monaco             -> Monaco     region   MC       pop 39,050     cands 12  (AMBIGUOUS: region vs country)
+Rhode Island, US   -> Rhode Island region US/US-RI pop 1,112,308  cands 3
+Cambridge, MA      -> Cambridge  locality US/US-MA pop 105,162    cands 1
+Alameda, CA        -> Alameda    locality US/US-CA pop 77,624     cands 4  (resolves CORRECTLY now; Saskatchewan bug fixed)
+Alameda, US-CA     -> Alameda    locality US/US-CA pop 77,624     cands 2
+Boston, MA         -> Boston     locality US/US-MA pop 675,647    cands 1
+Brooklyn           -> Brooklyn   locality US/US-NY pop 2,736,074  cands 60
+Vancouver, BC      -> Vancouver  locality CA/CA-BC pop 631,486    cands 1
+Williamsburg       -> Williamsburg locality US/US-VA pop 15,861   cands 48  (VIRGINIA, not Brooklyn)
+Williamsburg, NY   -> Williamsburg microhood US/US-NY pop None
+Reykjavik          -> UNRESOLVED  {"error":{"code":"no_match",...}}
+Reykjavík          -> Reykjavík  locality IS/IS-1  pop 139,804    cands 1
+San Marino         -> San Marino country  SM       pop 33,600     cands 25
+Andorra            -> Andorra    country  AD       pop 83,888     cands 5
+
+--- COUNTS: totals ---
+place  Luxembourg 2,496 | Monaco 3,032 | Williamsburg,NY 3,873 | Alameda,US-CA 5,507
+       Cambridge,MA 12,866 | Malta 22,877 | Rhode Island 66,098
+building Monaco 5,366 | Cambridge,MA 39,977 | Malta 80,713 | Brooklyn 460,063  <-- Brooklyn TOO LARGE
+segment  Monaco 3,533 | Malta 46,971
+address  Cambridge,MA 162,301
+water    Reykjavík 29 | Malta 4,375
+land_use Williamsburg,NY 437
+land     Malta 5,752
+infrastructure Williamsburg,NY 6,231 | (Cambridge,MA subtype=transit 4,907)
+connector      Williamsburg,NY 3,773
+building_part  Cambridge,MA 1,009
+land_cover     Williamsburg,NY 7
+division_boundary Malta 155
+bathymetry     Malta 13
+
+--- COUNTS: filtered ---
+place Rhode Island categories.primary=hospital            169
+place Monaco       categories.primary=pharmacy             18
+place Cambridge,MA categories.primary=coffee_shop         121
+place Cambridge,MA categories.primary=tattoo_and_piercing  24
+place Cambridge,MA categories.primary=hardware_store       18
+place Cambridge,MA categories.primary=ev_charging_station  15
+place Cambridge,MA names.primary=Starbucks                 28
+place Cambridge,MA brand.names.primary=Starbucks           19   <-- differs from names.primary
+place Cambridge,MA categories.primary=asian_restaurant     23   <-- UNDERCOUNT
+place Cambridge,MA categories.primary in [asian_restaurant,chinese_restaurant,
+        japanese_restaurant,sushi_restaurant,thai_restaurant,asian_fusion_restaurant,
+        pan_asian_restaurant,korean_restaurant,vietnamese_restaurant]            224   <-- ~10x more
+place Cambridge,MA basic_category=restaurant             1,231
+place Malta        categories.primary=hotel               551
+place Malta        categories.primary=ferry_terminal        0   <-- wrong slug
+place Malta        categories.primary=ferry_boat_company   23   <-- right slug
+place Cambridge,MA categories.primary=bus_stop              0   <-- NOT IN place
+place Boston,MA    categories.primary=bus_stop              0
+place Malta        categories.primary=bus_stop              0
+place Cambridge,MA categories.primary=bus_station          12   <-- IS in place
+place Cambridge,MA categories.primary=train_station        16   <-- IS in place
+place Williamsburg,NY categories.primary=coffee_shop       57
+place Williamsburg,VA categories.primary=coffee_shop        4
+infrastructure Cambridge,MA class=bus_stop                650   <-- bus stops live HERE
+infrastructure Williamsburg,NY class=bus_stop              93
+infrastructure Cambridge,MA class=bicycle_parking        1,774
+building Cambridge,MA height>100                            6
+building Cambridge,MA class=retail                        587
+building Cambridge,MA subtype=residential               9,942
+segment Rhode Island class=motorway                      2,007
+segment Malta class=motorway                                0   <-- Malta has NO motorway class
+segment Malta class=primary                             1,341
+segment Malta class=trunk                               1,247
+segment Cambridge,MA class=cycleway                       611
+segment Williamsburg,NY class=cycleway                     22
+segment Monaco class=footway                            1,586
+land Malta class=beach                                     67
+land_use Williamsburg,NY class=residential                  2
+land_use Brooklyn class=residential                       331
+address Cambridge,MA --where street='Massachusetts Avenue'  0   <-- SILENT ZERO, exit 0, no hint
+address Cambridge,MA --where street='MASSACHUSETTS AVENUE' 4,140  <-- stored form is UPPERCASE
+address Cambridge,MA --street Massachusetts             (works, case-insensitive substring)
+
+--- --where DIALECT (empirically determined) ---
+SUPPORTED ops:  =  !=  <  <=  >  >=  in [a,b,c]
+NOT supported:  ~   LIKE   contains       -> "Filter '<expr>' has no operator" exit 2
+Unknown field                              -> "Unknown field 'X'. Available fields: ..." exit 2 (GOOD)
+Empty key ('==')                           -> "--where expression has empty key" exit 2 (GOOD)
+Valid field, no matching rows              -> count:0, exit 0, NO HINT (silent)
+LIST/STRUCT-typed field                    -> RAW PYTHON TRACEBACK, exit 1  <-- BUG
+  categories.alternate=restaurant -> ArrowNotImplementedError equal(list<string>, string)
+  phones=555                      -> ArrowNotImplementedError equal(list<string>, int16)
+  road_surface=paved              -> ArrowNotImplementedError equal(list<struct<...>>, string)
+  speed_limits>50                 -> ArrowNotImplementedError greater(list<struct<...>>, int8)
+
+--- ZERO-RESULT NEAR-MATCH HINT COVERAGE ---
+places --category X      -> HINT fires  ("Did you mean: ...")
+places --where cat=X     -> HINT fires
+count  --where cat=X     -> NO HINT (silent count:0)   <-- gap
+sample --where cat=X     -> NO HINT (silent)           <-- gap
+
+--- categories with no area ---
+$ botmap --json categories --top 50
+Error: Provide --bbox or --in; global enumeration is too costly.   (exit 2, clean)
+NO --search flag exists; discovery = `--top N | grep`
+
+--- operating_status (place) ---
+values: 'open' | 'permanently_closed' | null   (a PERMANENT status, NOT opening hours)
+fill: Cambridge,MA 196/300 (65%) | Malta 0/300 | Bengaluru,IN 1/300
+NO hours / rating / review / popularity field exists on ANY type.
+
+--- sample is FIRST-N, not random ---
+Two runs of `sample -t building --in "Cambridge, MA" -n 5` return identical ids.
+building subtype=residential: sample n=400 estimate 2.75%  vs  true 9,942/39,977 = 24.9%  (9x biased)
+
+--- HANGING COMMANDS (no output, no progress, >25 min) ---
+botmap boundary "Monaco"          TIMEOUT at 120s
+botmap boundary "Cambridge, MA"   TIMEOUT at 60s
+botmap where "Monaco" --geometry  TIMEOUT at 120s, still running at 25min
+botmap --json containing 42.3736,-71.1097  TIMEOUT at 180s, still running at 25min
+(botmap at ... = 6.6s, fine. Only the division-polygon paths hang.)
+
+--- -r FLAG COLLISION ---
+at:  -r / --radius   (radius in metres)
+all others: -r / --release
+`places ... -r 500` -> Error: Release '500' is no longer available (loud, recoverable)
+
+
+============================================================
+== PHASE 2 VALIDATION vs Overture published category sheet
+== (Place Categories + Basic Categories, new release)
+============================================================
+rows=2354  levels=[np.int64(0), np.int64(1), np.int64(2), np.int64(3), np.int64(4), np.int64(5)]  basic-level=284
+PC Added=106  PC Removed=51 PC Name Change=214  PC Hierarchy Change=1583
+
+-- every category slug used in questions-newset.yaml --
+  hospital                   L1 basic=True  blc=hospital
+                             health_care > hospital
+  pharmacy                   L3 basic=False blc=pharmacy_and_drug_store
+                             shopping > specialty_store > pharmacy_and_drug_store > pharmacy
+  coffee_shop                L2 basic=True  blc=coffee_shop
+                             food_and_drink > non_alcoholic_beverage_venue > coffee_shop
+  cafe                       L2 basic=True  blc=cafe
+                             food_and_drink > casual_eatery > cafe
+  tattoo_and_piercing        L3 basic=False blc=personal_or_beauty_service
+                             lifestyle_services > personal_or_beauty_service > body_modification > tattoo_and_piercing
+  hardware_store             L3 basic=False blc=hardware_home_and_garden_store
+                             shopping > specialty_store > hardware_home_and_garden_store > hardware_store
+  ev_charging_station        L2 basic=True  blc=ev_charging_station
+                             travel_and_transportation > fueling_station > ev_charging_station
+  hotel                      L1 basic=True  blc=hotel
+                             lodging > hotel
+  bus_stop                   *** ABSENT FROM TAXONOMY ***
+  bus_station                L3 basic=False blc=public_transit_facility_or_service
+                             travel_and_transportation > ground_transport_facility_or_service > public_transit_facility_or_service > bus_station
+  train_station              L3 basic=True  blc=train_station
+                             travel_and_transportation > ground_transport_facility_or_service > rail_facility_or_service > train_station
+  ferry_terminal             *** ABSENT FROM TAXONOMY ***
+  ferry_boat_company         L2 basic=False blc=corporate_or_business_office
+                             services_and_business > corporate_or_business_office > ferry_boat_company
+  asian_restaurant           L2 basic=False blc=restaurant
+                             food_and_drink > restaurant > asian_restaurant
+  chinese_restaurant         L4 basic=False blc=restaurant
+                             food_and_drink > restaurant > asian_restaurant > east_asian_restaurant > chinese_restaurant
+  japanese_restaurant        L4 basic=False blc=restaurant
+                             food_and_drink > restaurant > asian_restaurant > east_asian_restaurant > japanese_restaurant
+  sushi_restaurant           L5 basic=False blc=restaurant
+                             food_and_drink > restaurant > asian_restaurant > east_asian_restaurant > japanese_restaurant > sushi_restaurant
+  thai_restaurant            L4 basic=False blc=restaurant
+                             food_and_drink > restaurant > asian_restaurant > southeast_asian_restaurant > thai_restaurant
+  korean_restaurant          L4 basic=False blc=restaurant
+                             food_and_drink > restaurant > asian_restaurant > east_asian_restaurant > korean_restaurant
+  vietnamese_restaurant      L4 basic=False blc=restaurant
+                             food_and_drink > restaurant > asian_restaurant > southeast_asian_restaurant > vietnamese_restaurant
+  indian_restaurant          L4 basic=False blc=restaurant
+                             food_and_drink > restaurant > asian_restaurant > south_asian_restaurant > indian_restaurant
+  pan_asian_restaurant       L3 basic=False blc=restaurant
+                             food_and_drink > restaurant > international_fusion_restaurant > pan_asian_restaurant
+  asian_fusion_restaurant    L3 basic=False blc=restaurant
+                             food_and_drink > restaurant > international_fusion_restaurant > asian_fusion_restaurant
+  restaurant                 L1 basic=True  blc=restaurant
+                             food_and_drink > restaurant
+  pharmacy_and_drug_store    L2 basic=True  blc=pharmacy_and_drug_store
+                             shopping > specialty_store > pharmacy_and_drug_store
+
+-- asian_restaurant subtree: 55 categories --
+  afghani_restaurant, asian_restaurant, bangladeshi_restaurant, baozi_restaurant, beijing_restaurant, bengali_restaurant, burmese_restaurant, cambodian_restaurant, cantonese_restaurant, central_asian_restaurant, chettinad_restaurant, chinese_restaurant, dim_sum_restaurant, dongbei_restaurant, east_asian_restaurant, filipino_restaurant, fujian_restaurant, gujarati_restaurant, himalayan_restaurant, hunan_restaurant, hyderabadi_restaurant, indian_restaurant, indo_chinese_restaurant, indonesian_restaurant, japanese_restaurant, jiangsu_restaurant, kazakhstani_restaurant, korean_restaurant, laotian_restaurant, malaysian_restaurant, mongolian_restaurant, nasi_restaurant, nepalese_restaurant, north_indian_restaurant, pakistani_restaurant, punjabi_restaurant, rajasthani_restaurant, ramen_restaurant, shandong_restaurant, shanghainese_restaurant, sichuan_restaurant, singaporean_restaurant, south_asian_restaurant, south_indian_restaurant, southeast_asian_restaurant, sri_lankan_restaurant, sundanese_restaurant, sushi_restaurant, taiwanese_restaurant, thai_restaurant, tibetan_restaurant, uzbek_restaurant, vietnamese_restaurant, wok_restaurant, xinjiang_restaurant
+
+-- under international_fusion_restaurant (NOT asian_restaurant descendants) --
+  asian_fusion_restaurant, international_fusion_restaurant, latin_fusion_restaurant, pan_asian_restaurant
+
+-- live-data cross-check (Cambridge, MA, release 2026-07-22.0) --
+  categories.primary : pan_asian_restaurant
+  basic_category     : restaurant
+  taxonomy.primary   : pan_asian_restaurant
+  taxonomy.hierarchy : ['food_and_drink','restaurant','international_fusion_restaurant','pan_asian_restaurant']
+  => taxonomy.hierarchy matches the sheet exactly, and IS populated in the data.
+
+  $ botmap count -t place --in "Cambridge, MA" --where taxonomy.hierarchy=asian_restaurant
+  pyarrow.lib.ArrowNotImplementedError: equal(list<element: string>, string)   [exit 1]
+  => the hierarchy ships in the data but cannot be filtered on.
+
+  basic_category=pharmacy                 -> 0     (not a basic-level value)
+  basic_category=pharmacy_and_drug_store  -> 59    (the real basic-level value)
+  => basic_category and categories.primary are SEPARATE vocabularies.
+
+
+
+═══ DIVISION-GEOMETRY LATENCY: definitive timings ═══
+$ botmap where "Monaco" --geometry            exit=0  1181.5s (19m42s)  44,848 bytes valid MultiPolygon
+$ botmap --json containing 42.3736,-71.1097   exit=0   637.2s (10m37s)  correct stack:
+    Middlesex County (county, US-MA) -> Massachusetts (region) -> ...
+$ botmap boundary "Monaco"                    no output at 120s (same path, not timed to completion)
+$ botmap boundary "Cambridge, MA"             no output at  60s
+$ botmap at 42.3736,-71.1097 -t place -n 3    exit=0     6.6s   <-- for contrast
+=> NOT deadlocked. Correct results, ~100-200x slower than `at`, zero progress output.
+
+
+═══ BUS_STOP RE-CHECK + count/download INCONSISTENCY ═══
+place categories.primary=bus_station, Cambridge MA -> 12, all real:
+  Go Bus Boston | MBTA - Alewife Station | Harvard Square Upper Busway |
+  MBTA Charlestown Bus Garage | Davis Square Busway | Wellington Station | ...
+"bus_stop" is absent from the published taxonomy in BOTH the New and Old
+Primary Category columns -> never existed, never renamed. bus_station is the
+category that answers a "bus stop" question.
+
+count vs download, identical --in/--where:
+  infrastructure class=bus_stop      count=650   download=0      sample=5
+  infrastructure subtype=transit     count=4907  download=0      sample=5
+  infrastructure class=crossing      count=8825  download=8825   sample=5
+  infrastructure (no filter)         count=29329 download=29329
+  place categories.primary=cafe      count=95    download=95     sample=5
+  building subtype=residential       count=9942  download=9942   sample=5
+=> Not type-wide and not filter-wide. `download` drops rows that `count`
+   counted and `sample` can read. Breaks count-before-pulling. See findings #13.
+
+═══ CORRECTION to the count/download claim ═══
+Root cause is NOT a predicate/STAC bug. botmap/cli.py:519-534 has a hard-coded
+guard in `download` only:
+  _TRANSIT_CLASSES = {bus_stop, bus_station, train_station, transit}
+  -> raise click.UsageError("Transit stops are `place` features, not
+     infrastructure — run: botmap places --category bus_stop --in ...")
+Verified: exit=2 with that message for class=bus_stop AND subtype=transit;
+class=crossing passes the guard and downloads 8825. My earlier "download=0"
+was an artifact of measuring with `2>/dev/null | grep -c .`, which turns an
+exit-2 usage error into an apparent zero-row result.
+The guard's premise is false: `sample` returns real infrastructure bus_stop
+features, and the suggested `places --category bus_stop` returns 0 rows.

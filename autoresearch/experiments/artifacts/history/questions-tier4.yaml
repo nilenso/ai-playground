@@ -1,0 +1,91 @@
+# Agent-usability eval question bank.
+# Fields:
+#   id                     stable slug (no '__' — that delimits run dirs)
+#   question               the prompt handed verbatim to `claude -p`
+#   tier                   1..5 complexity tier
+#   download_is_legitimate true only when no convenience verb covers the type
+#   target_type            expected Overture type(s) for the answer
+#   place                  optional; resolved by the cost guard to bound query size
+#   notes                  ideal path (and, for compound, the expected decomposition)
+#   subtasks               optional; expected verb-by-verb decomposition (compound)
+
+# ---------------------------------------------------------------------------
+# Tier 4 — two themes, joined. Requires a plan before the first call.
+# ---------------------------------------------------------------------------
+
+- id: places-inside-buildings-prague
+  question: "Which buildings in central Prague contain places that have street addresses?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: [place, building]
+  place: "Prague 1, CZ"
+  subtasks:
+    - resolve area "Prague 1"
+    - count places --area <bbox> --has-address
+    - count buildings --area <bbox>
+    - get both to local files
+    - spatial join on ST_Intersects(place.geometry, building.geometry)
+  notes: >
+    Both counts must precede both fetches. Failure mode: fetching buildings for
+    the whole city before checking size, or attempting the join in-context
+    instead of in DuckDB.
+
+- id: orphan-groceries-cambridge
+  question: "Which grocery stores in Cambridge, MA are not inside any building footprint?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: [place, building]
+  place: "Cambridge, MA, US"
+  subtasks:
+    - get places --category grocery_store --area "Cambridge, MA"
+    - get buildings --area "Cambridge, MA"
+    - anti-join on containment
+  notes: >
+    Anti-join. Tests whether the agent reports the residual as a data-quality
+    finding (geocoding drift, missing footprints) rather than as ground truth
+    about buildings that do not exist.
+
+- id: gers-churn-charleston
+  question: "Which places in Charleston, SC changed GERS ID between the June and July 2026 Overture releases?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: place
+  place: "Charleston, SC, US"
+  subtasks:
+    - gers changed --since 2026-06-17.0 --until 2026-07-22.0 --area "Charleston, SC"
+    - classify split / merge / new / retired
+  notes: >
+    Uses the changelog and bridge files, not a diff of two full downloads.
+    A correct answer flags that July re-matched the whole places corpus with a
+    new pipeline, so churn in this window is anomalously high and should not be
+    read as real-world change.
+
+- id: motorway-length-luxembourg
+  question: "What is the total length of motorway in Luxembourg?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: segment
+  place: "Luxembourg"
+  subtasks:
+    - get segments --class motorway --area Luxembourg
+    - clip to division boundary
+    - sum ST_Length on a projected CRS
+  notes: >
+    Two traps: summing lengths in EPSG:4326 degrees, and double-counting
+    segments that cross the border without clipping. Answer should state the
+    projection used.
+
+- id: poi-density-by-district
+  question: "Which district of Lisbon has the highest density of restaurants per square kilometre?"
+  tier: 4
+  download_is_legitimate: false
+  target_type: [place, division_area]
+  place: "Lisbon, PT"
+  subtasks:
+    - get division_area --admin-level <district> --area Lisbon
+    - get places --category restaurant --area Lisbon
+    - point-in-polygon aggregate
+    - divide by ST_Area on a projected CRS
+  notes: >
+    Requires knowing that admin_level exists on divisions and that areas come
+    from division_area, not division. Density needs a projected CRS.
