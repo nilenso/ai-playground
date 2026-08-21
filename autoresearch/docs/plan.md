@@ -238,7 +238,13 @@ unchanged, so nothing existing breaks.
     {"kind": "ignored_hint", "at_call": 3,
      "detail": "hint offered bus_station; next 4 calls did not use it"}
   ],
-  "answer": {"text": "There are no bus stops in Cambridge.", "verified": null}
+  "answer": {
+    "text": "There are no bus stops in Cambridge.",
+    "verified": null,
+    "grounded": "no",                    // must be grounded in Overture data
+    "support": [],                       // tool calls backing the answer
+    "external": ["websearch:answer"]     // what came from outside, and why
+  }
 }
 ```
 
@@ -272,7 +278,7 @@ RECOVERY   guided     the tool named a next action
            n/a        nothing to recover from
 ```
 
-### 4.2 The six classes
+### 4.2 The seven classes
 
 | Class | Axes | Meaning | Score |
 |---|---|---|---|
@@ -282,6 +288,30 @@ RECOVERY   guided     the tool named a next action
 | **D** Degenerate | `degenerate` | Right answer, unusable route. | proportional to waste |
 | **E** Environment | `blame=environment` | Network, quota, stale release. | **excluded from scoring** |
 | **F** Agent-side | `blame=agent` | Tool was fine; agent misused it. | **recorded, not charged to the tool** |
+| **G** Ungrounded | `grounded=no` | Answered from outside the tool entirely. | **attempt INVALID** |
+
+**Class G is the one we did not see coming.** `hotel-density-two-countries` ran
+**zero botmap commands** — two web searches, cited official hotel statistics —
+and **scored 1.00**. It is its own class because it is the only failure that
+tells us *nothing at all* about the CLI while scoring perfectly. A silent wrong
+answer at least exercised the tool; this never touched it. The attempt is
+**invalid**, not merely penalised: it is not a measurement of CLI usability, so
+it must not contribute to one.
+
+**Answers must be grounded in Overture data.** Web search is not banned — it is
+scoped, and the two uses mean opposite things:
+
+| The agent web-searches for | Verdict | What it tells us |
+|---|---|---|
+| **regional vocabulary** — what a thing is called, which category names exist | **legitimate** | but it is a SIGNAL that the CLI's own discovery failed. See defect 11: there is no `categories --search`. |
+| **the answer itself** — counts, statistics, facts | **ungrounded** | the attempt is invalid |
+
+An agent that web-searches for vocabulary and then queries the tool has been let
+down by discovery, but is still measuring the CLI. An agent that web-searches the
+answer has left the experiment. Record both; they are different findings.
+
+This is also why we are **not** blocking web search: a real agent has it, and
+removing it would make the test less like reality. We record the bypass instead.
 
 **Class B is the headline change.** Today a hint is punished twice — counted as
 an error, and disqualified from being the recovery that redeems an earlier
