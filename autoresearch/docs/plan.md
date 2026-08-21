@@ -238,13 +238,9 @@ unchanged, so nothing existing breaks.
     {"kind": "ignored_hint", "at_call": 3,
      "detail": "hint offered bus_station; next 4 calls did not use it"}
   ],
-  "answer": {
-    "text": "There are no bus stops in Cambridge.",
-    "verified": null,
-    "grounded": "no",                    // must be grounded in Overture data
-    "support": [],                       // tool calls backing the answer
-    "external": ["websearch:answer"]     // what came from outside, and why
-  }
+  "tools_used": {"Bash": 5, "Skill": 1, "WebSearch": 2},
+  "botmap_calls": 0,
+  "answer": {"text": "There are no bus stops in Cambridge.", "verified": null}
 }
 ```
 
@@ -278,7 +274,7 @@ RECOVERY   guided     the tool named a next action
            n/a        nothing to recover from
 ```
 
-### 4.2 The seven classes
+### 4.2 The six classes
 
 | Class | Axes | Meaning | Score |
 |---|---|---|---|
@@ -288,30 +284,33 @@ RECOVERY   guided     the tool named a next action
 | **D** Degenerate | `degenerate` | Right answer, unusable route. | proportional to waste |
 | **E** Environment | `blame=environment` | Network, quota, stale release. | **excluded from scoring** |
 | **F** Agent-side | `blame=agent` | Tool was fine; agent misused it. | **recorded, not charged to the tool** |
-| **G** Ungrounded | `grounded=no` | Answered from outside the tool entirely. | **attempt INVALID** |
 
-**Class G is the one we did not see coming.** `hotel-density-two-countries` ran
-**zero botmap commands** — two web searches, cited official hotel statistics —
-and **scored 1.00**. It is its own class because it is the only failure that
-tells us *nothing at all* about the CLI while scoring perfectly. A silent wrong
-answer at least exercised the tool; this never touched it. The attempt is
-**invalid**, not merely penalised: it is not a measurement of CLI usability, so
-it must not contribute to one.
+### Web search: record it, do not judge it yet
 
-**Answers must be grounded in Overture data.** Web search is not banned — it is
-scoped, and the two uses mean opposite things:
+`hotel-density-two-countries` ran **zero botmap commands** — two web searches, a
+citation of official hotel statistics — and **scored 1.00**.
 
-| The agent web-searches for | Verdict | What it tells us |
-|---|---|---|
-| **regional vocabulary** — what a thing is called, which category names exist | **legitimate** | but it is a SIGNAL that the CLI's own discovery failed. See defect 11: there is no `categories --search`. |
-| **the answer itself** — counts, statistics, facts | **ungrounded** | the attempt is invalid |
+We are **not** building a class or a scoring rule for this yet. We record the
+plain fact and decide what it means once we can see how often it happens:
 
-An agent that web-searches for vocabulary and then queries the tool has been let
-down by discovery, but is still measuring the CLI. An agent that web-searches the
-answer has left the experiment. Record both; they are different findings.
+```jsonc
+"tools_used":   {"Bash": 5, "Skill": 1, "WebSearch": 2},
+"botmap_calls": 0
+```
 
-This is also why we are **not** blocking web search: a real agent has it, and
-removing it would make the test less like reality. We record the bypass instead.
+That is all. No `grounded` judgement, no invalidation, no penalty. Both numbers
+fall straight out of the transcript we already parse, so it costs nothing.
+
+Why hold off: deciding *why* an agent web-searched needs judgement we do not
+have data for. The two plausible reasons point in opposite directions —
+searching for **vocabulary** ("what is this category called") suggests the CLI's
+own discovery failed, which is a design finding; searching for **the answer**
+suggests the attempt is not measuring the CLI at all. We will be able to tell
+those apart once we have counts. Guessing now would bake in a rule we cannot
+support.
+
+Web search stays allowed regardless. A real agent has it, and removing it would
+make the test less like reality.
 
 **Class B is the headline change.** Today a hint is punished twice — counted as
 an error, and disqualified from being the recovery that redeems an earlier
