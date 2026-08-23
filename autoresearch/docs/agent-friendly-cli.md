@@ -119,6 +119,44 @@ VERDICT     Confirmed provisionally. `c-truncated` fell from **13 to 5** on the
             subset result, but the measured direction is strong enough to keep
             the property.
 
+### If a value exists elsewhere, say where
+
+PROPERTY    If a filter value exists in another field, an agent-friendly CLI
+            names that field and gives the corrected filter.
+VIOLATION   `c-wrong-column`: the agent uses a real value in the wrong column,
+            gets zero, and treats the zero as absence.
+STATUS      confirmed
+
+BEFORE      On the paired subset (`bike-parking-coverage`,
+            `residential-share-cambridge`, 2 repeats each), the BEFORE trace had:
+
+```json
+{"c-truncated": 5, "B": 3, "c-wrong-column": 2, "c-unknown": 6, "A": 1, "c-wrong-type": 1}
+```
+
+CHANGE      Tool lever. Botmap candidate `7c794ff` changes `count`: when
+            `class=X` or `subtype=X` returns zero, it tests the paired field and
+            emits a concrete correction if that field has rows.
+
+```text
+[botmap] 0 rows for subtype='bicycle_parking', but class='bicycle_parking'
+returns 1,844. Try `--where class=bicycle_parking` before concluding none exist.
+```
+
+AFTER       Paired AFTER run:
+
+```text
+experiments/runs/after-count-wrong-column-hint-7c794ff/
+```
+
+```json
+{"c-truncated": 3, "B": 2, "c-vocabulary": 2, "A": 1}
+```
+
+VERDICT     Confirmed narrowly. `c-wrong-column` fell from **2 to 0** on the
+            matched subset. Other failures remain, so this confirms the column
+            guidance property, not full task success.
+
 ## Current candidate properties
 
 These are hypotheses from `docs/plan.md`. They are waiting for Phase 4 BEFORE

@@ -177,6 +177,34 @@ c-truncated BEFORE 13 → AFTER 5
 
 The property “Never silently truncate output” is now recorded as provisionally confirmed in `docs/agent-friendly-cli.md`.
 
+### count wrong-column hint — confirmed narrowly
+
+Artifact:
+
+```text
+experiments/paired/count-wrong-column-hint/result.md
+```
+
+Botmap candidate:
+
+```text
+/Users/priyangapkini/workspace/ar-b/botmap @ 7c794ff Hint when count filter uses class and subtype wrong
+```
+
+Subset:
+
+```text
+bike-parking-coverage, residential-share-cambridge; 2 repeats each
+```
+
+Result:
+
+```text
+c-wrong-column BEFORE 2 → AFTER 0
+```
+
+The property “If a value exists elsewhere, say where” is now recorded as confirmed narrowly in `docs/agent-friendly-cli.md`.
+
 ## Next actions
 
 1. Continue Phase 6 paired experiments for the next candidate property.
