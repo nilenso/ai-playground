@@ -47,17 +47,62 @@ cat experiments/runs/agenteval-measurement-3009509/summary.json
 tail -f experiments/runs/agenteval-measurement-3009509/run.log
 ```
 
-Last seen progress before this handover:
+Final measurement status:
+
+```json
+{
+  "attempts_done": 60,
+  "total": 60,
+  "completed": 51,
+  "ok": 51,
+  "botmap_calls": 486,
+  "cost_usd": 15.503289400000003,
+  "minutes": 323.8,
+  "finished": "2026-08-21T21:45:21.682677+00:00"
+}
+```
+
+Retry run for the 9 incomplete/timeout attempts:
+
+```text
+experiments/runs/agenteval-measurement-3009509-retry-incomplete/
+```
+
+Retry status:
 
 ```json
 {
   "attempts_done": 9,
-  "total": 60,
-  "completed": 9,
-  "ok": 9,
-  "botmap_calls": 23,
-  "cost_usd": 2.07959295,
-  "current_log_tail": "motorways-rhode-island__r2"
+  "completed": 2,
+  "ok": 2,
+  "botmap_calls": 94,
+  "cost_usd": 0.30920690000000006,
+  "minutes": 124.9,
+  "finished": "2026-08-23T13:39:41.214499+00:00",
+  "successful_replacements": [
+    "residential-share-cambridge__r2",
+    "which-admin-areas__r2"
+  ]
+}
+```
+
+Post-run probe enrichment completed for both original and retry runs. Main summary files:
+
+```text
+experiments/runs/agenteval-measurement-3009509/agenteval-summary.json
+experiments/runs/agenteval-measurement-3009509/agenteval-summary-with-retries.json
+experiments/runs/agenteval-measurement-3009509-retry-incomplete/agenteval-summary.json
+```
+
+Combined class histogram with successful retries layered over original:
+
+```json
+{
+  "records": 60,
+  "attempts_with_failures": 34,
+  "class_counts": {"clean": 386, "C": 58, "B": 15, "A": 38, "D": 3},
+  "subtype_counts": {"c-truncated": 25, "c-wrong-entity": 21, "c-wrong-type": 3, "c-unknown": 7, "c-wrong-column": 2},
+  "agent_side_counts": {}
 }
 ```
 
