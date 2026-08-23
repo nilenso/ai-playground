@@ -535,6 +535,11 @@ def entity_contradiction(place: str, stdout: str) -> str | None:
     region = str(parsed.get("region") or "").upper()
     name = str(parsed.get("name") or "")
 
+    if qualifier in US_STATE_CODES and country == "US":
+        expected_region = f"US-{qualifier}"
+        if region and region != expected_region:
+            return f"qualifier {qualifier} implies {expected_region}, but resolved {name} with country {country} / region {region}"
+        return None
     if qualifier in COUNTRY_CODES and country and qualifier != country:
         return f"qualifier {qualifier} implies country {qualifier}, but resolved {name} with country {country} / region {region}"
     if qualifier in US_STATE_CODES and region and region != f"US-{qualifier}":

@@ -6,6 +6,7 @@ from autoresearch.agenteval.probe import (
     ProbeBudget,
     ProbeObservation,
     TaxonomySnapshot,
+    entity_contradiction,
     probe_call,
     probe_empty,
 )
@@ -188,3 +189,20 @@ def test_budget_log_records_mocked_cli_probe_calls():
     assert budget.log == [
         {"kind": "column_swap", "argv": ["landuse", "--where", "subtype=recreation"], "ran": True}
     ]
+
+
+def test_entity_probe_accepts_us_state_abbreviations_that_are_also_country_codes():
+    cambridge = json.dumps({"name": "Cambridge", "country": "US", "region": "US-MA"})
+    malta_montana = json.dumps({"name": "Malta", "country": "US", "region": "US-MT"})
+
+    assert entity_contradiction("Cambridge, MA", cambridge) is None
+    assert entity_contradiction("Malta, MT", malta_montana) is None
+
+
+def test_entity_probe_still_flags_wrong_us_state_resolution():
+    resolved = json.dumps({"name": "Cambridge", "country": "US", "region": "US-MD"})
+
+    problem = entity_contradiction("Cambridge, MA", resolved)
+
+    assert problem is not None
+    assert "US-MA" in problem
