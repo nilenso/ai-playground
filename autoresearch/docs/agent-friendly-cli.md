@@ -76,6 +76,49 @@ the limit revealed more rows. The next largest bucket is `c-unknown`, which mean
 our probes could not yet explain the empty result; this is an instrumentation
 work queue, not proof that the CLI behaved well.
 
+## Confirmed properties
+
+### Never silently truncate output
+
+PROPERTY    An agent-friendly CLI says when an output list hit a limit and names
+            the exact recovery action.
+VIOLATION   `c-truncated`: the agent reads a capped list as complete and concludes
+            a value/category does not exist.
+STATUS      confirmed
+
+BEFORE      In the Phase 4 run, `categories --top N` frequently returned exactly
+            N rows with no truncation notice. A differential probe with a larger
+            `--top` found more rows. On the paired subset
+            (`bike-parking-coverage`, `basic-category-rollup`,
+            `bus-stops-cambridge`, 2 repeats each), the BEFORE trace had:
+
+```json
+{"c-truncated": 13, "B": 5, "A": 3, "c-wrong-column": 1, "c-unknown": 7}
+```
+
+CHANGE      Tool lever. Botmap candidate `00bff1a` changes `categories` to emit
+            stderr when `--top` truncates the list:
+
+```text
+[botmap] Showing top N of TOTAL categories. This list is truncated; rerun with
+`--top TOTAL` or a larger --top before concluding a category is absent.
+```
+
+AFTER       Paired AFTER run:
+
+```text
+experiments/runs/after-categories-truncation-hint-00bff1a/
+```
+
+```json
+{"c-truncated": 5, "B": 2, "c-unknown": 2, "A": 1}
+```
+
+VERDICT     Confirmed provisionally. `c-truncated` fell from **13 to 5** on the
+            matched subset. One AFTER attempt still timed out, and this is a
+            subset result, but the measured direction is strong enough to keep
+            the property.
+
 ## Current candidate properties
 
 These are hypotheses from `docs/plan.md`. They are waiting for Phase 4 BEFORE

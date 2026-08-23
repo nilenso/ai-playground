@@ -798,11 +798,13 @@ def view_overview() -> str:
 
     measurement_card = progress_card("Phase 4 measurement run", measurement_state())
     retry_card = progress_card("Retry incomplete attempts", run_progress_state("agenteval-measurement-3009509-retry-incomplete"))
+    after_trunc_card = progress_card("AFTER: categories truncation hint", run_progress_state("after-categories-truncation-hint-00bff1a"))
 
     return f"""<div class="grid">{''.join(cards)}</div>
 <div class="grid">
   {measurement_card}
   {retry_card}
+  {after_trunc_card}
   <article class="card"><header><h2>Shared constraints</h2></header>
     <div class="kv"><span>OpenRouter left</span><b>{esc(openrouter_balance())}</b></div>
     <div class="kv"><span>map release cached</span><b class="{rel_cls}">{esc(release)}</b></div>
