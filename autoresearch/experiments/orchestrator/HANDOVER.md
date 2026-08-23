@@ -147,13 +147,41 @@ They reported READY after implementing their minimal Phase 2 components. Herdr m
 - Quota failures: attempt-level verdict in contract.
 - Exit-0 `did you mean`: preserve guided recovery path; if agent ignores it, record agent-side failure detail.
 
+## Paired experiments
+
+### categories truncation hint — confirmed provisionally
+
+Artifact:
+
+```text
+experiments/paired/categories-truncation-hint/result.md
+```
+
+Botmap candidate:
+
+```text
+/Users/priyangapkini/workspace/ar-b/botmap @ 00bff1a Warn when categories output is truncated
+```
+
+Subset:
+
+```text
+bike-parking-coverage, basic-category-rollup, bus-stops-cambridge; 2 repeats each
+```
+
+Result:
+
+```text
+c-truncated BEFORE 13 → AFTER 5
+```
+
+The property “Never silently truncate output” is now recorded as provisionally confirmed in `docs/agent-friendly-cli.md`.
+
 ## Next actions
 
-1. Keep polling measurement and dashboard.
-2. When the Phase 4 run finishes, compute class histogram from its `record-v2.json` files.
-3. Check saturation prediction: whether old-perfect questions now fail due to class C.
-4. Write/update `docs/agent-friendly-cli.md` with BEFORE traces only where evidence exists; do not claim confirmation until paired before/after experiments.
-5. Bring C1 identity back to Priyanga before any paired experiment using that candidate.
+1. Continue Phase 6 paired experiments for the next candidate property.
+2. Highest remaining buckets after the entity-probe fix: `c-unknown` and hard failures A. Treat `c-unknown` as instrumentation work before claiming a CLI property.
+3. Bring C1 identity back to Priyanga before any paired experiment using count-zero-hint specifically, unless autonomy/veto is still in effect.
 
 ## Guardrails
 
