@@ -85,6 +85,20 @@ def test_vocabulary_probe_concludes_absent_value_without_cli_call():
     assert run.calls == []
 
 
+def test_cli_vocabulary_probe_checks_categories_listing_when_taxonomy_missing():
+    original = call(["--json", "count", "-t", "place", "--in", "Cambridge, MA", "--where", "categories.primary=bus_stop"])
+    run = runner_from({
+        ("--json", "categories", "-t", "place", "--in", "Cambridge, MA", "--top", "5000"):
+            ProbeObservation(stdout=json.dumps([{"value": "bus_station", "count": 3}]))
+    })
+
+    result = probe_empty(original, run)
+
+    assert result.subtype == "c-vocabulary"
+    assert "bus_stop absent" in result.evidence
+    assert run.calls == [("--json", "categories", "-t", "place", "--in", "Cambridge, MA", "--top", "5000")]
+
+
 def test_type_sweep_finds_same_filter_under_another_type():
     original = call(["count", "-t", "land_use", "--in", "Malta", "--where", "class=beach"])
     run = runner_from(

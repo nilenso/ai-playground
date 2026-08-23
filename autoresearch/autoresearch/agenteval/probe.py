@@ -176,9 +176,10 @@ def _empty_probe_sequence(
     for make_probe in (
         lambda: _probe_argv_echo(call),
         lambda: _probe_vocabulary(call, taxonomy),
+        lambda: _probe_vocabulary_cli(call, runner, budget),
         lambda: _probe_column_swap(call, runner, budget, taxonomy),
-        lambda: _probe_type_sweep(call, runner, budget, taxonomy),
         lambda: _probe_entity_check(call, runner, budget),
+        lambda: _probe_type_sweep(call, runner, budget, taxonomy),
     ):
         probe = make_probe()
         if probe is not None:
@@ -206,6 +207,31 @@ def _probe_vocabulary(call: Call, taxonomy: TaxonomySnapshot | None) -> Probe | 
         result=f"{checked} exists somewhere in the published taxonomy; vocabulary alone is not explanatory",
         conclusive=False,
     )
+
+
+def _probe_vocabulary_cli(call: Call, runner: CommandRunner, budget: ProbeBudget) -> Probe | None:
+    filters = [(column, value) for column, value in value_filters(call.argv) if column == "categories.primary"]
+    if not filters or feature_type(call.argv) != "place":
+        return None
+    location = location_args(call.argv)
+    if not location:
+        return None
+    argv = ("--json", "categories", "-t", "place", *location, "--top", "5000")
+    probe, observation = budget.run("vocabulary", argv, runner)
+    if observation is None:
+        return probe
+    values = category_values(observation.stdout)
+    if not values:
+        return Probe("vocabulary", probe.ran, "category vocabulary probe returned no values", False)
+    missing = [value for _, value in filters if value not in values]
+    if missing:
+        return Probe(
+            "vocabulary",
+            probe.ran,
+            f"{', '.join(missing)} absent from categories.primary listing of {len(values)} values",
+            True,
+        )
+    return Probe("vocabulary", probe.ran, "filtered value appears in categories.primary listing", False)
 
 
 def _probe_column_swap(
@@ -450,6 +476,15 @@ def place_qualifier(argv: Sequence[str]) -> str | None:
     return None
 
 
+def location_args(argv: Sequence[str]) -> tuple[str, ...]:
+    for flag in ("--in", "--bbox"):
+        if flag in argv:
+            index = argv.index(flag)
+            if index + 1 < len(argv):
+                return (flag, argv[index + 1])
+    return ()
+
+
 def explicit_limit(argv: Sequence[str]) -> int | None:
     for flag in ("--top", "--limit", "-n"):
         if flag in argv:
@@ -482,6 +517,17 @@ def repeated_value_flags(argv: Sequence[str]) -> dict[str, list[str]]:
             continue
         i += 1
     return {flag: seen for flag, seen in values.items() if len(seen) > 1}
+
+
+def category_values(stdout: str) -> frozenset[str]:
+    parsed = parse_json(stdout)
+    if not isinstance(parsed, list):
+        return frozenset()
+    return frozenset(
+        item["value"]
+        for item in parsed
+        if isinstance(item, dict) and isinstance(item.get("value"), str)
+    )
 
 
 def result_count(stdout: str) -> int:
