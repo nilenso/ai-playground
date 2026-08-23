@@ -25,6 +25,30 @@ AFTER       measured trace with the change in place
 VERDICT     confirmed | refuted, and the delta that supports it
 ```
 
+## Evaluation rubric
+
+Top-level score:
+
+- Correctness and recoverability: **60%**
+- Token efficiency: **20%**
+- Wall-clock time: **20%**
+
+The correctness/recoverability 60% is split into:
+
+- Final outcome correctness: **20 points**
+- Self-recovery: **20 points** — can the agent diagnose and recover without human help?
+- Guidance / error quality: **12 points** — does the CLI explain what went wrong and what to do next?
+- Execution / route quality: **6 points**
+- Failure severity / attribution: **2 points**
+
+Track **Self-Recovery Rate** separately:
+
+```text
+recoverable failures successfully recovered by the agent / total recoverable failures
+```
+
+Also track recovery cost: extra tokens, calls, and wall-clock time.
+
 ## Current candidate properties
 
 These are hypotheses from `docs/plan.md`. They are waiting for Phase 4 BEFORE

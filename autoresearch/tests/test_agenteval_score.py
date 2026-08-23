@@ -29,6 +29,8 @@ def test_clean_attempt_scores_full_value():
     score = score_attempt([verdict("ok", recovery="n/a")])
 
     assert score.value == 1.0
+    assert score.breakdown.correctness_recoverability == 1.0
+    assert score.recovery.self_recovery_rate is None
     assert not score.excluded
 
 
@@ -81,7 +83,21 @@ def test_agent_side_class_f_is_recorded_not_charged():
     assert score.charged == (clean,)
 
 
-def test_ignored_hint_detail_does_not_turn_guided_tool_signal_into_tool_penalty():
+def test_recovery_cost_tracks_extra_calls_tokens_and_wallclock():
+    guided_hint = verdict("error", recovery="guided")
+    clean = verdict("ok", recovery="n/a")
+
+    score = score_attempt([guided_hint, clean], extra_tokens=123, extra_wallclock_ms=456)
+
+    assert score.recovery.recoverable_failures == 1
+    assert score.recovery.recovered_failures == 1
+    assert score.recovery.self_recovery_rate == 1.0
+    assert score.recovery.extra_calls == 1
+    assert score.recovery.extra_tokens == 123
+    assert score.recovery.extra_wallclock_ms == 456
+
+
+def test_ignored_hint_detail_reduces_self_recovery_not_guidance_quality():
     guided_hint = verdict("error", recovery="guided")
 
     with_agent_detail = score_attempt([guided_hint], agent_side=[{
@@ -91,4 +107,7 @@ def test_ignored_hint_detail_does_not_turn_guided_tool_signal_into_tool_penalty(
     }])
     without_agent_detail = score_attempt([guided_hint])
 
-    assert with_agent_detail.value == without_agent_detail.value
+    assert without_agent_detail.recovery.self_recovery_rate == 1.0
+    assert with_agent_detail.recovery.self_recovery_rate == 0.0
+    assert with_agent_detail.breakdown.guidance == without_agent_detail.breakdown.guidance
+    assert with_agent_detail.value < without_agent_detail.value
