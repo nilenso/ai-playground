@@ -49,6 +49,33 @@ recoverable failures successfully recovered by the agent / total recoverable fai
 
 Also track recovery cost: extra tokens, calls, and wall-clock time.
 
+## Phase 4 measurement distribution
+
+Measurement run:
+
+```text
+experiments/runs/agenteval-measurement-3009509/agenteval-summary-with-retries.json
+```
+
+This combines the 60-attempt Phase 4 run with the two successful retry attempts
+for transient timeouts, leaving the original run artifacts untouched.
+
+```json
+{
+  "records": 60,
+  "attempts_with_failures": 34,
+  "class_counts": {"clean": 389, "C": 55, "B": 15, "A": 38, "D": 3},
+  "subtype_counts": {"c-truncated": 25, "c-unknown": 25, "c-wrong-type": 3, "c-wrong-column": 2},
+  "agent_side_counts": {}
+}
+```
+
+The largest evidenced candidate is currently `c-truncated`: taxonomy/discovery
+output hit a limit, the agent treated the capped list as complete, and raising
+the limit revealed more rows. The next largest bucket is `c-unknown`, which means
+our probes could not yet explain the empty result; this is an instrumentation
+work queue, not proof that the CLI behaved well.
+
 ## Current candidate properties
 
 These are hypotheses from `docs/plan.md`. They are waiting for Phase 4 BEFORE

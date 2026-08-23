@@ -94,17 +94,19 @@ experiments/runs/agenteval-measurement-3009509/agenteval-summary-with-retries.js
 experiments/runs/agenteval-measurement-3009509-retry-incomplete/agenteval-summary.json
 ```
 
-Combined class histogram with successful retries layered over original:
+Combined class histogram with successful retries layered over original, after repairing the MA/MT entity-probe false positive:
 
 ```json
 {
   "records": 60,
   "attempts_with_failures": 34,
-  "class_counts": {"clean": 386, "C": 58, "B": 15, "A": 38, "D": 3},
-  "subtype_counts": {"c-truncated": 25, "c-wrong-entity": 21, "c-wrong-type": 3, "c-unknown": 7, "c-wrong-column": 2},
+  "class_counts": {"clean": 389, "C": 55, "B": 15, "A": 38, "D": 3},
+  "subtype_counts": {"c-truncated": 25, "c-unknown": 25, "c-wrong-type": 3, "c-wrong-column": 2},
   "agent_side_counts": {}
 }
 ```
+
+Important correction: the initial `c-wrong-entity` bucket was an instrument bug. The entity probe treated `MA` and `MT` as ISO country codes before recognizing valid US state abbreviations (`US-MA`, `US-MT`). Fixed in `89acc62`; stale retry records repaired by `repair_us_state_entity_false_positives`.
 
 ## Dashboard
 
