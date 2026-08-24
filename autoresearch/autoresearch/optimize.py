@@ -9,9 +9,10 @@ The best version it finds is written out at the end.
 
 Two rules keep the answer meaningful:
 
-- **One file per run.** If we changed the code and the instructions at once and
-  the score moved, we wouldn't know which one moved it. Run it twice instead,
-  and compare.
+- **One file per run by default.** If we changed the code and the instructions
+  at once and the score moved, we wouldn't know which one moved it. Run it twice
+  instead, and compare. When the operator explicitly asks for full-repo mode,
+  attribution is intentionally traded for a wider search.
 - **Held-out questions.** GEPA optimises against one set of questions and is
   scored on a set it never saw. Without that we'd only learn that it can
   memorise the questions we gave it.
@@ -30,6 +31,8 @@ from pathlib import Path
 import gepa.optimize_anything as oa
 
 from . import baseline, blocked, config, proposer as proposer_mod, questions as qmod
+from .agenteval.sabotage import FIXTURES, assert_sabotage_passes
+from .agenteval.taxonomy import TranscriptLike, classify, classify_attempt
 from .evaluator import Evaluator
 from .worktree import Pool, head_sha
 
@@ -66,15 +69,7 @@ Things that score badly:
 Keep the file valid Python that still starts. A file that will not import
 scores zero without being tested at all.
 
-IMPORTANT — you can only edit the files listed below. The tool has other source
-files you cannot touch on this run.
-
-If you work out that the real cause of a failure lives in a file you have not
-been given, do NOT paper over it somewhere else. Say so plainly in your
-reasoning and name the file, like "the actual fix belongs in core.py". We read
-your reasoning after the run and will widen the next one. A clear statement
-that you are blocked is more useful to us than a workaround that muddies the
-measurement.
+IMPORTANT — you can only edit the files listed below.
 
 If what you need is a file that does not exist yet, you cannot create it — the
 set of files you can edit is fixed before you start. Ask for it instead, on its
@@ -101,11 +96,27 @@ def _objective_text(lever: str) -> str:
     )
 
 
+def run_sabotage_gate() -> None:
+    """Fail fast if the new evaluator cannot see known invisible failures."""
+
+    def classify_fixture(call):
+        if not call.get("argv") and call.get("blame") == "environment":
+            return classify_attempt(TranscriptLike(final_answer=call.get("stderr_head", "")))
+        if call.get("blame") == "agent":
+            from .agenteval.sabotage import expected_verdict
+
+            return expected_verdict(call)
+        return classify(call, call.get("probes", ()))
+
+    assert_sabotage_passes(classify_fixture, FIXTURES)
+
+
 def run(lever: str, budget: int, holdout: float, reflection_lm: str,
         workers: int, keep_runs: bool,
         files: tuple[str, ...] | None = None,
-        proposer: str = "api") -> None:
+        proposer: str = "api", full_repo_context: bool = False) -> None:
     started = time.time()
+    run_sabotage_gate()
     subscription = proposer == "subscription"
     # Before preflight, because checking the cached baseline's map-data
     # release needs to know which baseline we would be reusing.
@@ -165,6 +176,11 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
         print(f"[oa] starting from the current files ({total} lines in total)")
         print(f"[oa] budget: {budget} evaluations (each is ~{config.REPEATS} questions asked)")
 
+        context = ""
+        if full_repo_context:
+            context = "\n\n" + config.full_repo_context()
+            print(f"[oa] full repo context enabled ({len(context):,} chars)")
+
         result = oa.optimize_anything(
             seed,
             evaluator=evaluate,
@@ -172,7 +188,7 @@ def run(lever: str, budget: int, holdout: float, reflection_lm: str,
             valset=val,          # dataset + valset = "make it generalise"
             objective=_objective_text(lever),
             background=BACKGROUND + "\n\nFiles you may edit on this run:\n"
-            + "\n".join(f"  - {f}" for f in files),
+            + "\n".join(f"  - {f}" for f in files) + context,
             config=oa.GEPAConfig(
                 engine=oa.EngineConfig(
                     max_metric_calls=budget,
@@ -293,15 +309,19 @@ def main() -> None:
                         "'subscription' shells out to `claude -p` and uses your "
                         "Claude Code plan instead")
     p.add_argument("--all-files", action="store_true",
-                   help="evolve every eligible file in the tool. Widens the search "
-                        "beyond what we already know is broken, but splits the budget "
-                        "across more files — raise --budget to match.")
+                   help="evolve every tracked UTF-8 text file in the tool repo. "
+                        "This is full-edit mode: it trades attribution for reach and "
+                        "splits the budget across many files — raise --budget to match.")
+    p.add_argument("--full-repo-context", action="store_true",
+                   help="include a bounded read-only snapshot of the whole tracked "
+                        "tool repo in GEPA's background prompt.")
     args = p.parse_args()
 
     chosen = tuple(args.files) if args.files else (
-        config.discoverable_files() if args.all_files else None)
+        config.full_repo_files() if args.all_files else None)
     run(args.lever, args.budget, args.holdout, args.reflection_lm,
-        args.workers, args.keep_runs, chosen, args.proposer)
+        args.workers, args.keep_runs, chosen, args.proposer,
+        args.full_repo_context)
 
 
 if __name__ == "__main__":

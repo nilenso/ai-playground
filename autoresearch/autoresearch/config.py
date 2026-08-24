@@ -16,6 +16,9 @@ import subprocess
 import time
 from pathlib import Path
 
+FULL_REPO_CONTEXT_MAX_CHARS = 700_000
+FULL_REPO_CONTEXT_FILE_MAX_CHARS = 40_000
+
 from . import credits
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -97,7 +100,7 @@ WEIGHTS = {"correctness": 0.60, "token_efficiency": 0.20, "wallclock": 0.20}
 
 # Names the way correctness is currently measured. Recorded on every result so
 # two runs scored by different rules are never compared as if they matched.
-CORRECTNESS_IMPL = "proxy-v1"
+CORRECTNESS_IMPL = "agenteval-v2"
 
 # The tool we're changing. `~/workspace/botmap` unless you say otherwise.
 DEFAULT_REPO = Path.home() / "workspace" / "botmap"
@@ -459,8 +462,8 @@ def _check_baseline_release(sha: str) -> str:
     return f"release {current}, matching the cached baseline"
 
 
-# Everything importable in the tool, minus what should never be evolved. Used
-# when you ask for a wider search than the curated default.
+# Everything importable in the tool, minus what should never be evolved in the
+# curated "wider than default" mode. Explicit full-repo mode bypasses this list.
 NEVER_EVOLVE = {
     "botmap/__init__.py",         # trivial re-exports
     "botmap/core.py",             # data plumbing: one bad edit breaks everything
@@ -468,16 +471,65 @@ NEVER_EVOLVE = {
 }
 
 
-def discoverable_files(repo: Path | None = None) -> tuple[str, ...]:
-    """Every Python file in the tool that we'd be willing to evolve.
+def _tracked_files(repo: Path) -> tuple[str, ...]:
+    done = subprocess.run(
+        ["git", "ls-files"], cwd=repo, check=True, capture_output=True, text=True
+    )
+    return tuple(line for line in done.stdout.splitlines() if line)
 
-    Offered so the search space isn't limited to what we already know is
-    broken. The trade-off is real: GEPA spreads its budget evenly across files,
-    so doubling the file count halves the attempts each one gets.
-    """
+
+def _read_utf8_text(path: Path) -> str | None:
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    if b"\x00" in raw:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def discoverable_files(repo: Path | None = None) -> tuple[str, ...]:
+    """Every Python module in the tool that curated wide mode may evolve."""
     root = (repo or repo_root()) / "botmap"
     found = sorted(f"botmap/{p.name}" for p in root.glob("*.py"))
     return tuple(f for f in found if f not in NEVER_EVOLVE)
+
+
+def full_repo_files(repo: Path | None = None) -> tuple[str, ...]:
+    """Every tracked UTF-8 text file in botmap, for explicit full-edit runs."""
+    root = repo or repo_root()
+    return tuple(
+        rel for rel in _tracked_files(root)
+        if (root / rel).is_file() and _read_utf8_text(root / rel) is not None
+    )
+
+
+def full_repo_context(repo: Path | None = None,
+                      max_chars: int = FULL_REPO_CONTEXT_MAX_CHARS,
+                      file_max_chars: int = FULL_REPO_CONTEXT_FILE_MAX_CHARS) -> str:
+    """A bounded read-only snapshot of the tracked botmap repo for GEPA."""
+    root = repo or repo_root()
+    parts = ["Tracked repo context follows. Paths are relative to the botmap repo."]
+    used = len(parts[0])
+    omitted = 0
+    for rel in full_repo_files(root):
+        text = _read_utf8_text(root / rel)
+        if text is None:
+            continue
+        if len(text) > file_max_chars:
+            text = text[:file_max_chars] + "\n... [file truncated in context]\n"
+        block = f"\n\n--- FILE: {rel} ---\n{text}"
+        if used + len(block) > max_chars:
+            omitted += 1
+            continue
+        parts.append(block)
+        used += len(block)
+    if omitted:
+        parts.append(f"\n\n... [{omitted} tracked text files omitted from context budget]")
+    return "".join(parts)
 
 
 def lever_files(lever: str, override: tuple[str, ...] | None = None) -> tuple[str, ...]:
