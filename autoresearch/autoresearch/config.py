@@ -18,7 +18,7 @@ from pathlib import Path
 
 FULL_REPO_CONTEXT_MAX_CHARS = 700_000
 FULL_REPO_CONTEXT_FILE_MAX_CHARS = 40_000
-EVALUATOR_FILE_PREFIXES = ("evals/",)
+EVALUATOR_FILE_PREFIXES = ("evals/", "tests/eval_fixtures/", "tests/test_eval_")
 
 from . import credits
 

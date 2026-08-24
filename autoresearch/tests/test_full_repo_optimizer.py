@@ -29,12 +29,14 @@ def test_full_repo_files_returns_tracked_utf8_files(monkeypatch, tmp_path):
     (repo / "botmap" / "cli.py").write_text("print('ok')\n", encoding="utf-8")
     (repo / "evals").mkdir()
     (repo / "evals" / "score.py").write_text("print('exam')\n", encoding="utf-8")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_eval_score.py").write_text("print('exam test')\n", encoding="utf-8")
     (repo / "README.md").write_text("# botmap\n", encoding="utf-8")
     (repo / "image.bin").write_bytes(b"abc\x00def")
     (repo / "untracked.py").write_text("ignored\n", encoding="utf-8")
 
     _git(repo, "init")
-    _git(repo, "add", "botmap/cli.py", "evals/score.py", "README.md", "image.bin")
+    _git(repo, "add", "botmap/cli.py", "evals/score.py", "tests/test_eval_score.py", "README.md", "image.bin")
     _git(repo, "commit", "-m", "seed")
 
     monkeypatch.setattr(config, "repo_root", lambda: repo)
@@ -44,6 +46,7 @@ def test_full_repo_files_returns_tracked_utf8_files(monkeypatch, tmp_path):
         "README.md",
         "botmap/cli.py",
         "evals/score.py",
+        "tests/test_eval_score.py",
     )
 
 
