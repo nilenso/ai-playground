@@ -18,6 +18,7 @@ from pathlib import Path
 
 FULL_REPO_CONTEXT_MAX_CHARS = 700_000
 FULL_REPO_CONTEXT_FILE_MAX_CHARS = 40_000
+EVALUATOR_FILE_PREFIXES = ("evals/",)
 
 from . import credits
 
@@ -498,12 +499,20 @@ def discoverable_files(repo: Path | None = None) -> tuple[str, ...]:
     return tuple(f for f in found if f not in NEVER_EVOLVE)
 
 
-def full_repo_files(repo: Path | None = None) -> tuple[str, ...]:
-    """Every tracked UTF-8 text file in botmap, for explicit full-edit runs."""
+def full_repo_files(repo: Path | None = None,
+                    include_evaluator: bool = False) -> tuple[str, ...]:
+    """Every tracked UTF-8 text file in botmap, for explicit full-edit runs.
+
+    The evaluator/yardstick stays read-only by default.  Letting the optimiser
+    edit it would reward changing the exam rather than making the CLI easier for
+    agents.
+    """
     root = repo or repo_root()
     return tuple(
         rel for rel in _tracked_files(root)
-        if (root / rel).is_file() and _read_utf8_text(root / rel) is not None
+        if (root / rel).is_file()
+        and _read_utf8_text(root / rel) is not None
+        and (include_evaluator or not rel.startswith(EVALUATOR_FILE_PREFIXES))
     )
 
 

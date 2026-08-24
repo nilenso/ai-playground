@@ -309,16 +309,21 @@ def main() -> None:
                         "'subscription' shells out to `claude -p` and uses your "
                         "Claude Code plan instead")
     p.add_argument("--all-files", action="store_true",
-                   help="evolve every tracked UTF-8 text file in the tool repo. "
-                        "This is full-edit mode: it trades attribution for reach and "
-                        "splits the budget across many files — raise --budget to match.")
+                   help="evolve every tracked UTF-8 text file in the tool repo, except "
+                        "the evaluator/yardstick. This full-edit mode trades attribution "
+                        "for reach and splits the budget across many files — raise "
+                        "--budget to match.")
+    p.add_argument("--include-evaluator-files", action="store_true",
+                   help="include evaluator files in --all-files. Normally invalid for "
+                        "experiments because it lets the optimiser change the exam.")
     p.add_argument("--full-repo-context", action="store_true",
                    help="include a bounded read-only snapshot of the whole tracked "
                         "tool repo in GEPA's background prompt.")
     args = p.parse_args()
 
     chosen = tuple(args.files) if args.files else (
-        config.full_repo_files() if args.all_files else None)
+        config.full_repo_files(include_evaluator=args.include_evaluator_files)
+        if args.all_files else None)
     run(args.lever, args.budget, args.holdout, args.reflection_lm,
         args.workers, args.keep_runs, chosen, args.proposer,
         args.full_repo_context)
