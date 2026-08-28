@@ -116,6 +116,8 @@ See `worktrees/` for each botmap clone’s state:
 - `worktrees/arm-b-clean.md`
 - `worktrees/arm-c-clean.md`
 - `worktrees/arm-c-original.md`
+- `worktrees/arm-d-wrong-type.md`
+- `worktrees/arm-d-wrong-type.commits-since-3009509.patch`
 
 These preserve the branch/commit trail and candidate patches from external botmap checkouts used by the arms.
 
