@@ -1,5 +1,5 @@
 from autoresearch.agenteval.contract import AttemptVerdict, CallVerdict, derive_class
-from autoresearch.agenteval.score import score_attempt
+from autoresearch.agenteval.score import score_attempt, score_record
 
 
 def verdict(outcome, blame="tool", recovery="unguided", subtype=None):
@@ -111,3 +111,30 @@ def test_ignored_hint_detail_reduces_self_recovery_not_guidance_quality():
     assert with_agent_detail.recovery.self_recovery_rate == 0.0
     assert with_agent_detail.breakdown.guidance == without_agent_detail.breakdown.guidance
     assert with_agent_detail.value < without_agent_detail.value
+
+
+def test_score_record_reads_record_v2_dicts_as_scoring_source():
+    record = {
+        "calls": [{
+            "outcome": "error",
+            "blame": "tool",
+            "recovery": "guided",
+            "class": "B",
+            "subtype": None,
+            "evidence": "Did you mean: bus_station",
+            "probes": [],
+        }],
+        "agent_side": [],
+        "attempt": None,
+    }
+
+    assert score_record(record).value == score_attempt([verdict("error", recovery="guided")]).value
+
+
+def test_incomplete_non_environment_attempt_scores_zero_not_fast_path_credit():
+    clean = verdict("ok", recovery="n/a")
+
+    scored = score_attempt([clean], completed=False, token_efficiency=1.0, wallclock=1.0)
+
+    assert scored.value == 0.0
+    assert scored.breakdown.correctness_recoverability == 0.0

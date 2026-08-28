@@ -20,9 +20,9 @@ Class E is excluded. Class F is recorded but not charged to the CLI.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
-from .contract import AttemptVerdict, CallVerdict
+from .contract import AttemptVerdict, CallVerdict, Probe
 
 CORRECTNESS_RECOVERABILITY_WEIGHT = 0.60
 TOKEN_EFFICIENCY_WEIGHT = 0.20
@@ -121,6 +121,18 @@ def score_attempt(
             attempt_environment=attempt,
         )
 
+    if not completed:
+        return Score(
+            value=0.0,
+            excluded=False,
+            charged=charged,
+            recorded_not_charged=recorded_not_charged,
+            environment=environment,
+            breakdown=empty_breakdown,
+            recovery=recovery,
+            attempt_environment=attempt if attempt and attempt.cls == "E" else None,
+        )
+
     breakdown = _breakdown(
         charged,
         completed=completed,
@@ -143,6 +155,45 @@ def score_attempt(
         recovery=recovery,
         attempt_environment=attempt if attempt and attempt.cls == "E" else None,
     )
+
+
+def score_record(
+    record: object,
+    *,
+    completed: bool = True,
+    token_efficiency: float = 1.0,
+    wallclock: float = 1.0,
+    extra_tokens: int = 0,
+    extra_wallclock_ms: int = 0,
+) -> Score:
+    """Score a record-v2 object or raw dictionary.
+
+    This is the integration point for the runner/evaluator: record-v2 remains
+    the auditable source, and scoring reads the same verdict fields that are
+    written to disk.
+    """
+    raw = _raw_record(record)
+    return score_attempt(
+        [_call_verdict(call) for call in raw.get("calls", ())],
+        attempt=_attempt_verdict(raw.get("attempt")),
+        agent_side=raw.get("agent_side", ()),
+        completed=completed,
+        token_efficiency=token_efficiency,
+        wallclock=wallclock,
+        extra_tokens=extra_tokens,
+        extra_wallclock_ms=extra_wallclock_ms,
+    )
+
+
+def efficiency(reference: float | None, actual: float) -> float:
+    """Normalize cost/time against the unchanged tool.
+
+    0.5 means parity, below is worse, above is better.  No reference is neutral
+    rather than free full credit.
+    """
+    if not reference or actual <= 0:
+        return 0.5
+    return min(2.0, reference / actual) / 2.0
 
 
 def _breakdown(
@@ -241,3 +292,51 @@ def _attribution_quality(calls: tuple[CallVerdict, ...]) -> float:
         return 1.0
     penalty = sum(CLASS_SEVERITY_PENALTIES.get(call.cls or "", 0.0) for call in charged_failures)
     return max(0.0, 1.0 - (penalty / len(charged_failures)))
+
+
+def _raw_record(record: object) -> dict[str, Any]:
+    if isinstance(record, dict):
+        return record
+    return {
+        "calls": getattr(record, "calls", ()),
+        "agent_side": getattr(record, "agent_side", ()),
+        "attempt": getattr(record, "attempt", None),
+    }
+
+
+def _call_verdict(raw: CallVerdict | dict[str, Any]) -> CallVerdict:
+    if isinstance(raw, CallVerdict):
+        return raw
+    return CallVerdict(
+        outcome=raw.get("outcome", ""),
+        blame=raw.get("blame", ""),
+        recovery=raw.get("recovery", ""),
+        cls=raw.get("class", raw.get("cls")),
+        subtype=raw.get("subtype"),
+        evidence=raw.get("evidence", ""),
+        probes=tuple(_probe(probe) for probe in raw.get("probes", ())),
+    )
+
+
+def _attempt_verdict(raw: AttemptVerdict | dict[str, Any] | None) -> AttemptVerdict | None:
+    if raw is None or isinstance(raw, AttemptVerdict):
+        return raw
+    return AttemptVerdict(
+        outcome=raw.get("outcome", ""),
+        blame=raw.get("blame", ""),
+        recovery=raw.get("recovery", ""),
+        cls=raw.get("class", raw.get("cls")),
+        subtype=raw.get("subtype"),
+        evidence=raw.get("evidence", ""),
+    )
+
+
+def _probe(raw: Probe | dict[str, Any]) -> Probe:
+    if isinstance(raw, Probe):
+        return raw
+    return Probe(
+        kind=raw.get("kind", ""),
+        ran=raw.get("ran", ""),
+        result=raw.get("result", ""),
+        conclusive=bool(raw.get("conclusive", False)),
+    )

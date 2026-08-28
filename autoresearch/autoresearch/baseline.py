@@ -15,6 +15,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import config, runner
+from .agenteval.record import build_record
+from .agenteval.score import score_record
 from .questions import Question
 from .score import Attempt
 
@@ -29,15 +31,18 @@ class Reading:
 
 
 def _summarise(attempts: list[Attempt]) -> Reading | None:
-    usable = [a for a in attempts if a.ok]
+    measured = [
+        (attempt, score_record(build_record(attempt), completed=attempt.completed))
+        for attempt in attempts
+    ]
+    usable = [(attempt, score) for attempt, score in measured if not score.excluded]
     if not usable:
-        return None  # every try failed; this question tells us nothing
-    from .score import correctness
+        return None  # every try failed outside the tool; this question tells us nothing
 
     return Reading(
-        tokens=statistics.mean(a.transcript.usage.total_tokens for a in usable),
-        duration_ms=statistics.mean(a.transcript.usage.duration_ms for a in usable),
-        correctness=correctness(usable),
+        tokens=statistics.mean(attempt.transcript.usage.total_tokens for attempt, _ in usable),
+        duration_ms=statistics.mean(attempt.transcript.usage.duration_ms for attempt, _ in usable),
+        correctness=statistics.mean(score.breakdown.correctness_recoverability for _, score in usable),
     )
 
 
