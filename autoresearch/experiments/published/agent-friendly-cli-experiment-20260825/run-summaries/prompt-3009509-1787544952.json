@@ -1,0 +1,87 @@
+{
+  "run": "prompt-3009509-1787544952",
+  "source": "experiments/runs/prompt-3009509-1787544952",
+  "summary.json": {
+    "agent_model": "sonnet",
+    "agent_path": "subscription",
+    "agent_provider": "anthropic-subscription",
+    "budget": 60,
+    "candidates_tried": 5,
+    "correctness_impl": "agenteval-v2",
+    "evaluations_run": 63,
+    "files": [
+      "botmap/data/skill.md"
+    ],
+    "files_changed": [],
+    "finished": "2026-08-24T16:08:07.579360+00:00",
+    "heldout_questions": [
+      "street-canonical-form",
+      "pharmacies-monaco",
+      "hardware-near-bikepaths",
+      "unsupported-hours-and-ratings",
+      "which-admin-areas"
+    ],
+    "lever": "prompt",
+    "minutes": 712.2,
+    "new_file_reasons": {
+      "botmap/nearby.py": "a `near`/spatial-join command (\"features of type A within N metres of type B\") so agents stop hand-rolling shapely buffers for \"buildings near the water\" questions",
+      "botmap/normalize.py": "diacritic/ASCII-folding and fuzzy candidate matching for division name lookup belongs in code, not as a prose list of accented city names in skill.md",
+      "botmap/placematch.py": "diacritic/ASCII-insensitive and alias-aware division name matching (\"Reykjavik\"\u2192\"Reykjav\u00edk\", \"Munich\"\u2192\"M\u00fcnchen\") plus a bbox suggestion in the no_match error, so `where` returns a ready-to-run replace"
+    },
+    "pinned": false,
+    "proposer": "openrouter/anthropic/claude-opus-5",
+    "release_requested": null,
+    "sha": "3009509",
+    "train_questions": [
+      "asian-restaurants-rollup",
+      "basic-category-rollup",
+      "malta-highways-absent-class",
+      "starbucks-name-vs-brand",
+      "tall-buildings-cambridge",
+      "tattoo-category-discovery",
+      "bbox-cambridge",
+      "hospitals-rhode-island",
+      "motorways-rhode-island",
+      "nearest-pois-harvard",
+      "beach-accessibility-malta",
+      "bike-parking-coverage",
+      "building-parts-detail",
+      "bus-stops-with-coffee",
+      "junction-density",
+      "waterfront-buildings-reykjavik",
+      "brooklyn-every-building",
+      "bus-stops-cambridge",
+      "residential-share-cambridge",
+      "reykjavik-diacritic",
+      "williamsburg-which-one",
+      "clipping-polygon-qgis",
+      "ev-charging-gap",
+      "hotel-density-two-countries",
+      "pharmacy-near-address"
+    ],
+    "wanted_existing_files_out_of_scope": {
+      "botmap/__init__.py": 5
+    },
+    "wanted_files_that_do_not_exist": {
+      "Users/priyangapkini/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/concurrent/futures/_base.py": 1,
+      "Users/priyangapkini/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/contextlib.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/gepa/lm.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/gepa/proposer/reflective_mutation/reflection_lm.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/gepa/proposer/reflective_mutation/reflective_mutation.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/httpcore/_backends/sync.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/httpcore/_exceptions.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/httpcore/_sync/connection.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/httpx/_client.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/httpx/_transports/default.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/litellm/litellm_core_utils/exception_mapping_utils.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/litellm/llms/custom_httpx/http_handler.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/litellm/llms/custom_httpx/llm_http_handler.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/litellm/main.py": 1,
+      "Users/priyangapkini/nilenso/ai-playground/autoresearch/.venv/lib/python3.11/site-packages/litellm/utils.py": 1,
+      "botmap/nearby.py": 2,
+      "botmap/normalize.py": 2,
+      "botmap/placematch.py": 1
+    }
+  }
+}

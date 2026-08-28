@@ -1,0 +1,332 @@
+{
+  "agenteval-summary.json": {
+    "agent_side_counts": {},
+    "attempts_with_failures": 6,
+    "class_counts": {
+      "A": 3,
+      "B": 2,
+      "C": 6,
+      "D": 1,
+      "clean": 82
+    },
+    "details": [
+      {
+        "attempt": "basic-category-rollup__r2",
+        "botmap_calls": 4,
+        "failures": [],
+        "question_id": "basic-category-rollup",
+        "repeat": 2
+      },
+      {
+        "attempt": "beach-accessibility-malta__r1",
+        "botmap_calls": 47,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Malta, MT",
+              "--where",
+              "categories.primary=beach"
+            ],
+            "class": "C",
+            "evidence": "empty result with no conclusive probe; reason unknown",
+            "index": 2,
+            "scope": "call",
+            "subtype": "c-unknown"
+          }
+        ],
+        "question_id": "beach-accessibility-malta",
+        "repeat": 1
+      },
+      {
+        "attempt": "building-parts-detail__r1",
+        "botmap_calls": 8,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "capabilities"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 0,
+            "scope": "call",
+            "subtype": null
+          },
+          {
+            "argv": [
+              "building_part",
+              "--in",
+              "Cambridge, MA",
+              "-f",
+              "geojsonseq",
+              "-o",
+              "cambridge_bparts.jsonl"
+            ],
+            "class": "A",
+            "evidence": "Usage: python -m botmap [OPTIONS] COMMAND [ARGS]...",
+            "index": 5,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "building-parts-detail",
+        "repeat": 1
+      },
+      {
+        "attempt": "clipping-polygon-qgis__r1",
+        "botmap_calls": 0,
+        "failures": [],
+        "question_id": "clipping-polygon-qgis",
+        "repeat": 1
+      },
+      {
+        "attempt": "ev-charging-gap__r2",
+        "botmap_calls": 6,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "100"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 100; raised limit returned 980 rows",
+            "index": 1,
+            "scope": "call",
+            "subtype": "c-truncated"
+          },
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "categories.primary=electric_vehicle_charging_station"
+            ],
+            "class": "C",
+            "evidence": "empty result with no conclusive probe; reason unknown",
+            "index": 2,
+            "scope": "call",
+            "subtype": "c-unknown"
+          },
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "categories.primary=charging_station"
+            ],
+            "class": "C",
+            "evidence": "empty result with no conclusive probe; reason unknown",
+            "index": 4,
+            "scope": "call",
+            "subtype": "c-unknown"
+          }
+        ],
+        "question_id": "ev-charging-gap",
+        "repeat": 2
+      },
+      {
+        "attempt": "residential-share-cambridge__r2",
+        "botmap_calls": 20,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "building",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "30"
+            ],
+            "class": "A",
+            "evidence": "Usage: python -m botmap categories [OPTIONS]",
+            "index": 4,
+            "scope": "call",
+            "subtype": null
+          },
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "building",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "subtype=government"
+            ],
+            "class": "C",
+            "evidence": "c-wrong-column: subtype=government returned 0; class=government returned 23. The value exists in a different column.",
+            "index": 12,
+            "scope": "call",
+            "subtype": "c-wrong-column"
+          },
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "building",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "subtype=military"
+            ],
+            "class": "C",
+            "evidence": "c-wrong-type: building returned 0; land_use returned 1 for the same filter",
+            "index": 19,
+            "scope": "call",
+            "subtype": "c-wrong-type"
+          }
+        ],
+        "question_id": "residential-share-cambridge",
+        "repeat": 2
+      },
+      {
+        "attempt": "reykjavik-diacritic__r2",
+        "botmap_calls": 5,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "where",
+              "Reykjavik, Iceland"
+            ],
+            "class": "A",
+            "evidence": "{\"error\":{\"code\":\"no_match\",\"message\":\"No division found for 'Reykjavik, Iceland'. It may be a neighborhood not in Overture's divisions index. Try a parent locality (city \u2192 state \u2192 country), `containing LAT,LON`, or `--bbox`.\"}}",
+            "index": 0,
+            "scope": "call",
+            "subtype": null
+          },
+          {
+            "argv": [
+              "--json",
+              "capabilities"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 4,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "reykjavik-diacritic",
+        "repeat": 2
+      },
+      {
+        "attempt": "tall-buildings-cambridge__r2",
+        "botmap_calls": 4,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "containing",
+              "42.3620,-71.0855"
+            ],
+            "class": "D",
+            "evidence": "command eventually answered but by an unusable route",
+            "index": 3,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "tall-buildings-cambridge",
+        "repeat": 2
+      },
+      {
+        "attempt": "which-admin-areas__r2",
+        "botmap_calls": 0,
+        "failures": [],
+        "question_id": "which-admin-areas",
+        "repeat": 2
+      }
+    ],
+    "records": 9,
+    "run_dir": "experiments/runs/agenteval-measurement-3009509-retry-incomplete",
+    "subtype_counts": {
+      "c-truncated": 1,
+      "c-unknown": 3,
+      "c-wrong-column": 1,
+      "c-wrong-type": 1
+    }
+  },
+  "run": "agenteval-measurement-3009509-retry-incomplete",
+  "source": "experiments/runs/agenteval-measurement-3009509-retry-incomplete",
+  "summary.json": {
+    "agent_model": "anthropic/claude-sonnet-5",
+    "agent_path": "openrouter",
+    "agent_provider": "anthropic",
+    "attempts_done": 9,
+    "attempts_total": 9,
+    "botmap_calls": 94,
+    "completed": 2,
+    "cost_usd": 0.30920690000000006,
+    "finished": "2026-08-23T13:39:41.214499+00:00",
+    "minutes": 124.9,
+    "name": "agenteval-measurement-3009509-retry-incomplete",
+    "ok": 2,
+    "purpose": "Retry non-completed attempts from agenteval-measurement-3009509",
+    "repo": "/Users/priyangapkini/workspace/ar-b/botmap",
+    "source_run": "experiments/runs/agenteval-measurement-3009509",
+    "started": "2026-08-23T11:34:46.331187+00:00",
+    "targets": [
+      {
+        "question_id": "tall-buildings-cambridge",
+        "repeat": 2
+      },
+      {
+        "question_id": "basic-category-rollup",
+        "repeat": 2
+      },
+      {
+        "question_id": "reykjavik-diacritic",
+        "repeat": 2
+      },
+      {
+        "question_id": "residential-share-cambridge",
+        "repeat": 2
+      },
+      {
+        "question_id": "clipping-polygon-qgis",
+        "repeat": 1
+      },
+      {
+        "question_id": "which-admin-areas",
+        "repeat": 2
+      },
+      {
+        "question_id": "ev-charging-gap",
+        "repeat": 2
+      },
+      {
+        "question_id": "beach-accessibility-malta",
+        "repeat": 1
+      },
+      {
+        "question_id": "building-parts-detail",
+        "repeat": 1
+      }
+    ],
+    "updated": "2026-08-23T13:39:41.164100+00:00"
+  }
+}

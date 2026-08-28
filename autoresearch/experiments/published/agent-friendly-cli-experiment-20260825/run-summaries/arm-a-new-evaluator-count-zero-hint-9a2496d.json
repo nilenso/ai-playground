@@ -1,0 +1,78 @@
+{
+  "run": "arm-a-new-evaluator-count-zero-hint-9a2496d",
+  "source": "experiments/runs/arm-a-new-evaluator-count-zero-hint-9a2496d",
+  "summary.json": {
+    "attempts_done": 60,
+    "attempts_total": 60,
+    "botmap_calls": 288,
+    "candidate_branch": "cand/count-zero-hint",
+    "candidate_commit": "9a2496d",
+    "candidate_repo": "/Users/priyangapkini/workspace/ar-a/botmap",
+    "changed_files": [
+      "botmap/cli.py"
+    ],
+    "completed": 45,
+    "cost_usd": 8.3376002,
+    "enrich_error": "TimeoutExpired(['/Users/priyangapkini/workspace/ar-a/botmap/.venv/bin/python', '-m', 'botmap', '--json', 'categories', '-t', 'place', '--in', 'Cambridge, MA', '--top', '2000'], 120)",
+    "finished": "2026-08-24T11:42:43.439057+00:00",
+    "minutes": 446.8,
+    "name": "arm-a-new-evaluator-count-zero-hint-9a2496d",
+    "ok": 45,
+    "preflight": {
+      "branch": "cand/count-zero-hint",
+      "changed_files": [
+        "botmap/cli.py"
+      ],
+      "commit": "9a2496d",
+      "compile": {
+        "exit_code": 0,
+        "skipped": false,
+        "stderr": ""
+      },
+      "ok": true,
+      "starts": {
+        "exit_code": 0,
+        "stderr": ""
+      }
+    },
+    "purpose": "Arm A full existing-candidate screening with record-v2/agenteval",
+    "question_ids": [
+      "hospitals-rhode-island",
+      "bbox-cambridge",
+      "pharmacies-monaco",
+      "nearest-pois-harvard",
+      "motorways-rhode-island",
+      "asian-restaurants-rollup",
+      "street-canonical-form",
+      "tattoo-category-discovery",
+      "malta-highways-absent-class",
+      "starbucks-name-vs-brand",
+      "tall-buildings-cambridge",
+      "basic-category-rollup",
+      "unsupported-hours-and-ratings",
+      "bus-stops-cambridge",
+      "reykjavik-diacritic",
+      "williamsburg-which-one",
+      "brooklyn-every-building",
+      "residential-share-cambridge",
+      "clipping-polygon-qgis",
+      "which-admin-areas",
+      "pharmacy-near-address",
+      "hotel-density-two-countries",
+      "ev-charging-gap",
+      "hardware-near-bikepaths",
+      "bus-stops-with-coffee",
+      "beach-accessibility-malta",
+      "bike-parking-coverage",
+      "waterfront-buildings-reykjavik",
+      "building-parts-detail",
+      "junction-density"
+    ],
+    "repeats": [
+      1,
+      2
+    ],
+    "started": "2026-08-24T04:15:56.163491+00:00",
+    "updated": "2026-08-24T11:40:43.259160+00:00"
+  }
+}

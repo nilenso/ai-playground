@@ -1,0 +1,197 @@
+{
+  "agenteval-summary.json": {
+    "agent_side_counts": {},
+    "attempts_with_failures": 3,
+    "class_counts": {
+      "A": 1,
+      "B": 2,
+      "C": 5,
+      "clean": 55
+    },
+    "details": [
+      {
+        "attempt": "bike-parking-coverage__r1",
+        "botmap_calls": 18,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "100"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 100; raised limit returned 980 rows",
+            "index": 1,
+            "scope": "call",
+            "subtype": "c-truncated"
+          },
+          {
+            "argv": [
+              "--json",
+              "capabilities"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 3,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "bike-parking-coverage",
+        "repeat": 1
+      },
+      {
+        "attempt": "bike-parking-coverage__r2",
+        "botmap_calls": 16,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "200"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 200; raised limit returned 980 rows",
+            "index": 1,
+            "scope": "call",
+            "subtype": "c-truncated"
+          },
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "200"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 200; raised limit returned 980 rows",
+            "index": 2,
+            "scope": "call",
+            "subtype": "c-truncated"
+          },
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "categories.primary=bicycle_parking"
+            ],
+            "class": "C",
+            "evidence": "c-vocabulary: bicycle_parking absent from categories.primary listing of 980 values",
+            "index": 3,
+            "scope": "call",
+            "subtype": "c-vocabulary"
+          },
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "categories.primary=bike_rental"
+            ],
+            "class": "C",
+            "evidence": "c-vocabulary: bike_rental absent from categories.primary listing of 980 values",
+            "index": 4,
+            "scope": "call",
+            "subtype": "c-vocabulary"
+          },
+          {
+            "argv": [
+              "--json",
+              "capabilities"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 6,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "bike-parking-coverage",
+        "repeat": 2
+      },
+      {
+        "attempt": "residential-share-cambridge__r1",
+        "botmap_calls": 14,
+        "failures": [],
+        "question_id": "residential-share-cambridge",
+        "repeat": 1
+      },
+      {
+        "attempt": "residential-share-cambridge__r2",
+        "botmap_calls": 15,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "building",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "30"
+            ],
+            "class": "A",
+            "evidence": "Usage: python -m botmap categories [OPTIONS]",
+            "index": 4,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "residential-share-cambridge",
+        "repeat": 2
+      }
+    ],
+    "records": 4,
+    "run_dir": "experiments/runs/after-count-wrong-column-hint-7c794ff",
+    "subtype_counts": {
+      "c-truncated": 3,
+      "c-vocabulary": 2
+    }
+  },
+  "run": "after-count-wrong-column-hint-7c794ff",
+  "source": "experiments/runs/after-count-wrong-column-hint-7c794ff",
+  "summary.json": {
+    "attempts_done": 4,
+    "attempts_total": 4,
+    "botmap_calls": 63,
+    "candidate_commit": "7c794ff",
+    "candidate_repo": "/Users/priyangapkini/workspace/ar-b/botmap",
+    "completed": 3,
+    "cost_usd": 0.7439005,
+    "finished": "2026-08-23T19:16:58.244767+00:00",
+    "minutes": 33.0,
+    "name": "after-count-wrong-column-hint-7c794ff",
+    "ok": 3,
+    "purpose": "Phase 6 AFTER paired run for c-wrong-column/count wrong-column hint",
+    "question_ids": [
+      "bike-parking-coverage",
+      "residential-share-cambridge"
+    ],
+    "started": "2026-08-23T18:43:56.818296+00:00",
+    "updated": "2026-08-23T19:16:57.848693+00:00"
+  }
+}

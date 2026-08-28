@@ -1,0 +1,57 @@
+From 7c794ff92423d7882acde6a0083fcd633740af71 Mon Sep 17 00:00:00 2001
+From: PriyangaPKini <priyangapkini99@gmail.com>
+Date: Mon, 24 Aug 2026 00:13:34 +0530
+Subject: [PATCH] Hint when count filter uses class and subtype wrong
+
+---
+ botmap/cli.py | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/botmap/cli.py b/botmap/cli.py
+index f72a565..8d85315 100644
+--- a/botmap/cli.py
++++ b/botmap/cli.py
+@@ -773,6 +773,30 @@ def boundary(ctx, query):
+     _emit_division_geometry(ctx, division)
+ 
+ 
++def _maybe_hint_wrong_column(type_, bbox, release, where_filters):
++    """If a zero count used class/subtype in the wrong field, name the fix."""
++    swaps = {"subtype": "class", "class": "subtype"}
++    for f in where_filters:
++        if f.op != "=" or f.key not in swaps:
++            continue
++        other_key = swaps[f.key]
++        try:
++            other_filter = parse_where_expr(f"{other_key}={f.value}")
++            other_count = _safe_count(
++                type_, bbox=bbox, release=release, stac=True, where_filters=[other_filter]
++            )
++        except Exception:
++            continue
++        if other_count > 0:
++            click.echo(
++                f"[botmap] 0 rows for {f.key}={f.value!r}, but "
++                f"{other_key}={f.value!r} returns {other_count:,}. "
++                f"Try `--where {other_key}={f.value}` before concluding none exist.",
++                err=True,
++            )
++            return
++
++
+ @cli.command()
+ @click.option("-t", "--type", "type_",
+               type=click.Choice(get_all_overture_types()), required=True)
+@@ -801,6 +825,9 @@ def count(ctx, type_, bbox, in_place, where_exprs, release):
+         type_, bbox=bbox, release=release, stac=True, where_filters=where_filters,
+     )
+ 
++    if n == 0 and where_filters:
++        _maybe_hint_wrong_column(type_, bbox, release, where_filters)
++
+     if ctx.obj.get("json"):
+         _emit_json(ctx, {
+             "type": type_,
+-- 
+2.50.1 (Apple Git-155)
+

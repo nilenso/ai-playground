@@ -1,0 +1,248 @@
+{
+  "agenteval-summary.json": {
+    "agent_side_counts": {},
+    "attempts_with_failures": 5,
+    "class_counts": {
+      "A": 1,
+      "B": 2,
+      "C": 7,
+      "clean": 38
+    },
+    "details": [
+      {
+        "attempt": "basic-category-rollup__r1",
+        "botmap_calls": 5,
+        "failures": [],
+        "question_id": "basic-category-rollup",
+        "repeat": 1
+      },
+      {
+        "attempt": "basic-category-rollup__r2",
+        "botmap_calls": 7,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "200"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 200; raised limit returned 980 rows",
+            "index": 1,
+            "scope": "call",
+            "subtype": "c-truncated"
+          }
+        ],
+        "question_id": "basic-category-rollup",
+        "repeat": 2
+      },
+      {
+        "attempt": "bike-parking-coverage__r1",
+        "botmap_calls": 8,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "200"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 200; raised limit returned 980 rows",
+            "index": 1,
+            "scope": "call",
+            "subtype": "c-truncated"
+          },
+          {
+            "argv": [
+              "--json",
+              "capabilities"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 3,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "bike-parking-coverage",
+        "repeat": 1
+      },
+      {
+        "attempt": "bike-parking-coverage__r2",
+        "botmap_calls": 17,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "50"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 50; raised limit returned 500 rows",
+            "index": 1,
+            "scope": "call",
+            "subtype": "c-truncated"
+          },
+          {
+            "argv": [
+              "--json",
+              "capabilities"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 3,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "bike-parking-coverage",
+        "repeat": 2
+      },
+      {
+        "attempt": "bus-stops-cambridge__r1",
+        "botmap_calls": 5,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "categories.primary=bus_stop"
+            ],
+            "class": "C",
+            "evidence": "empty result with no conclusive probe; reason unknown",
+            "index": 1,
+            "scope": "call",
+            "subtype": "c-unknown"
+          },
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "50"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 50; raised limit returned 500 rows",
+            "index": 2,
+            "scope": "call",
+            "subtype": "c-truncated"
+          }
+        ],
+        "question_id": "bus-stops-cambridge",
+        "repeat": 1
+      },
+      {
+        "attempt": "bus-stops-cambridge__r2",
+        "botmap_calls": 6,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "categories.primary=bus_stop"
+            ],
+            "class": "C",
+            "evidence": "empty result with no conclusive probe; reason unknown",
+            "index": 1,
+            "scope": "call",
+            "subtype": "c-unknown"
+          },
+          {
+            "argv": [
+              "--json",
+              "categories",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--top",
+              "50"
+            ],
+            "class": "C",
+            "evidence": "c-truncated: original output length equalled limit 50; raised limit returned 500 rows",
+            "index": 2,
+            "scope": "call",
+            "subtype": "c-truncated"
+          },
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Cambridge, MA",
+              "--where",
+              "categories.alternate in [bus_stop]"
+            ],
+            "class": "A",
+            "evidence": "Traceback (most recent call last):",
+            "index": 5,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "bus-stops-cambridge",
+        "repeat": 2
+      }
+    ],
+    "records": 6,
+    "run_dir": "experiments/runs/after-categories-truncation-hint-00bff1a",
+    "subtype_counts": {
+      "c-truncated": 5,
+      "c-unknown": 2
+    }
+  },
+  "run": "after-categories-truncation-hint-00bff1a",
+  "source": "experiments/runs/after-categories-truncation-hint-00bff1a",
+  "summary.json": {
+    "attempts_done": 6,
+    "attempts_total": 6,
+    "botmap_calls": 48,
+    "candidate_commit": "00bff1a",
+    "candidate_repo": "/Users/priyangapkini/workspace/ar-b/botmap",
+    "completed": 5,
+    "cost_usd": 1.3692619,
+    "finished": "2026-08-23T18:30:12.568786+00:00",
+    "minutes": 40.2,
+    "name": "after-categories-truncation-hint-00bff1a",
+    "ok": 5,
+    "purpose": "Phase 6 AFTER paired run for c-truncated/categories truncation hint",
+    "question_ids": [
+      "bike-parking-coverage",
+      "basic-category-rollup",
+      "bus-stops-cambridge"
+    ],
+    "started": "2026-08-23T17:49:57.776684+00:00",
+    "updated": "2026-08-23T18:30:12.114531+00:00"
+  }
+}
