@@ -1,0 +1,656 @@
+<title>Measuring the Measurement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+:root{
+  --ground:#f6f7f9; --panel:#ffffff; --sunk:#eceef2;
+  --ink:#14171c; --ink-2:#414855; --ink-3:#6b7280;
+  --rule:#dde1e8; --rule-2:#c8cedb;
+  --signal:#a05a1f; --signal-soft:#f5ece1;
+  --pass:#2f7d5c; --fail:#a63d2f; --idle:#8b93a3; --noise:#8b93a3;
+  --measure:66ch;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#14171c; --panel:#1b1f26; --sunk:#22272f;
+    --ink:#e8eaef; --ink-2:#b3bac6; --ink-3:#89909e;
+    --rule:#2b313a; --rule-2:#3a424e;
+    --signal:#d99a5b; --signal-soft:#2e251c;
+    --pass:#5cbe93; --fail:#e08476; --idle:#79808f; --noise:#79808f;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#14171c; --panel:#1b1f26; --sunk:#22272f;
+  --ink:#e8eaef; --ink-2:#b3bac6; --ink-3:#89909e;
+  --rule:#2b313a; --rule-2:#3a424e;
+  --signal:#d99a5b; --signal-soft:#2e251c;
+  --pass:#5cbe93; --fail:#e08476; --idle:#79808f; --noise:#79808f;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:"Source Serif 4",Georgia,serif;font-size:17.5px;line-height:1.62;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto;padding:0 28px 96px}
+.col{max-width:var(--measure)}
+h1,h2,h3,h4,.ui,.tag,.k{font-family:"IBM Plex Sans",system-ui,sans-serif}
+.mono,code,td.num,.fid,.v,.when{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+
+header.top{border-bottom:1px solid var(--rule);padding:52px 0 36px;margin-bottom:12px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--signal);margin-bottom:20px;
+  display:flex;gap:14px;flex-wrap:wrap}
+.eyebrow span:not(:last-child)::after{content:"";display:inline-block;width:1px;height:10px;
+  background:var(--rule-2);margin-left:14px;vertical-align:-1px}
+h1{font-size:clamp(34px,5.4vw,54px);line-height:1.04;letter-spacing:-.022em;
+  font-weight:600;margin:0 0 22px;text-wrap:balance;max-width:19ch}
+.standfirst{font-size:20.5px;line-height:1.5;color:var(--ink-2);max-width:56ch;margin:0}
+.standfirst strong{color:var(--ink);font-weight:600}
+
+section{margin:56px 0 0}
+h2{font-size:12px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;
+  color:var(--ink-3);margin:0 0 20px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+h3{font-size:25px;line-height:1.22;letter-spacing:-.014em;font-weight:600;
+  margin:30px 0 10px;text-wrap:balance;max-width:26ch}
+h4{font-size:17.5px;font-weight:600;margin:22px 0 6px;letter-spacing:-.006em}
+p{margin:0 0 16px}
+
+/* the skim line: bold takeaway that opens a section */
+.takeaway{font-size:21px;line-height:1.45;color:var(--ink);font-weight:600;
+  max-width:50ch;margin:0 0 18px;letter-spacing:-.012em}
+
+.plain{background:var(--signal-soft);border-radius:4px;padding:18px 22px;
+  margin:22px 0;max-width:60ch}
+.plain p{margin:0;font-size:17px}
+.plain .k{display:block;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--signal);margin-bottom:7px;font-weight:600}
+
+.chart{background:var(--panel);border:1px solid var(--rule);border-radius:4px;
+  padding:24px 26px 18px;margin:24px 0}
+.chart-head{display:flex;justify-content:space-between;align-items:baseline;gap:18px;
+  flex-wrap:wrap;margin-bottom:20px}
+.chart-title{font-family:"IBM Plex Sans",sans-serif;font-weight:600;font-size:15px}
+.legend{display:flex;gap:16px;font-family:"IBM Plex Mono",monospace;font-size:11px;
+  color:var(--ink-3);letter-spacing:.04em}
+.key{display:inline-block;width:22px;height:9px;vertical-align:-1px;margin-right:6px;border-radius:1px}
+.key.h{background:var(--signal)}
+.key.n{background:repeating-linear-gradient(135deg,var(--noise) 0 3px,transparent 3px 6px);
+  border:1px solid var(--noise)}
+.row{display:grid;grid-template-columns:184px 1fr 104px;gap:14px;align-items:center;
+  padding:10px 0;border-top:1px solid var(--rule)}
+.row:first-of-type{border-top:none}
+.rname{font-family:"IBM Plex Sans",sans-serif;font-size:13.5px;font-weight:500}
+.rname em{display:block;font-style:normal;font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;color:var(--ink-3);letter-spacing:.04em;margin-top:2px}
+.bars{position:relative;height:30px}
+.bar{position:absolute;left:0;height:11px;border-radius:1px}
+.bar.h{top:2px;background:var(--signal)}
+.bar.n{top:16px;background:repeating-linear-gradient(135deg,var(--noise) 0 3px,transparent 3px 6px);
+  border:1px solid var(--noise)}
+.verdict{font-family:"IBM Plex Mono",monospace;font-size:11px;text-align:right;
+  font-variant-numeric:tabular-nums}
+.verdict.bad{color:var(--fail)} .verdict.ok{color:var(--pass)} .verdict.mid{color:var(--ink-3)}
+.chart-foot{font-family:"IBM Plex Sans",sans-serif;font-size:13px;color:var(--ink-3);
+  border-top:1px solid var(--rule);padding-top:12px;line-height:1.55}
+
+.pull{border-left:2px solid var(--signal);padding:2px 0 2px 22px;margin:28px 0;
+  font-size:21px;line-height:1.44;max-width:44ch;letter-spacing:-.01em}
+.pull cite{display:block;font-family:"IBM Plex Mono",monospace;font-style:normal;
+  font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:12px}
+
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px;margin:22px 0}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:20px 22px}
+.card h4{margin-top:0}
+.card ul{margin:0;padding-left:19px}
+.card li{margin-bottom:9px}
+.card li:last-child{margin-bottom:0}
+.card.neg{background:var(--sunk)}
+
+.arm{border-top:1px solid var(--rule);padding:20px 0 6px;display:grid;
+  grid-template-columns:104px 1fr;gap:24px}
+.arm-id{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--signal);padding-top:5px}
+.arm-id em{display:block;font-style:normal;color:var(--ink-3);margin-top:5px;letter-spacing:.04em}
+.arm h4{margin-top:0}
+.arm p{margin-bottom:8px}
+
+.scroll{overflow-x:auto;margin:20px 0;border:1px solid var(--rule);border-radius:4px;
+  background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:540px}
+th{font-family:"IBM Plex Sans",sans-serif;font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);text-align:left;font-weight:600;
+  padding:12px 16px;border-bottom:1px solid var(--rule-2);white-space:nowrap}
+td{padding:11px 16px;border-bottom:1px solid var(--rule);vertical-align:top;
+  font-family:"IBM Plex Sans",sans-serif;font-size:13.5px;line-height:1.45}
+tr:last-child td{border-bottom:none}
+.fid{color:var(--signal);font-weight:500;white-space:nowrap;font-size:12.5px}
+.tag{font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;
+  border-radius:2px;border:1px solid currentColor;white-space:nowrap;display:inline-block}
+.tag.instrument{color:var(--fail)} .tag.tool{color:var(--signal)}
+.tag.exam{color:var(--idle)} .tag.pass{color:var(--pass)}
+code{background:var(--sunk);padding:1.5px 5px;border-radius:2px;font-size:.86em;
+  border:1px solid var(--rule)}
+
+.tl{margin:22px 0}
+.tl-item{display:grid;grid-template-columns:112px 1fr;gap:22px;padding:16px 0 16px 24px;
+  position:relative;border-left:1px solid var(--rule-2)}
+.tl-item::before{content:"";position:absolute;left:-4.5px;top:24px;width:8px;height:8px;
+  border-radius:50%;background:var(--rule-2)}
+.tl-item.hit::before{background:var(--fail)}
+.tl-item.win::before{background:var(--pass)}
+.when{font-size:11px;color:var(--ink-3);letter-spacing:.04em;padding-top:3px}
+.tl-what h4{margin:0 0 4px}
+.tl-what p{margin:0;font-size:15.5px;color:var(--ink-2)}
+
+.ledger{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden;margin:22px 0}
+.cell{background:var(--panel);padding:16px 18px}
+.cell .v{font-size:23px;font-weight:500;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;display:block;margin-bottom:3px}
+.cell .k{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+.cell.accent .v{color:var(--signal)}
+
+/* next steps */
+.step{display:grid;grid-template-columns:44px 1fr;gap:20px;padding:22px 0;
+  border-top:1px solid var(--rule)}
+.step:last-child{border-bottom:1px solid var(--rule)}
+.step-n{font-family:"IBM Plex Mono",monospace;font-size:22px;color:var(--signal);
+  font-weight:500;line-height:1.1;padding-top:2px}
+.step h4{margin:0 0 6px;font-size:19px}
+.step p{margin:0 0 10px;color:var(--ink-2);max-width:58ch}
+.meta{display:flex;gap:8px;flex-wrap:wrap;font-family:"IBM Plex Sans",sans-serif;
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}
+.meta span{border:1px solid var(--rule-2);color:var(--ink-3);padding:3px 8px;border-radius:2px}
+.meta span.now{border-color:var(--signal);color:var(--signal)}
+
+footer{margin-top:68px;padding-top:22px;border-top:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3);line-height:1.8}
+
+@media (max-width:640px){
+  .arm,.tl-item,.step{grid-template-columns:1fr;gap:8px}
+  .row{grid-template-columns:124px 1fr 78px;gap:10px}
+  h1{font-size:32px} .takeaway{font-size:19px}
+}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow"><span>Case study</span><span>botmap &times; autoresearch</span><span>20&ndash;21 Aug 2026</span></div>
+  <h1>Measuring the Measurement</h1>
+  <p class="standfirst">We are trying to answer one question: <strong>what makes a command-line
+  interface agent-friendly?</strong> Two days in, we cannot yet answer it &mdash; because the test we
+  built to measure it <strong>gives full marks to an agent that never touches the tool.</strong></p>
+</header>
+
+<section>
+  <h2>The short version</h2>
+  <p class="takeaway">Our exam gives full marks to four completely different outcomes, including
+  "ignored the tool" and "didn't answer the question".</p>
+  <div class="col">
+    <p>On top of that, the score can only move by 4 points out of 100 &mdash; and it randomly wobbles by
+    12 between identical runs. So even where the marking is right, a perfect change and a lucky roll of
+    the dice look the same.</p>
+    <p>We found all of this before spending money on optimisation runs. Total spend so far:
+    <strong>$1.06</strong>, and not one optimiser run funded.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The question we are answering</h2>
+  <p class="takeaway">What makes a command-line interface agent-friendly?</p>
+  <div class="col">
+    <p>That is the whole point. <code>botmap</code> is the <em>subject</em> we experiment on, not the
+    thing we are shipping. Everything else &mdash; the optimiser, the three parallel arms, the exam
+    &mdash; is instrumentation for answering it.</p>
+    <p>Which means a run that moves no score can still succeed. If it tells us which CLI properties let
+    an agent recover on its own, that is the result we came for.</p>
+  </div>
+  <div class="col">
+    <p><strong>The tool.</strong> <code>botmap</code> answers questions about maps &mdash; "how many
+    hospitals are in Rhode Island?" Its users are AI assistants, not people. An assistant gets the
+    question and a terminal, and has to work out the right command <em>on its own</em>. Nobody tells it
+    which command to use. Figuring that out is the entire test.</p>
+
+    <p><strong>The exam.</strong> We ask an AI 30 map questions and score how well it coped. Did it
+    finish? Did it give up and download the whole dataset? Did it hit errors?</p>
+
+    <p><strong>The loop.</strong> An optimiser rewrites the tool, we re-run the exam, and keep the
+    version that scores better. Repeat. The optimiser reads the actual transcripts &mdash; every command
+    the AI typed and every error it hit &mdash; not just the final score.</p>
+  </div>
+
+  <div class="plain">
+    <span class="k">Two ways to improve things</span>
+    <p>You can change <strong>the tool</strong> (make commands easier to find) or change
+    <strong>the instructions</strong> the AI reads (tell it the right command up front). We call these
+    two <em>levers</em>. Most of this experiment is about which lever is worth pulling.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The result</h2>
+  <p class="takeaway">Every part of the score is either already maxed out, or too noisy to read.</p>
+
+  <div class="chart">
+    <div class="chart-head">
+      <span class="chart-title">How much a change could win, vs. how much the score randomly moves</span>
+      <span class="legend">
+        <span><i class="key h"></i>best possible gain</span>
+        <span><i class="key n"></i>random wobble</span>
+      </span>
+    </div>
+
+    <div class="row">
+      <div class="rname">Getting answers right<em>45% of the score</em></div>
+      <div class="bars"><div class="bar h" style="width:39%"></div><div class="bar n" style="width:90%"></div></div>
+      <div class="verdict bad">unreadable</div>
+    </div>
+    <div class="row">
+      <div class="rname">How much the AI struggles<em>35% of the score</em></div>
+      <div class="bars"><div class="bar h" style="width:39%"></div><div class="bar n" style="width:37%"></div></div>
+      <div class="verdict mid">borderline</div>
+    </div>
+    <div class="row">
+      <div class="rname">Tokens used<em>10% of the score</em></div>
+      <div class="bars"><div class="bar h" style="width:100%"></div><div class="bar n" style="width:71%"></div></div>
+      <div class="verdict ok">readable</div>
+    </div>
+    <div class="row">
+      <div class="rname">Time taken<em>10% of the score</em></div>
+      <div class="bars"><div class="bar h" style="width:100%"></div><div class="bar n" style="width:100%"></div></div>
+      <div class="verdict bad">unreadable</div>
+    </div>
+
+    <p class="chart-foot">Read it this way: wherever the hatched bar is longer than the solid bar, the
+    random wobble is bigger than the best result you could possibly achieve &mdash; so you can't tell a
+    real improvement from luck. Time taken is the starkest: the two bars are the same length.</p>
+  </div>
+
+  <div class="col">
+    <p>The pattern is odd and worth naming: <strong>the exam is quiet where it's already maxed out, and
+    noisy where it still has room.</strong> The parts that could move are the parts we can't measure
+    reliably.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Why the exam stopped working</h2>
+  <p class="takeaway">Four completely different outcomes all score a perfect 1.00.</p>
+  <div class="col">
+    <p>We read the actual transcripts of eight questions that scored full marks. They were not doing
+    the same thing at all:</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Question</th><th>What the agent actually did</th><th>Cost</th><th>Score</th></tr></thead>
+      <tbody>
+        <tr><td class="fid">asian&#8209;restaurants</td>
+            <td>Drove the CLI well. Correct answer, clearly explained.</td>
+            <td class="num">14 cmds &middot; $0.39</td><td><span class="tag pass">1.00</span></td></tr>
+        <tr><td class="fid">bus&#8209;stops&#8209;cambridge</td>
+            <td>Hit a defect and <em>recovered</em> &mdash; guessed <code>bus_stop</code>, hunted, tested another city to isolate the variable, found <code>bus_station</code>. Honest, careful answer.</td>
+            <td class="num">8 cmds &middot; $0.44</td><td><span class="tag pass">1.00</span></td></tr>
+        <tr><td class="fid">hotel&#8209;density</td>
+            <td><strong>Never used the tool at all.</strong> No <code>botmap</code> command was run. Answered from two web searches and official statistics.</td>
+            <td class="num">0 cmds &middot; $0.23</td><td><span class="tag pass">1.00</span></td></tr>
+        <tr><td class="fid">clipping&#8209;polygon</td>
+            <td><strong>Never answered the question.</strong> Ran one command, drifted into scheduling itself a wake-up, and finished with &ldquo;I&rsquo;ll just wait for the background task notification instead.&rdquo;</td>
+            <td class="num">1 cmd &middot; $0.30</td><td><span class="tag pass">1.00</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>Those four are not degrees of the same thing. One is the tool working. One is the tool failing
+    and the agent rescuing it expensively. One is the tool being <em>bypassed</em>. One is no answer at
+    all.</p>
+
+    <div class="plain">
+      <span class="k">The actual defect</span>
+      <p>Scoring asks <strong>&ldquo;did the agent produce text?&rdquo;</strong> Nothing checks whether
+      the tool was used, or whether the text answers the question. A confident non-answer passes. So
+      does a web search.</p>
+    </div>
+
+    <h3>What we can and cannot claim</h3>
+    <p>An earlier draft of this page said the exam awards full marks on questions where we have proof
+    the tool fails, and used <code>bus-stops-cambridge</code> as the example. <strong>That was
+    wrong.</strong> Reading the transcript, the agent recovered and gave a good answer; the 1.00 is
+    deserved.</p>
+    <p>The true finding is different, and worse. The exam is not mismarking failures &mdash;
+    <strong>it cannot see what happened at all.</strong> It gives the same mark whether the CLI was
+    driven, worked around, or ignored.</p>
+
+    <h3>The cost is where the signal actually was</h3>
+    <p><code>bus-stops-cambridge</code> is still instructive, just not as a marking failure. The tool
+    knew <code>bus_station</code> existed and never said so. The agent found it anyway &mdash; after
+    <strong>8 commands, 10 turns and $0.44</strong> on one question.</p>
+    <p>That is the shape of nearly everything we found: the CLI is not <em>broken</em>, it is
+    <em>expensive</em>. It withholds what it knows, and the agent pays to rediscover it.</p>
+
+    <h3>And the ceiling on top of that</h3>
+    <p>Where the marking <em>is</em> right, there is almost nothing left to win: 21 of 30 questions
+    already score full marks, so a perfect change is worth about 4 points out of 100 &mdash; against a
+    random wobble of 12 between identical runs. Two questions swing by 0.8 out of 1.0 running the
+    unchanged tool twice, minutes apart.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The measurement leaked</h2>
+  <p class="takeaway">The agent under test could see 30 of the operator&rsquo;s personal tools.</p>
+  <div class="col">
+    <p>Two things we found by probing the harness itself:</p>
+    <p><strong>The environment was not isolated.</strong> Run as the harness runs it, the agent under
+    test sees more than thirty skills installed on the machine it happens to be running on &mdash;
+    nothing to do with the tool being measured. Nobody else could reproduce our numbers, and neither
+    could we after changing our own setup. One flag fixes it.</p>
+    <p><strong>The tool restriction did not restrict.</strong> The harness passes
+    <code>--allowedTools Bash</code>. A recorded attempt invoked <code>Skill</code>,
+    <code>Bash</code>, <code>ToolSearch</code> <em>and</em> <code>WebSearch</code> &mdash; which is how
+    one question got answered without the tool at all.</p>
+    <p>We are deliberately <strong>not</strong> blocking those tools: a real agent has them, and
+    removing them would make the test less like reality, not more. But it has to be
+    <em>recorded</em> &mdash; and arguably an agent routing around your CLI is itself a measurement of
+    how agent-friendly it is.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What we tried</h2>
+  <p class="takeaway">Three approaches, running side by side, so we could compare them fairly.</p>
+
+  <div class="arm">
+    <div class="arm-id">Arm A<em>no optimiser</em></div>
+    <div>
+      <h4>Let an agent run the loop itself</h4>
+      <p>Instead of an optimiser library, we wrote instructions telling an AI agent how to do the same
+      job: propose a few competing ideas, test them cheaply, throw out the losers. This tests whether
+      you need the code at all, or whether good instructions are enough.</p>
+      <p><strong>Result:</strong> three working fixes. Whether it matches the optimiser &mdash; still
+      unanswered.</p>
+    </div>
+  </div>
+
+  <div class="arm">
+    <div class="arm-id">Arm B<em>instructions</em></div>
+    <div>
+      <h4>Only improve what the AI is told</h4>
+      <p>Change nothing about the tool. Just rewrite the instructions the AI reads before it starts.</p>
+      <p><strong>Result:</strong> the one clean baseline we have, the safety checks that made it
+      possible, and the single most useful insight on this page (below).</p>
+    </div>
+  </div>
+
+  <div class="arm">
+    <div class="arm-id">Arm C<em>more context</em></div>
+    <div>
+      <h4>Show the optimiser the whole codebase</h4>
+      <p>Previously the optimiser could only see the files it was allowed to edit. It kept asking about
+      a file it couldn't see &mdash; 35 times in one run. So we let it <em>read</em> everything while
+      still only editing a few files.</p>
+      <p><strong>Result:</strong> the noise analysis above, and one prediction registered in advance.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>What went wrong along the way</h2>
+  <p class="takeaway">We destroyed two measurements before getting one clean run.</p>
+  <div class="tl">
+    <div class="tl-item hit">
+      <div class="when">Day 1 &middot; 4h in</div>
+      <div class="tl-what">
+        <h4>The map data updated underneath us</h4>
+        <p>Our reference measurement was taken on last month's map data; the new runs used this month's.
+        Scores crashed from 0.76 to 0.19. It looked exactly like a terrible change. It was a broken
+        comparison.</p>
+      </div>
+    </div>
+    <div class="tl-item hit">
+      <div class="when">Day 1 &middot; 9h in</div>
+      <div class="tl-what">
+        <h4>The AI was reading the wrong instruction file</h4>
+        <p>A global file on the machine was overriding the one we were editing. Every change to the
+        instructions would have been written somewhere the AI never looked &mdash; and the result would
+        have read as "improving the instructions doesn't help."</p>
+      </div>
+    </div>
+    <div class="tl-item hit">
+      <div class="when">Day 1 &middot; 13h in</div>
+      <div class="tl-what">
+        <h4>We ran out of API quota mid-exam</h4>
+        <p>Questions 1&ndash;5 passed, 6&ndash;30 all failed. A clean cliff, not scatter. To the scoring
+        code, running out of quota looks identical to a change that broke the tool.</p>
+      </div>
+    </div>
+    <div class="tl-item win">
+      <div class="when">Day 2 &middot; 03:00</div>
+      <div class="tl-what">
+        <h4>A clean baseline, third attempt</h4>
+        <p>All 30 questions, correct data, nothing failed. The safety checks we built after the first two
+        disasters are why it finished.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>What we found</h2>
+  <p class="takeaway">Fourteen problems. Nine of them are in our measuring equipment, not the tool.</p>
+  <div class="col">
+    <p>A project built to find silent failures in a CLI found its worst silent failures in the thing
+    doing the looking.</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>#</th><th>What</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td class="fid">F1</td><td>A 330MB cache file is written unsafely &mdash; a failed write leaves a file that looks fine</td><td><span class="tag tool">tool</span></td></tr>
+        <tr><td class="fid">F2</td><td>Two exam questions are pointless &mdash; they test for commands the tool now has</td><td><span class="tag exam">exam</span></td></tr>
+        <tr><td class="fid">F3</td><td>A map-data update silently invalidated our reference measurement</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F4</td><td>Only the "download everything" command can set a network timeout &mdash; the exact command the exam penalises</td><td><span class="tag tool">tool</span></td></tr>
+        <tr><td class="fid">F5</td><td>A misplaced flag silently disabled the cost guard entirely</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F6</td><td>Network failures get recorded as tool crashes &mdash; indistinguishable from real bugs</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F7</td><td>A global file shadowed the one being tested, voiding every instruction change</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F8</td><td>Giving no answer at all scores as a clean pass</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F9</td><td>No question is both improvable and reliable &mdash; so no gain can ever be shown</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F10</td><td>Running out of quota looks identical to a change that broke the tool</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F11</td><td>The scorer rewards silent failure and punishes helpful error messages</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F12</td><td>A commit reported success while committing nothing</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F13</td><td>Agents coordinating with each other produced confident, wrong instructions</td><td><span class="tag instrument">measuring</span></td></tr>
+        <tr><td class="fid">F9b</td><td>Both exams &mdash; built independently &mdash; are maxed out in the same place</td><td><span class="tag instrument">measuring</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p class="pull">Every one of them was invisible in the direction that mattered. The stale
+    measurement looked like a valid comparison. The silent zero looked like a clean result. The empty
+    commit looked like a success.<cite>The recurring shape</cite></p>
+
+    <h3>F11 is the one to remember</h3>
+    <p>If a command finds nothing, the tool used to say nothing &mdash; and the AI would confidently
+    report "there are none." One of our fixes makes it say <em>"did you mean bus_station?"</em> instead.</p>
+    <p>But the scorer counts that helpful message as <strong>an error</strong>. So the fix scores
+    <em>worse</em> precisely because it made the tool <em>better</em>.</p>
+    <p>Generalised: <strong>any optimiser that scores on error count will learn to delete error
+    messages.</strong> Left alone, our loop would have stripped out the very warnings it exists to add.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The good news</h2>
+  <p class="takeaway">The AI wastes most of its effort exploring, not recovering from errors. That's fixable.</p>
+  <div class="col">
+    <p>We measured what the AI actually does per question: about <strong>six commands and ten
+    turns</strong> &mdash; and only <strong>6% of commands fail</strong>.</p>
+    <p>So the cost isn't error recovery. It's <em>exploration</em>: working out which command to use,
+    checking it worked, checking the output looks right. An AI that already knew the right command could
+    plausibly do it in two or three.</p>
+    <p>Halving time and tokens isn't an ambitious target here. It's roughly <em>"don't explore."</em></p>
+    <p>And this is where the exam still works. Those 21 maxed-out questions can't score better on
+    correctness &mdash; but they can all get <strong>faster and cheaper</strong>. So speed and cost have
+    room on all 30 questions, not just nine.</p>
+    <p>This points straight at improving the instructions rather than the tool: <strong>the tool can make
+    commands easier to find; the instructions can make finding unnecessary.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2>What we actually built</h2>
+  <p class="takeaway">Three fixes, all verified to work &mdash; just not yet provable as wins.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Fix</th><th>Changes</th><th>What it does</th><th>Tested</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="fid">count&#8209;zero&#8209;hint</td><td><span class="tag tool">tool</span></td>
+          <td>When a filter matches nothing, suggest close matches. In the failing run, the AI ran seven commands hunting for a name this now offers immediately.</td>
+          <td><span class="tag pass">4/4</span></td>
+        </tr>
+        <tr>
+          <td class="fid">skill&#8209;bus&#8209;station</td><td><span class="tag exam">instructions</span></td>
+          <td>The instructions taught a category name that has never existed. Fixed &mdash; the question that returned zero now returns real data.</td>
+          <td><span class="tag pass">4/4</span></td>
+        </tr>
+        <tr>
+          <td class="fid">count&#8209;flag&#8209;parity</td><td><span class="tag tool">tool</span></td>
+          <td>Makes a shortcut work on <code>count</code> that already worked on similar commands. Verified to give identical results to the long form.</td>
+          <td><span class="tag pass">5/5</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="col">
+    <p>"Tested" here means we ran the tool directly and confirmed the behaviour changed as intended. What
+    we <em>can't</em> yet say is "this improved the score" &mdash; for the reason this whole page is about.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What it cost</h2>
+  <div class="ledger">
+    <div class="cell accent"><span class="v">$0.72</span><span class="k">total API spend</span></div>
+    <div class="cell"><span class="v">2 days</span><span class="k">elapsed</span></div>
+    <div class="cell"><span class="v">3</span><span class="k">fixes built</span></div>
+    <div class="cell"><span class="v">14</span><span class="k">problems found</span></div>
+    <div class="cell"><span class="v">0</span><span class="k">optimiser runs funded</span></div>
+  </div>
+  <div class="col">
+    <p>We never funded a single optimisation run. Everything above came from baselines, direct testing,
+    and analysing measurements we already had. <strong>The cheapest thing we did was find out the
+    expensive thing wouldn't have worked.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2>What needs to happen next</h2>
+  <p class="takeaway">Fix the instrument, then run controlled before/after experiments &mdash; one per
+  candidate property.</p>
+
+  <div class="col">
+    <p>The deliverable is not a patched CLI. It is a list of <strong>design properties, each backed by
+    a measurement</strong>: what an agent-friendly CLI does, the trace of an agent defeated without it,
+    the change we made, and the trace showing the agent doing better. A property with no
+    &ldquo;after&rdquo; is a hypothesis, not an answer.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-n">0</div>
+    <div>
+      <h4>Isolate the environment</h4>
+      <p>One flag, so the agent under test stops seeing thirty of the operator&rsquo;s personal tools.
+      Until this lands, no measurement is reproducible on anyone else&rsquo;s machine.</p>
+      <div class="meta"><span class="now">blocking</span><span>one line</span></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">1</div>
+    <div>
+      <h4>Classify failures properly, instead of counting errors</h4>
+      <p>Today one label answers &ldquo;did stderr look bad?&rdquo; and we pretend it answered
+      &ldquo;did this go well?&rdquo; Three separate facts replace it: <strong>what happened</strong>
+      (worked / empty / refused / wasteful), <strong>whose fault</strong> (tool / agent / environment),
+      and <strong>could the agent recover</strong> (was it told how, or left guessing).</p>
+      <p>This is what separates a helpful refusal from a silent wrong answer &mdash; today they score
+      the same, and one of them is the worst thing a CLI can do.</p>
+      <div class="meta"><span>blocking the rest</span><span>no API cost</span></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">2</div>
+    <div>
+      <h4>Build the differential probe</h4>
+      <p>We cannot ask &ldquo;is this zero correct?&rdquo; But we can ask <strong>&ldquo;does this zero
+      survive a change that should not matter?&rdquo;</strong> Re-run the same query with one thing
+      swapped &mdash; a different field, a different type, a bigger limit. If the answer appears, the
+      original was wrong and the tool knew.</p>
+      <p>Cheap CLI calls, no model spend. It turns an unanswerable question into an answerable one, and
+      it is how we find candidate properties without waiting for expensive runs.</p>
+      <div class="meta"><span>no API cost</span></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">3</div>
+    <div>
+      <h4>Prove the detector fires, then re-read the runs we already have</h4>
+      <p>We are building a detector for failures that are invisible by definition, so we feed it known
+      bad cases first and confirm it catches them. A silent-wrong case scoring clean is a build
+      failure.</p>
+      <p>Then run it over the <strong>60 attempts already on disk</strong>. No model calls, and it
+      gives the first real picture of what is actually going wrong.</p>
+      <div class="meta"><span>free</span></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">4</div>
+    <div>
+      <h4>One measurement run &mdash; no optimiser</h4>
+      <p>Its output is a breakdown of failure types, not a score. It also tests a prediction: many of
+      the 21 perfect questions may be perfect <em>only because these failures are invisible</em>. If
+      they start failing once we can see them, <strong>the exam was never the problem &mdash; the
+      marking was</strong>, and we need no new questions at all.</p>
+      <div class="meta"><span>after step 3</span></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">5</div>
+    <div>
+      <h4>Paired before/after experiments &mdash; this is where the answer gets made</h4>
+      <p>One per candidate property: change it, re-run the same questions under the same conditions,
+      compare the traces. Did the agent recover unaided? How many commands did it take before, and
+      after?</p>
+      <p>Each records <strong>which lever</strong> the fix used &mdash; the tool, or the instructions
+      &mdash; because &ldquo;what makes a CLI agent-friendly&rdquo; has a legitimate answer of the form
+      <em>&ldquo;nothing in the CLI; tell the agent up front.&rdquo;</em> If the confirmed properties
+      cluster on one side, that is itself the finding.</p>
+      <p>The three fixes above are the first three experiments, already built.</p>
+      <div class="meta"><span>the deliverable</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <p style="margin-top:26px"><strong>A refuted property is a real result.</strong> If we add a hint
+    and the agent ignores it anyway, then &ldquo;name the fix&rdquo; was not the missing property, and
+    something else is. That is worth knowing, and far cheaper than shipping a fix nobody benefits
+    from.</p>
+  </div>
+</section>
+
+<footer>
+  Baseline commit 3009509 &middot; map release 2026-08-19.0 &middot; 30 questions, none skipped<br>
+  Noise measured from 60 recorded attempts &middot; three parallel arms &middot; 20&ndash;21 August 2026
+</footer>
+
+</div>

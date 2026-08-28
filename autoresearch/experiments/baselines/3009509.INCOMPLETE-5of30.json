@@ -1,0 +1,62 @@
+{
+  "sha": "3009509",
+  "release_requested": null,
+  "release": "2026-08-19.0",
+  "pinned": false,
+  "correctness_impl": "proxy-v1",
+  "repeats": 2,
+  "skipped": [
+    "asian-restaurants-rollup",
+    "street-canonical-form",
+    "tattoo-category-discovery",
+    "malta-highways-absent-class",
+    "starbucks-name-vs-brand",
+    "tall-buildings-cambridge",
+    "basic-category-rollup",
+    "unsupported-hours-and-ratings",
+    "bus-stops-cambridge",
+    "reykjavik-diacritic",
+    "williamsburg-which-one",
+    "brooklyn-every-building",
+    "residential-share-cambridge",
+    "clipping-polygon-qgis",
+    "which-admin-areas",
+    "pharmacy-near-address",
+    "hotel-density-two-countries",
+    "ev-charging-gap",
+    "hardware-near-bikepaths",
+    "bus-stops-with-coffee",
+    "beach-accessibility-malta",
+    "bike-parking-coverage",
+    "waterfront-buildings-reykjavik",
+    "building-parts-detail",
+    "junction-density"
+  ],
+  "questions": {
+    "hospitals-rhode-island": {
+      "tokens": 298012.5,
+      "duration_ms": 127063,
+      "correctness": 1.0
+    },
+    "bbox-cambridge": {
+      "tokens": 40754.5,
+      "duration_ms": 4925.5,
+      "correctness": 1.0
+    },
+    "pharmacies-monaco": {
+      "tokens": 250832.5,
+      "duration_ms": 47984,
+      "correctness": 0.9
+    },
+    "nearest-pois-harvard": {
+      "tokens": 166450.5,
+      "duration_ms": 116316.5,
+      "correctness": 1.0
+    },
+    "motorways-rhode-island": {
+      "tokens": 162474.5,
+      "duration_ms": 76442.5,
+      "correctness": 1.0
+    }
+  }
+}

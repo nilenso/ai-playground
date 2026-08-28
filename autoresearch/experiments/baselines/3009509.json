@@ -1,0 +1,165 @@
+{
+  "sha": "3009509",
+  "release_requested": null,
+  "release": "2026-08-19.0",
+  "pinned": false,
+  "correctness_impl": "proxy-v1",
+  "repeats": 2,
+  "skipped": [],
+  "questions": {
+    "hospitals-rhode-island": {
+      "tokens": 402176.5,
+      "duration_ms": 87727,
+      "correctness": 1.0
+    },
+    "bbox-cambridge": {
+      "tokens": 40880.5,
+      "duration_ms": 4003,
+      "correctness": 1.0
+    },
+    "pharmacies-monaco": {
+      "tokens": 220359.5,
+      "duration_ms": 35887,
+      "correctness": 1.0
+    },
+    "nearest-pois-harvard": {
+      "tokens": 142855,
+      "duration_ms": 78662,
+      "correctness": 1.0
+    },
+    "motorways-rhode-island": {
+      "tokens": 246115.5,
+      "duration_ms": 78348,
+      "correctness": 0.95
+    },
+    "asian-restaurants-rollup": {
+      "tokens": 424179.5,
+      "duration_ms": 281732,
+      "correctness": 1.0
+    },
+    "street-canonical-form": {
+      "tokens": 335091.5,
+      "duration_ms": 70054,
+      "correctness": 0.9
+    },
+    "tattoo-category-discovery": {
+      "tokens": 193073.5,
+      "duration_ms": 45620.5,
+      "correctness": 1.0
+    },
+    "malta-highways-absent-class": {
+      "tokens": 648518.5,
+      "duration_ms": 101859,
+      "correctness": 1.0
+    },
+    "starbucks-name-vs-brand": {
+      "tokens": 291314.5,
+      "duration_ms": 66516.5,
+      "correctness": 1.0
+    },
+    "tall-buildings-cambridge": {
+      "tokens": 377698.5,
+      "duration_ms": 110632,
+      "correctness": 1.0
+    },
+    "basic-category-rollup": {
+      "tokens": 340196.5,
+      "duration_ms": 112322.5,
+      "correctness": 1.0
+    },
+    "unsupported-hours-and-ratings": {
+      "tokens": 40898.5,
+      "duration_ms": 4069.5,
+      "correctness": 1.0
+    },
+    "bus-stops-cambridge": {
+      "tokens": 709615,
+      "duration_ms": 173945,
+      "correctness": 1.0
+    },
+    "reykjavik-diacritic": {
+      "tokens": 522461,
+      "duration_ms": 285843,
+      "correctness": 0.9
+    },
+    "williamsburg-which-one": {
+      "tokens": 184844.5,
+      "duration_ms": 23097.5,
+      "correctness": 1.0
+    },
+    "brooklyn-every-building": {
+      "tokens": 235927.5,
+      "duration_ms": 50795.5,
+      "correctness": 1.0
+    },
+    "residential-share-cambridge": {
+      "tokens": 262598,
+      "duration_ms": 83727.5,
+      "correctness": 1.0
+    },
+    "clipping-polygon-qgis": {
+      "tokens": 500431,
+      "duration_ms": 132445,
+      "correctness": 1.0
+    },
+    "which-admin-areas": {
+      "tokens": 88747,
+      "duration_ms": 66424,
+      "correctness": 1.0
+    },
+    "pharmacy-near-address": {
+      "tokens": 336163.5,
+      "duration_ms": 60039.5,
+      "correctness": 0.9
+    },
+    "hotel-density-two-countries": {
+      "tokens": 131667.5,
+      "duration_ms": 24946,
+      "correctness": 1.0
+    },
+    "ev-charging-gap": {
+      "tokens": 425044,
+      "duration_ms": 232333,
+      "correctness": 0.6
+    },
+    "hardware-near-bikepaths": {
+      "tokens": 750102.5,
+      "duration_ms": 279219,
+      "correctness": 1.0
+    },
+    "bus-stops-with-coffee": {
+      "tokens": 760361.5,
+      "duration_ms": 272361.5,
+      "correctness": 0.7
+    },
+    "beach-accessibility-malta": {
+      "tokens": 744693.5,
+      "duration_ms": 180028,
+      "correctness": 1.0
+    },
+    "bike-parking-coverage": {
+      "tokens": 877185.5,
+      "duration_ms": 301977.5,
+      "correctness": 0.95
+    },
+    "waterfront-buildings-reykjavik": {
+      "tokens": 2572117,
+      "duration_ms": 344203,
+      "correctness": 0.9
+    },
+    "building-parts-detail": {
+      "tokens": 815401,
+      "duration_ms": 312403,
+      "correctness": 0.9
+    },
+    "junction-density": {
+      "tokens": 750976,
+      "duration_ms": 352746.5,
+      "correctness": 1.0
+    }
+  },
+  "agent_path": "subscription",
+  "agent_provider": "anthropic-subscription",
+  "agent_model": "sonnet",
+  "agent_fields_backfilled": "Recorded after the run: the measuring process was started before these fields existed. Evidence: all 1136 model records across the 60 retained transcripts read claude-sonnet-5, and the script set no ANTHROPIC_BASE_URL."
+}

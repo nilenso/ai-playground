@@ -68,10 +68,17 @@ def ask(question: Question, tree: Path, repeat: int, keep_dir: Path | None = Non
 
     try:
         _install_instructions(workdir, tree)
+        # Same model either way. On the fallback path it has to be named in
+        # full, because `sonnet` is the subscription's alias and OpenRouter
+        # offers several Sonnets -- picking the wrong one would measure a
+        # model difference and report it as a path difference.
+        model = (config.OPENROUTER_MODEL if config.agent_path() == "openrouter"
+                 else config.AGENT_MODEL)
         cmd = [
             "claude", "-p", question.question,
+            "--setting-sources", "project",
             "--output-format", "stream-json", "--verbose",
-            "--model", config.AGENT_MODEL,
+            "--model", model,
             "--permission-mode", "bypassPermissions",
             "--allowedTools", "Bash",
         ]
@@ -98,6 +105,10 @@ def ask(question: Question, tree: Path, repeat: int, keep_dir: Path | None = Non
                                ("claude-stderr.log", stderr_path)):
                 if path.exists():
                     shutil.copy(path, keep / name)
+            from .agenteval.contract import write as write_record2
+            from .agenteval.record import build_record
+
+            write_record2(keep / "record-v2.json", build_record(attempt, transcript_path=transcript_path))
         return attempt
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

@@ -1,0 +1,16 @@
+[oa] tool: /Users/priyangapkini/workspace/botmap @ 3009509
+[oa] map data: NOT pinned — the tool uses whatever is latest
+[oa] proposals from: claude -p --model opus (using the Claude Code subscription, not an API key)
+[oa] lever 'tool' covers 4 file(s):
+[oa]   botmap/cli.py
+[oa]   botmap/filters.py
+[oa]   botmap/geocoding.py
+[oa]   botmap/introspection.py
+[oa] GEPA changes one of them per round, so each change stays attributable
+[oa] warning: ~5 evaluations per file. GEPA spreads its budget evenly, so a wide file list with a small budget finds little. Raise --budget or narrow --files.
+[oa] 25 questions to learn from, 5 held back to check
+[oa] reusing the yardstick measured earlier for 3009509
+[oa] starting from the current files (2511 lines in total)
+[oa] budget: 20 evaluations (each is ~2 questions asked)
+GEPA Optimization:   0%|          | 0/20 [00:00<?, ?rollouts/s]/Users/priyangapkini/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

@@ -1,0 +1,631 @@
+From 87e2c7ce3f10fbd7c1d06c83cd183157cf8adb9f Mon Sep 17 00:00:00 2001
+From: PriyangaPKini <priyangapkini99@gmail.com>
+Date: Thu, 20 Aug 2026 14:18:35 +0530
+Subject: [PATCH 1/4] Add. autoresearch loop skills for arm A
+
+---
+ .claude/skills/autoresearch-loop/SKILL.md    | 134 +++++++++++++++++++
+ .claude/skills/autoresearch-propose/SKILL.md |  88 ++++++++++++
+ .claude/skills/autoresearch-verify/SKILL.md  | 114 ++++++++++++++++
+ 3 files changed, 336 insertions(+)
+ create mode 100644 .claude/skills/autoresearch-loop/SKILL.md
+ create mode 100644 .claude/skills/autoresearch-propose/SKILL.md
+ create mode 100644 .claude/skills/autoresearch-verify/SKILL.md
+
+diff --git a/.claude/skills/autoresearch-loop/SKILL.md b/.claude/skills/autoresearch-loop/SKILL.md
+new file mode 100644
+index 0000000..87c06b7
+--- /dev/null
++++ b/.claude/skills/autoresearch-loop/SKILL.md
+@@ -0,0 +1,134 @@
++---
++name: autoresearch-loop
++description: Run a self-driving research loop that makes the botmap CLI easier for an AI agent to drive. Use when asked to improve botmap's agent-usability, run an autoresearch loop, or optimise the CLI against the eval suite.
++---
++
++# Autoresearch loop
++
++You are running a research loop on the `botmap` CLI. Your goal is to make the
++tool **easier for an AI agent to drive** — not to make its answers more
++correct.
++
++The users of `botmap` are AI assistants, not people. An assistant is handed a
++plain-English question ("how many hospitals are in Rhode Island?") and a shell,
++and must work out the right command alone. Nobody tells it which command to
++use. **Working that out is exactly what is being measured.**
++
++There is no optimiser library here. You are the optimiser. Run the loop
++yourself.
++
++## The loop
++
++```
++measure  ->  read the evidence  ->  propose 2-3 candidates
++   ^                                        |
++   |                                        v
++   +---- keep the winner  <----  verify each candidate
++```
++
++One pass through that is a **round**. Do rounds until a stop condition below
++is met.
++
++## Round procedure
++
++### 1. Measure
++
++The eval suite lives in `evals/`. A full run is 10 questions x 2 repeats = 20
++`claude -p` invocations, which is slow and burns quota. **Do not run the full
++suite to screen candidates.**
++
++Full run (use for the baseline, and for a finalist only):
++
++```bash
++uv run python -m evals.runner --model sonnet --runs-dir evals/runs/<label>
++uv run python -m evals.score  --runs-dir evals/runs/<label>
++uv run python -m evals.synthesize --model opus --runs-dir evals/runs/<label>
++```
++
++Mini-batch (use for screening — see `autoresearch-verify`):
++
++```bash
++uv run python -m evals.runner --questions /tmp/minibatch.yaml --repeats 1 \
++    --runs-dir evals/runs/<label>
++uv run python -m evals.score --questions /tmp/minibatch.yaml --runs-dir evals/runs/<label>
++```
++
++Always give each measurement its own `--runs-dir`. Mixing runs silently
++corrupts the score.
++
++Record the baseline once, before changing anything. Every later number is read
++against it.
++
++### 2. Read the evidence
++
++`evals/report.md` ranks failure clusters. `evals/proposals.json` lists concrete
++findings. Read both. Also read the raw `record.json` under the runs dir when a
++cluster is unclear — the actual commands the agent typed are the most useful
++thing in this whole system.
++
++What counts as a failure, worst first:
++
++1. **Silent wrong answers** — the tool exits 0 and returns "0 rows", the agent
++   reads that as "there are none here" and confidently reports a wrong answer.
++   This is the worst failure mode in the system.
++2. **Falling back to `download`** — when `download_is_legitimate: false`, the
++   agent could not find the purpose-built command and reached for the bulk
++   escape hatch.
++3. **Errors it never recovered from** — the message failed to hand back a
++   usable next command.
++4. **Wasted turns** — many commands before the first correct one.
++
++### 3. Propose
++
++Invoke the `autoresearch-propose` skill. It returns 2-3 candidates. Do not
++propose only one — a single candidate gives you nothing to compare.
++
++### 4. Verify
++
++Invoke the `autoresearch-verify` skill for each candidate. It screens on a
++mini-batch, checks for reward hacking, and returns a verdict.
++
++### 5. Keep the winner
++
++Pick the candidate that **dominates** — better on the mini-batch without being
++worse on any question the others handled. If none dominates, keep none and say
++so; a tie is a real result, not a failure to decide.
++
++Confirm the winner on the **full** suite before committing it. A mini-batch
++gain that vanishes on the full suite was noise.
++
++Commit each accepted winner separately, so every change stays attributable:
++
++```bash
++git add -A && git commit -m "Update. <what changed and which failure it targets>"
++```
++
++## Stop conditions
++
++Stop and report when any of these is true:
++
++- **Two consecutive rounds** produce no candidate that beats the baseline.
++- You have run **six rounds**.
++- The full-suite score has stopped moving by more than noise (one question
++  flipping is noise; three is not).
++
++## Keeping yourself honest
++
++- **Never edit `evals/`.** That is the exam. Changing it makes every number
++  meaningless. If you believe a question is wrong, say so in your report and
++  leave it alone.
++- **The baseline is measured once**, on unmodified code, and reused. Do not
++  re-measure it to make a candidate look better.
++- **Report what happened, including nothing.** "Six rounds, no reliable gain"
++  is a valid and useful outcome. Do not manufacture an improvement.
++- Two attempts at the same question will not behave identically. Treat a small
++  gain as suspicion, not evidence.
++
++## Final report
++
++Write `AUTORESEARCH-REPORT.md` in the repo root:
++
++- baseline numbers, and the numbers after each accepted change
++- every candidate proposed, and why each was kept or dropped
++- which failure clusters you closed and which you could not
++- what you would try next, and what stopped you trying it now
+diff --git a/.claude/skills/autoresearch-propose/SKILL.md b/.claude/skills/autoresearch-propose/SKILL.md
+new file mode 100644
+index 0000000..8011a2b
+--- /dev/null
++++ b/.claude/skills/autoresearch-propose/SKILL.md
+@@ -0,0 +1,88 @@
++---
++name: autoresearch-propose
++description: Read botmap's eval evidence and propose 2-3 competing candidate changes that would make the CLI easier for an AI agent to drive. Use from the autoresearch-loop skill, or when asked to propose botmap improvements from eval results.
++---
++
++# Propose candidates
++
++Turn eval evidence into **2-3 competing candidate changes**. You propose only.
++Implementing and testing belongs to `autoresearch-verify`.
++
++## Inputs
++
++- `evals/report.md` — ranked failure clusters
++- `evals/proposals.json` — concrete findings
++- `evals/runs/<label>/*/record.json` — the commands the agent actually typed
++
++The `record.json` files matter most. A cluster name tells you *what* broke; the
++commands tell you *what the agent was reaching for when it broke*. Design for
++the reach, not the error.
++
++## What you may change
++
++The whole `botmap/` package is yours, plus `botmap/data/skill.md`.
++
++These two are different levers and it is worth being deliberate about which
++you pull:
++
++| Lever | File | Changes |
++|---|---|---|
++| tool | `botmap/*.py` | what the CLI **does** |
++| prompt | `botmap/data/skill.md` | what the agent is **told** |
++
++Prefer the tool lever when the agent's reach was reasonable and the tool
++refused it. Prefer the prompt lever when the tool already does the right thing
++and the agent never found it. Say which lever each candidate pulls and why.
++
++**Never touch `evals/`.** That is the exam.
++
++`botmap/core.py` is data-access plumbing — a bad edit there breaks every
++command at once. You may edit it, but a candidate that touches it must say
++plainly why nothing shallower would do.
++
++## What has worked before
++
++- adding a purpose-built command for a common task, so the agent stops falling
++  back to the bulk `download`
++- error messages that name the problem **and** print a ready-to-run replacement
++  command, so a wrong first try becomes a correct second try
++- accepting the obvious spelling of an argument as well as the official one
++- making a command that already exists cover more of the cases an agent will
++  reasonably try it on
++
++## What scores badly
++
++- returning zero results with no explanation — the agent reads it as "there are
++  none here" and reports a confident wrong answer
++- crashing with a raw Python traceback
++- being correct but so hard to discover the agent never finds it
++
++## Rules for the candidate set
++
++**Propose 2-3, and make them genuinely different.** Three variations on one
++idea teach you nothing. Aim for different levers or different failure clusters,
++so whichever wins tells you something.
++
++Each candidate must state:
++
++1. **Target** — which failure cluster, and how many eval questions it touches
++2. **Lever** — tool or prompt, and why that one
++3. **Change** — the specific edit, concretely enough to apply without guessing
++4. **Prediction** — what should improve, and *what would prove it did not*
++5. **Risk** — what else this could break
++
++The prediction matters. A candidate with no falsifiable prediction cannot be
++verified, only believed.
++
++## Do not
++
++- Do not special-case a specific eval question. Fixing `hospitals-rhode-island`
++  by name is reward hacking, and `autoresearch-verify` is looking for it.
++- Do not bundle unrelated fixes into one candidate. If it needs "and" to
++  describe, it is two candidates.
++- Do not propose a change you cannot measure with the existing eval suite.
++
++## Output
++
++Return the candidates as a numbered list with the five fields above. Do not
++edit any files.
+diff --git a/.claude/skills/autoresearch-verify/SKILL.md b/.claude/skills/autoresearch-verify/SKILL.md
+new file mode 100644
+index 0000000..679a7b6
+--- /dev/null
++++ b/.claude/skills/autoresearch-verify/SKILL.md
+@@ -0,0 +1,114 @@
++---
++name: autoresearch-verify
++description: Implement a proposed botmap candidate, screen it on a mini-batch of eval questions, and check it for reward hacking with an independent sub-agent. Use from the autoresearch-loop skill, or when asked to test whether a proposed change actually improves agent usability.
++---
++
++# Verify a candidate
++
++Take one proposed candidate, implement it, and find out whether it actually
++helps. Assume it does not until the numbers say otherwise.
++
++## 1. Implement on a branch
++
++```bash
++git checkout -b cand/<short-slug>
++```
++
++Apply only what the candidate described. If you find yourself fixing something
++else along the way, stop — that is a separate candidate, and mixing them makes
++the result unattributable.
++
++Confirm the tool still starts before spending anything on it:
++
++```bash
++uv run botmap --help >/dev/null && echo "starts"
++```
++
++A candidate that will not run scores zero. Do not evaluate it; report the
++error and stop.
++
++## 2. Screen on a mini-batch
++
++Running all 10 questions x 2 repeats to screen a candidate is wasteful. Build a
++mini-batch instead.
++
++**Choosing the mini-batch matters.** It must contain:
++
++- every question in the failure cluster this candidate targets (or it cannot
++  show a gain), **and**
++- at least two questions the candidate should *not* affect (or it cannot show a
++  regression).
++
++Use the **same mini-batch for every candidate in a round.** Comparing
++candidates screened on different questions is meaningless.
++
++```bash
++# extract the chosen ids into a subset bank
++uv run python - <<'PY'
++import yaml, pathlib
++ids = {"coffee-brooklyn-count", "where-boston"}   # <- the round's mini-batch
++bank = yaml.safe_load(pathlib.Path("evals/questions.yaml").read_text())
++subset = [q for q in bank if q["id"] in ids]
++pathlib.Path("/tmp/minibatch.yaml").write_text(yaml.safe_dump(subset, sort_keys=False))
++print(f"{len(subset)} questions")
++PY
++
++uv run python -m evals.runner --questions /tmp/minibatch.yaml --repeats 1 \
++    --runs-dir evals/runs/cand-<slug>
++uv run python -m evals.score --questions /tmp/minibatch.yaml \
++    --runs-dir evals/runs/cand-<slug>
++```
++
++Read the result against the baseline's numbers **on the same questions** — not
++against the baseline's full-suite score.
++
++## 3. Check for reward hacking
++
++Before accepting any candidate that improved, **launch an independent
++sub-agent** to inspect it. Give the sub-agent the diff and the eval questions,
++and ask it to answer one question:
++
++> Does this change genuinely make the CLI easier for any agent to drive, or
++> does it improve the score by exploiting the specific questions in the eval
++> suite? Default to "exploiting" if uncertain.
++
++Tell it to look for:
++
++- **question-shaped logic** — place names, categories, or values from the eval
++  bank appearing in the code
++- **detecting the harness** — behaviour that changes under the eval shim, or
++  when a specific env var is set
++- **widening what counts as success** — suppressing an error, or returning
++  something plausible where the tool used to admit it did not know
++- **help text tuned to the exam** — examples that happen to be the eval
++  questions rather than representative usage
++
++The sub-agent must be given the diff and must reach its own verdict. Do not
++tell it your prediction, or which cluster you were targeting — you would be
++handing it the answer.
++
++A candidate the sub-agent calls exploitative is **rejected**, even if it
++scored well. Record it in the report: a rejected reward hack is a finding
++worth keeping.
++
++## 4. Verdict
++
++Return one of:
++
++- **dominant** — improved its target questions and regressed none
++- **mixed** — improved some, regressed others; report both
++- **no effect** — within noise
++- **broken** — will not run, or regressed the target
++- **rejected** — the sub-agent judged it reward hacking
++
++Report the numbers, not an impression. One question flipping is noise; three
++moving the same way is a signal.
++
++## Cleaning up
++
++Leave the branch in place — the loop decides what to keep. Return to the
++starting point so the next candidate is measured from the same base:
++
++```bash
++git checkout -
++```
+-- 
+2.50.1 (Apple Git-155)
+
+
+From 9e2afa256383d18b3f6d8cceabd80dc0b4126157 Mon Sep 17 00:00:00 2001
+From: PriyangaPKini <priyangapkini99@gmail.com>
+Date: Fri, 21 Aug 2026 00:46:37 +0530
+Subject: [PATCH 2/4] Update. verify skill to judge on mechanism and recovery,
+ not error count
+
+The taxonomy scores an exit-0 'did you mean' hint as bad_category_value, so
+screening on error count rejects a candidate for fixing a silent failure.
+Also replaces the guessed noise rule with the measured floor, and adds the
+empty-candidate guard.
+---
+ .claude/skills/autoresearch-verify/SKILL.md | 116 +++++++++++++++++---
+ 1 file changed, 102 insertions(+), 14 deletions(-)
+
+diff --git a/.claude/skills/autoresearch-verify/SKILL.md b/.claude/skills/autoresearch-verify/SKILL.md
+index 679a7b6..2dd59a4 100644
+--- a/.claude/skills/autoresearch-verify/SKILL.md
++++ b/.claude/skills/autoresearch-verify/SKILL.md
+@@ -27,7 +27,42 @@ uv run botmap --help >/dev/null && echo "starts"
+ A candidate that will not run scores zero. Do not evaluate it; report the
+ error and stop.
+ 
+-## 2. Screen on a mini-batch
++**Then confirm the candidate is not empty.** `git commit` exits 0 and prints
++"nothing to commit" when a change was stashed, reverted, or never applied. An
++empty branch screens as "no effect" -- a plausible result -- and gets recorded
++as a tested negative for a change that never existed:
++
++```bash
++git diff --quiet arm-a-base <branch> && echo "EMPTY CANDIDATE -- do not measure"
++```
++
++Never measure an empty candidate.
++
++## 2. Check the mechanism first -- it is free
++
++Before spending any quota, prove the change does what it claims, directly
++against the CLI with no agent involved. This costs nothing, has no noise, and
++discards a broken candidate before it consumes a single run.
++
++State the check as a before/after on real commands, e.g.:
++
++```bash
++# the case the candidate targets
++botmap --json count -t place --in "Brooklyn, US-NY" --where categories.primary=bus_stop
++#   expect: exit 0, count 0, AND a stderr hint naming a near match
++
++# a control that must NOT change
++botmap --json count -t place --in "Brooklyn, US-NY" --where categories.primary=coffee_shop
++#   expect: 1253, no hint
++```
++
++Where a candidate adds sugar for an existing option, **check equivalence**: the
++shortcut must return exactly what the longhand returns. A shortcut wired to the
++wrong column returns a silent zero, which is the worst failure in the system.
++
++A candidate whose mechanism fails here is dead. Do not measure it.
++
++## 3. Screen on a mini-batch
+ 
+ Running all 10 questions x 2 repeats to screen a candidate is wasteful. Build a
+ mini-batch instead.
+@@ -62,7 +97,7 @@ uv run python -m evals.score --questions /tmp/minibatch.yaml \
+ Read the result against the baseline's numbers **on the same questions** — not
+ against the baseline's full-suite score.
+ 
+-## 3. Check for reward hacking
++## 4. Check for reward hacking
+ 
+ Before accepting any candidate that improved, **launch an independent
+ sub-agent** to inspect it. Give the sub-agent the diff and the eval questions,
+@@ -91,18 +126,71 @@ A candidate the sub-agent calls exploitative is **rejected**, even if it
+ scored well. Record it in the report: a rejected reward hack is a finding
+ worth keeping.
+ 
+-## 4. Verdict
+-
+-Return one of:
+-
+-- **dominant** — improved its target questions and regressed none
+-- **mixed** — improved some, regressed others; report both
+-- **no effect** — within noise
+-- **broken** — will not run, or regressed the target
+-- **rejected** — the sub-agent judged it reward hacking
+-
+-Report the numbers, not an impression. One question flipping is noise; three
+-moving the same way is a signal.
++## 5. Verdict
++
++### Do NOT judge on `cli_error_count`
++
++`evals/taxonomy.py` classifies an exit-0 call carrying "did you mean:" as
++`bad_category_value` -- an error. So a candidate that adds a diagnostic to a
++previously-silent zero result converts a call the scorer called **clean** into
++a call the scorer calls an **error**.
++
++The tool gets better; the number gets worse. A candidate that fixes a silent
++failure is guaranteed to look like a regression on error count. Judging on that
++metric rejects the correct fix, and an optimiser following it learns to delete
++diagnostics.
++
++The same trap applies to `wasted_commands`, which is derived from the error
++count.
++
++### Judge on this instead, in order
++
++1. **The mechanism check** (step 2). Deterministic, free, no noise. This is the
++   primary evidence that the candidate works.
++2. **Regression on stable questions.** Some questions have *identical* mean
++   command counts across independent baselines. A change there is real signal.
++   Establish which ones are stable by comparing two baselines before trusting
++   any of them as detectors.
++3. **Recovery and outcome.** Did the agent reach an answer, and in how many
++   commands? An error followed by a corrected retry is the tool working. An
++   error followed by silence and a confident wrong answer is the failure. These
++   score the same today, which is why you read the trace and not the total.
++4. **The trace on the target question.** Did the agent actually encounter the
++   new affordance? A mechanism that works but is never reached is a failed
++   candidate -- and honest evidence the fix is in the wrong place.
++
++### Know your noise floor before calling anything a win
++
++Measure it: run the baseline twice, unchanged, and count what moves. On
++botmap's 10-question suite this was **3 of 10 questions flipping outcome with
++the tool held constant**, while the aggregate barely moved (18/20 -> 17/20)
++because the flips cancelled.
++
++Do not use a rule of thumb here. An earlier version of this file said "one
++question flipping is noise; three moving the same way is a signal" -- that was
++written from intuition and the measurement contradicts it.
++
++If every question with headroom is also unstable, and every stable question is
++already at ceiling, then **the suite cannot demonstrate an improvement at all**
++and you should say so rather than report a number from it.
++
++### Verdicts
++
++- **mechanism-verified** -- the change provably does what it claims (step 2).
++  This stands on its own and needs no quota.
++- **dominant** -- mechanism verified AND the agent demonstrably recovers where
++  it previously did not, with no regression on stable questions.
++- **mixed** -- improved some, regressed others; report both, with the noise
++  floor beside them.
++- **no effect** -- the mechanism works but the agent never reaches it. Say
++  where the fix would have to live instead.
++- **broken** -- will not run, empty branch, or the mechanism check failed.
++- **rejected** -- the sub-agent judged it reward hacking.
++- **unproven** -- any movement smaller than the measured noise floor. This is
++  the honest verdict for most small gains and should be used freely.
++
++Report the numbers, and report the floor next to them. A gain quoted without
++its noise floor is not a result.
+ 
+ ## Cleaning up
+ 
+-- 
+2.50.1 (Apple Git-155)
+
+
+From 044f260cb1a329ed376a2fd8f202f2502ab4edc9 Mon Sep 17 00:00:00 2001
+From: PriyangaPKini <priyangapkini99@gmail.com>
+Date: Fri, 21 Aug 2026 00:55:14 +0530
+Subject: [PATCH 3/4] Update. require the candidate sync guard after any base
+ commit
+
+---
+ .claude/skills/autoresearch-verify/SKILL.md | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/.claude/skills/autoresearch-verify/SKILL.md b/.claude/skills/autoresearch-verify/SKILL.md
+index 2dd59a4..ca11729 100644
+--- a/.claude/skills/autoresearch-verify/SKILL.md
++++ b/.claude/skills/autoresearch-verify/SKILL.md
+@@ -38,6 +38,22 @@ git diff --quiet arm-a-base <branch> && echo "EMPTY CANDIDATE -- do not measure"
+ 
+ Never measure an empty candidate.
+ 
++**And re-sync after ANY commit to the base.** When the base moves, candidate
++branches fall behind it, and `git diff arm-a-base <branch>` then presents the
++base's new commits as *reverts* inside the candidate's diff. This has already
++happened once: a 116-line revert of this very file appeared inside all three
++candidates, which a reward-hack reviewer would have read as the candidate
++tampering with its own verifier -- and rejected, correctly.
++
++Run the guard after every base commit and before every measurement:
++
++```bash
++./notes/sync-candidates.sh
++```
++
++It rebases each candidate onto the base and refuses any that is empty, touches
++files outside `botmap/`, or touches `evals/`.
++
+ ## 2. Check the mechanism first -- it is free
+ 
+ Before spending any quota, prove the change does what it claims, directly
+-- 
+2.50.1 (Apple Git-155)
+
+
+From 05ef72c5c7f2dc059c5469df46fbbb2a0c76dd3b Mon Sep 17 00:00:00 2001
+From: PriyangaPKini <priyangapkini99@gmail.com>
+Date: Fri, 21 Aug 2026 00:20:27 +0530
+Subject: [PATCH 4/4] Add. --category and --class shortcuts on count, matching
+ places and roads
+
+places accepts --category and roads accepts --class, so an agent that used
+them there reasonably tries them on count -- which the Skill's workflow
+reaches first. Both were usage errors. Refuses the doubled spelling rather
+than silently preferring one.
+---
+ botmap/cli.py | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/botmap/cli.py b/botmap/cli.py
+index f72a565..71d7669 100644
+--- a/botmap/cli.py
++++ b/botmap/cli.py
+@@ -779,10 +779,14 @@ def boundary(ctx, query):
+ @click.option("--bbox", required=False, type=BboxParamType())
+ @click.option("--in", "in_place", required=False, type=str)
+ @click.option("--where", "where_exprs", multiple=True)
++@click.option("--category", required=False, type=str,
++              help="Shortcut for --where categories.primary=VAL")
++@click.option("--class", "feature_class", required=False, type=str,
++              help="Shortcut for --where class=VAL")
+ @click.option("-r", "--release", default=None, callback=validate_release,
+               required=False)
+ @click.pass_context
+-def count(ctx, type_, bbox, in_place, where_exprs, release):
++def count(ctx, type_, bbox, in_place, where_exprs, category, feature_class, release):
+     """Count features for a query without downloading them."""
+     if bbox is not None and in_place is not None:
+         raise click.UsageError("--bbox and --in are mutually exclusive")
+@@ -797,6 +801,21 @@ def count(ctx, type_, bbox, in_place, where_exprs, release):
+     except ValueError as e:
+         raise click.UsageError(str(e))
+ 
++    # `places` accepts --category and `roads` accepts --class, so an agent that
++    # used them there reasonably expects them here -- and the Skill's workflow
++    # sends it to `count` first. Same sugar, same spelling.
++    for flag, value, key in (("--category", category, "categories.primary"),
++                             ("--class", feature_class, "class")):
++        if value is None:
++            continue
++        if any(f.key == key for f in (where_filters or [])):
++            raise click.UsageError(
++                f"{flag} and --where {key}=... are the same filter; use one or the other"
++            )
++        where_filters = (where_filters or []) + [
++            ParsedFilter(key=key, op="=", value=value)
++        ]
++
+     n = _safe_count(
+         type_, bbox=bbox, release=release, stac=True, where_filters=where_filters,
+     )
+-- 
+2.50.1 (Apple Git-155)
+

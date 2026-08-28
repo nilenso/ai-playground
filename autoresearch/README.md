@@ -16,6 +16,25 @@ well; a confusing one scores badly even if every answer it gives is right.
 Then [GEPA](https://arxiv.org/abs/2507.19457) rewrites the tool to make the
 score go up.
 
+## Published dataset and experiment trail
+
+The dataset, raw run artifacts, arm reports, worktree patches, and compact
+summaries are published at:
+
+```text
+https://huggingface.co/datasets/nilenso/autoresearch
+```
+
+The local publication index is:
+
+```text
+experiments/published/agent-friendly-cli-experiment-20260825/README.md
+```
+
+Start there for the documented trail of the agent-friendly CLI experiment,
+including the baseline measurement, paired before/after experiments, Arms A–D,
+and the derived principles.
+
 ## How the loop works
 
 ```
@@ -59,6 +78,8 @@ a patch, and you decide.
 | `--reflection-lm` | `openrouter/anthropic/claude-opus-5` | the model that proposes changes |
 | `--workers` | `1` | parallel evaluations (each needs its own copy of the tool) |
 | `BOTMAP_REPO` | `~/workspace/botmap` | the tool under test |
+| `--all-files` | off | edit every tracked UTF-8 tool-repo file except evaluator/yardstick files |
+| `--full-repo-context` | off | include bounded read-only full-repo context in GEPA's prompt |
 
 Keys are read from `.env` in this directory, so a checkout is self-contained
 and nothing has to live in your shell profile. An already-exported variable
@@ -160,14 +181,18 @@ reason. Mentions aren't proof — read `run_log.txt` before acting.
 ### Choosing the file list
 
 ```bash
---lever tool                      # the curated four
---files botmap/filters.py         # narrow and deep
---all-files --budget 200          # everything eligible, budget raised to match
+--lever tool                              # the curated four
+--files botmap/filters.py                 # narrow and deep
+--all-files --full-repo-context --budget 200  # broad edit surface + broad read context
 ```
 
-Widening costs depth. GEPA splits its budget evenly across files, so 12 files
-at `--budget 60` gives each about 5 attempts, which finds nothing. The
-optimiser warns you when the arithmetic drops below ~8 per file.
+`--all-files` is intentionally not allowed to edit the evaluator/yardstick
+surface (`evals/*`, `tests/eval_fixtures/*`, `tests/test_eval_*`). Full-repo
+context is read-only; changing the exam is not a valid improvement.
+
+Widening costs depth. GEPA splits its budget evenly across files, so a broad
+file list with `--budget 60` can find very little. The optimiser warns you when
+the arithmetic drops below ~8 per file.
 
 A good pattern is two passes: go wide and cheap first to see which files GEPA
 actually pulls on, then narrow to those and spend the real budget.
@@ -194,7 +219,8 @@ accidentally all-easy.
 | `optimize.py` | the loop — hands the file and the scorer to GEPA |
 | `evaluator.py` | scores one candidate on one question, and writes the feedback |
 | `runner.py` | asks the AI one question and records everything it did |
-| `score.py` | turns an attempt into a number *and* a written explanation |
+| `agenteval/` | record-v2 evaluator: taxonomy, probes, sabotage fixtures, scoring, enrichment, and explanations |
+| `score.py` | legacy scoring helpers retained for compatibility |
 | `baseline.py` | measures the unchanged tool once, as the yardstick |
 | `worktree.py` | private copies of the tool, so runs can't tread on each other |
 | `shim/botmap` | sits in front of the real tool and logs every command |

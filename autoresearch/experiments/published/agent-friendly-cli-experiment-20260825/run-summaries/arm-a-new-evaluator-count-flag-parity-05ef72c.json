@@ -1,0 +1,76 @@
+{
+  "run": "arm-a-new-evaluator-count-flag-parity-05ef72c",
+  "source": "experiments/runs/arm-a-new-evaluator-count-flag-parity-05ef72c",
+  "summary.json": {
+    "attempts_done": 37,
+    "attempts_total": 60,
+    "botmap_calls": 177,
+    "candidate_branch": "cand/count-flag-parity",
+    "candidate_commit": "05ef72c",
+    "candidate_repo": "/Users/priyangapkini/workspace/ar-a/botmap",
+    "changed_files": [
+      "botmap/cli.py"
+    ],
+    "completed": 33,
+    "cost_usd": 6.0574513,
+    "minutes": 203.6,
+    "name": "arm-a-new-evaluator-count-flag-parity-05ef72c",
+    "ok": 33,
+    "preflight": {
+      "branch": "cand/count-flag-parity",
+      "changed_files": [
+        "botmap/cli.py"
+      ],
+      "commit": "05ef72c",
+      "compile": {
+        "exit_code": 0,
+        "skipped": false,
+        "stderr": ""
+      },
+      "ok": true,
+      "starts": {
+        "exit_code": 0,
+        "stderr": ""
+      }
+    },
+    "purpose": "Arm A full existing-candidate screening with record-v2/agenteval",
+    "question_ids": [
+      "hospitals-rhode-island",
+      "bbox-cambridge",
+      "pharmacies-monaco",
+      "nearest-pois-harvard",
+      "motorways-rhode-island",
+      "asian-restaurants-rollup",
+      "street-canonical-form",
+      "tattoo-category-discovery",
+      "malta-highways-absent-class",
+      "starbucks-name-vs-brand",
+      "tall-buildings-cambridge",
+      "basic-category-rollup",
+      "unsupported-hours-and-ratings",
+      "bus-stops-cambridge",
+      "reykjavik-diacritic",
+      "williamsburg-which-one",
+      "brooklyn-every-building",
+      "residential-share-cambridge",
+      "clipping-polygon-qgis",
+      "which-admin-areas",
+      "pharmacy-near-address",
+      "hotel-density-two-countries",
+      "ev-charging-gap",
+      "hardware-near-bikepaths",
+      "bus-stops-with-coffee",
+      "beach-accessibility-malta",
+      "bike-parking-coverage",
+      "waterfront-buildings-reykjavik",
+      "building-parts-detail",
+      "junction-density"
+    ],
+    "repeats": [
+      1,
+      2
+    ],
+    "started": "2026-08-25T13:04:43.812202+00:00",
+    "updated": "2026-08-25T16:28:20.446765+00:00"
+  }
+}

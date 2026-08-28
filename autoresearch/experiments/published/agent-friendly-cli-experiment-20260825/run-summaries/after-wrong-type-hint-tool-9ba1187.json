@@ -1,0 +1,122 @@
+{
+  "agenteval-summary.json": {
+    "agent_side_counts": {},
+    "attempts_with_failures": 2,
+    "class_counts": {
+      "B": 3,
+      "C": 1,
+      "clean": 35
+    },
+    "details": [
+      {
+        "attempt": "beach-accessibility-malta__r1",
+        "botmap_calls": 10,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "capabilities"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 2,
+            "scope": "call",
+            "subtype": null
+          },
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "place",
+              "--in",
+              "Malta, MT",
+              "--where",
+              "categories.primary=beach"
+            ],
+            "class": "C",
+            "evidence": "empty result with no conclusive probe; reason unknown",
+            "index": 6,
+            "scope": "call",
+            "subtype": "c-unknown"
+          }
+        ],
+        "question_id": "beach-accessibility-malta",
+        "repeat": 1
+      },
+      {
+        "attempt": "beach-accessibility-malta__r2",
+        "botmap_calls": 8,
+        "failures": [
+          {
+            "argv": [
+              "--json",
+              "count",
+              "-t",
+              "land_use",
+              "--bbox",
+              "13.936,35.585,14.823,36.283",
+              "--where",
+              "class=beach"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 2,
+            "scope": "call",
+            "subtype": null
+          },
+          {
+            "argv": [
+              "--json",
+              "capabilities"
+            ],
+            "class": "B",
+            "evidence": "tool named a recovery path for the next iteration",
+            "index": 6,
+            "scope": "call",
+            "subtype": null
+          }
+        ],
+        "question_id": "beach-accessibility-malta",
+        "repeat": 2
+      },
+      {
+        "attempt": "residential-share-cambridge__r1",
+        "botmap_calls": 14,
+        "failures": [],
+        "question_id": "residential-share-cambridge",
+        "repeat": 1
+      },
+      {
+        "attempt": "residential-share-cambridge__r2",
+        "botmap_calls": 7,
+        "failures": [],
+        "question_id": "residential-share-cambridge",
+        "repeat": 2
+      }
+    ],
+    "records": 4,
+    "run_dir": "experiments/runs/after-wrong-type-hint-tool-9ba1187",
+    "subtype_counts": {
+      "c-unknown": 1
+    }
+  },
+  "enrichment-summary.json": {
+    "attempts": 4,
+    "calls_probed": 3,
+    "calls_seen": 39,
+    "probe_calls": 12
+  },
+  "run": "after-wrong-type-hint-tool-9ba1187",
+  "source": "experiments/runs/after-wrong-type-hint-tool-9ba1187",
+  "summary.json": {
+    "attempts_done": 4,
+    "botmap_calls": 39,
+    "completed": 2,
+    "cost_usd": 0.8831648000000001,
+    "finished": "2026-08-24T12:43:43.842275+00:00",
+    "minutes": 49.5,
+    "ok": 2,
+    "total": 4
+  }
+}

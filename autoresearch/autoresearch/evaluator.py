@@ -15,11 +15,15 @@ from __future__ import annotations
 
 import statistics
 import subprocess
+from dataclasses import asdict
 from pathlib import Path
 
 import gepa.optimize_anything as oa
 
-from . import config, runner, score
+from . import config, runner
+from .agenteval import score as agenteval_score
+from .agenteval.explain import explain
+from .agenteval.record import build_record
 from .baseline import Reading
 from .questions import Question
 from .worktree import Pool
@@ -91,37 +95,64 @@ class Evaluator:
             return 0.0, {"Blocked": problem}
 
         attempts = runner.ask_repeatedly(example, tree, keep_dir=self.keep_dir)
-        usable = [a for a in attempts if a.ok]
+        measured = [_measure_attempt(a, self.reference.get(example.id)) for a in attempts]
+        usable = [item for item in measured if not item["score"].excluded]
 
-        # Every try crashed or timed out. That's a broken measurement, not a
-        # bad candidate, so say so rather than blaming the candidate.
+        # Every try crashed, timed out, or hit an environment failure. That's a
+        # broken measurement, not a bad candidate, so say so rather than
+        # blaming the candidate.
         if not usable:
-            oa.log(f"Could not measure {example.id}: every attempt crashed or timed out.")
-            return 0.0, {"Unmeasurable": "all attempts failed"}
+            for item in measured:
+                oa.log(explain(item["record"]))
+            oa.log(f"Could not measure {example.id}: every attempt was excluded by agenteval.")
+            return 0.0, {"Unmeasurable": "all attempts excluded by agenteval"}
 
-        correct = score.correctness(usable)
-        tokens = statistics.mean(a.transcript.usage.total_tokens for a in usable)
-        wall = statistics.mean(a.transcript.usage.duration_ms for a in usable)
+        scores = [item["score"].value for item in usable if item["score"].value is not None]
+        total = statistics.mean(scores) if scores else 0.0
+        first = usable[0]
+        first_score = first["score"]
+        first_attempt = first["attempt"]
+        correctness = statistics.mean(item["score"].breakdown.correctness_recoverability for item in usable)
+        token_eff = statistics.mean(item["score"].breakdown.token_efficiency for item in usable)
+        wall_eff = statistics.mean(item["score"].breakdown.wallclock for item in usable)
 
+        # The written half. GEPA reads this to decide what to try next.  It is
+        # generated from record-v2, so the feedback and saved artifacts describe
+        # the same classified evidence.
+        for item in measured:
+            oa.log(f'Question: "{example.question}"')
+            oa.log(explain(item["record"]))
         ref = self.reference.get(example.id)
-        token_eff = score.efficiency(ref.tokens if ref else None, tokens)
-        wall_eff = score.efficiency(ref.duration_ms if ref else None, wall)
-        total = score.objective(correct, token_eff, wall_eff)
-
-        # The written half. GEPA reads this to decide what to try next.
-        oa.log(score.feedback(example, attempts))
         if ref:
-            direction = "better" if correct > ref.correctness else (
-                "worse" if correct < ref.correctness else "unchanged")
+            direction = "better" if correctness > ref.correctness else (
+                "worse" if correctness < ref.correctness else "unchanged")
             oa.log(
-                f"Correctness {correct:.2f} vs {ref.correctness:.2f} before "
-                f"the change ({direction})."
+                f"Agenteval correctness/recovery {correctness:.2f} vs "
+                f"{ref.correctness:.2f} before the change ({direction})."
             )
 
         return total, {
-            "Score": f"{total:.4f} (correctness {correct:.2f}, "
+            "Score": f"{total:.4f} (agenteval {correctness:.2f}, "
                      f"tokens {token_eff:.2f}, speed {wall_eff:.2f})",
-            "Commands": len(usable[0].calls),
-            "FailedCommands": len(usable[0].errors),
-            "UsedBulkDownload": usable[0].unnecessary_download,
+            "Commands": len(first_attempt.calls),
+            "ClassifiedFailures": len(first_score.charged),
+            "RecordedNotCharged": len(first_score.recorded_not_charged),
+            "EnvironmentFailures": len(first_score.environment) + (1 if first_score.attempt_environment else 0),
+            "SelfRecoveryRate": first_score.recovery.self_recovery_rate,
+            "UsedBulkDownload": first_attempt.unnecessary_download,
         }
+
+
+def _measure_attempt(attempt, reference: Reading | None) -> dict:
+    record = build_record(attempt)
+    tokens = attempt.transcript.usage.total_tokens
+    wall = attempt.transcript.usage.duration_ms
+    token_eff = agenteval_score.efficiency(reference.tokens if reference else None, tokens)
+    wall_eff = agenteval_score.efficiency(reference.duration_ms if reference else None, wall)
+    scored = agenteval_score.score_record(
+        asdict(record),
+        completed=attempt.completed,
+        token_efficiency=token_eff,
+        wallclock=wall_eff,
+    )
+    return {"attempt": attempt, "record": record, "score": scored}

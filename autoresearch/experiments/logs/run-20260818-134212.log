@@ -1,0 +1,46 @@
+[oa] tool: /Users/priyangapkini/workspace/botmap @ 3009509
+[oa] map data: NOT pinned — the tool uses whatever is latest
+[oa] proposals from: openrouter/anthropic/claude-opus-5
+[oa] lever 'tool' covers 4 file(s):
+[oa]   botmap/cli.py
+[oa]   botmap/filters.py
+[oa]   botmap/geocoding.py
+[oa]   botmap/introspection.py
+[oa] GEPA changes one of them per round, so each change stays attributable
+[oa] warning: ~5 evaluations per file. GEPA spreads its budget evenly, so a wide file list with a small budget finds little. Raise --budget or narrow --files.
+[oa] 25 questions to learn from, 5 held back to check
+[oa] no yardstick for 3009509 yet — measuring the unchanged tool once
+[baseline] 1/30 hospitals-rhode-island
+[baseline] 2/30 bbox-cambridge
+[baseline] 3/30 pharmacies-monaco
+[baseline] 4/30 nearest-pois-harvard
+[baseline] 5/30 motorways-rhode-island
+[baseline] 6/30 asian-restaurants-rollup
+[baseline] 7/30 street-canonical-form
+[baseline] 8/30 tattoo-category-discovery
+[baseline] 9/30 malta-highways-absent-class
+[baseline] 10/30 starbucks-name-vs-brand
+[baseline] 11/30 tall-buildings-cambridge
+[baseline] 12/30 basic-category-rollup
+[baseline] 13/30 unsupported-hours-and-ratings
+[baseline] 14/30 bus-stops-cambridge
+[baseline] 15/30 reykjavik-diacritic
+[baseline] 16/30 williamsburg-which-one
+[baseline] 17/30 brooklyn-every-building
+[baseline] 18/30 residential-share-cambridge
+[baseline] 19/30 clipping-polygon-qgis
+[baseline] 20/30 which-admin-areas
+[baseline] 21/30 pharmacy-near-address
+[baseline] 22/30 hotel-density-two-countries
+[baseline] 23/30 ev-charging-gap
+[baseline] 24/30 hardware-near-bikepaths
+[baseline] 25/30 bus-stops-with-coffee
+[baseline] 26/30 beach-accessibility-malta
+[baseline] 27/30 bike-parking-coverage
+[baseline] 28/30 waterfront-buildings-reykjavik
+[baseline] 29/30 building-parts-detail
+[baseline] 30/30 junction-density
+[oa] starting from the current files (2511 lines in total)
+[oa] budget: 20 evaluations (each is ~2 questions asked)
+GEPA Optimization:   0%|          | 0/20 [00:00<?, ?rollouts/s]/Users/priyangapkini/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

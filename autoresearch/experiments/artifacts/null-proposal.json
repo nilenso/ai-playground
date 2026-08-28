@@ -1,0 +1,8 @@
+[
+  {
+    "title": "Null proposal — measures the harness noise floor",
+    "target": "none",
+    "evidence": "Changes nothing. Two arms of identical code should score identically; whatever delta appears is the harness's own noise, not an effect.",
+    "proposal": "Make no change. The loop runs the batch against an unmodified worktree and compares it to the baseline arm. The result must be INCONCLUSIVE. If it is not, the threshold is below the noise floor and every verdict the loop produces is suspect."
+  }
+]
