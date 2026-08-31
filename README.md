@@ -13,6 +13,7 @@ It is a polyglot monorepo with multiple small services and tools organized in to
 | [fivetwo](./fivetwo) | Long-term memory and project tracking for AI coding agents | TypeScript, Bun, Hono |
 | [lenso2](./lenso2) | Real-time voice/video meeting assistant | TypeScript, Bun |
 | [jadoo](./jadoo) | Slack bot for assorted Nilenso tasks | Mixed |
+| [autoresearch](https://github.com/nilenso/autoresearch) | Agent-friendly CLI evaluation and experiment harness, moved to its own repository | Python, uv |
 
 ## Notes
 
