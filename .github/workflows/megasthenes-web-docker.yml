@@ -5,25 +5,148 @@ on:
     branches: [main]
     paths:
       - "megasthenes-web/**"
+      - ".github/workflows/megasthenes-web-docker.yml"
+  pull_request:
+    paths:
+      - "megasthenes-web/**"
+      - ".github/workflows/megasthenes-web-docker.yml"
+  schedule:
+    - cron: "23 6 * * 1"
   workflow_dispatch:
+    inputs:
+      publish_image:
+        description: Publish the checked image (main only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/megasthenes-web
+  LOCAL_IMAGE: megasthenes-web:checked
+  TRIVY_IMAGE: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
 
 jobs:
-  build-and-push:
+  check-image:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # A digest pin never moves automatically. Require a reviewed base-refresh PR,
+      # rather than quietly continuing to publish an obsolete embedded CA store.
+      - name: Check scheduled Bun base freshness
+        if: github.event_name == 'schedule'
+        run: |
+          pinned=$(sed -n 's/^FROM oven\/bun:\([0-9.]*\)-alpine@.*/\1/p' megasthenes-web/Dockerfile)
+          latest=$(curl --fail --silent --show-error https://api.github.com/repos/oven-sh/bun/releases/latest | jq -r '.tag_name | sub("^bun-v"; "")')
+          if [ "$pinned" != "$latest" ]; then
+            echo "::error::Bun $latest is available (pinned: $pinned). Open a base version/digest refresh PR; see docs/container-security.md."
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Build test stage
+        uses: docker/build-push-action@v6
+        with:
+          context: megasthenes-web
+          target: builder
+          load: true
+          tags: megasthenes-web:tests
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test, lint and verify both clients build
+        run: docker run --rm megasthenes-web:tests sh -ec 'bun test && bun run check && bun run build && bun run build:visualizer'
+
+      - name: Extract application metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=megasthenes-web
+
+      - name: Build final image
+        uses: docker/build-push-action@v6
+        with:
+          context: megasthenes-web
+          load: true
+          tags: ${{ env.LOCAL_IMAGE }}
+          labels: ${{ steps.meta.outputs.labels }}
+          pull: true
+          # Always rerun apk upgrade; a cached RUN would preserve vulnerable OS packages.
+          no-cache: true
+          cache-from: type=gha
+
+      - name: Smoke-test disposable final image without external networking
+        run: |
+          container="megasthenes-web-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$container" >/dev/null' EXIT
+          docker run -d --name "$container" --network none \
+            -e GITHUB_CLIENT_ID=dummy-client -e GITHUB_CLIENT_SECRET=dummy-client-secret \
+            -e JWT_SECRET=dummy-jwt-secret-at-least-32-characters "$LOCAL_IMAGE"
+          docker cp megasthenes-web/scripts/check-container-smoke.ts "$container:/app/scripts/check-container-smoke.ts"
+          docker exec -e CONTAINER_SMOKE_TEST=1 "$container" bun run scripts/check-container-smoke.ts
+          docker exec "$container" litem8 up --db /app/data/megasthenes.db --migrations /app/migrations
+
+      - name: Check final image trust and export the exact image for scanning
+        run: |
+          docker run --rm --entrypoint bun "$LOCAL_IMAGE" run scripts/check-container-trust.ts
+          docker save "$LOCAL_IMAGE" -o "$RUNNER_TEMP/megasthenes-web.tar"
+
+      - name: Scan final image (block high and critical vulnerabilities)
+        run: |
+          mkdir -p "$RUNNER_TEMP/trivy-cache" "$RUNNER_TEMP/scan"
+          docker run --rm \
+            -v "$RUNNER_TEMP/megasthenes-web.tar:/image.tar:ro" \
+            -v "$RUNNER_TEMP/trivy-cache:/root/.cache/trivy" \
+            -v "$RUNNER_TEMP/scan:/scan" \
+            "$TRIVY_IMAGE" image --input /image.tar --scanners vuln \
+            --format json --output /scan/trivy.json
+          jq -e '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL")] | length == 0' "$RUNNER_TEMP/scan/trivy.json"
+
+      - name: Upload vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: megasthenes-web-scan
+          path: ${{ runner.temp }}/scan/trivy.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Pass the checked image to the publish-only job
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_image))
+        uses: actions/upload-artifact@v4
+        with:
+          name: megasthenes-web-image
+          path: ${{ runner.temp }}/megasthenes-web.tar
+          retention-days: 1
+
+  publish:
+    needs: check-image
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_image))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download checked image
+        uses: actions/download-artifact@v4
+        with:
+          name: megasthenes-web-image
+          path: ${{ runner.temp }}/image
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -32,21 +155,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: megasthenes-web
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # Publish the scanned bytes, not a second build against a mutable OS repository.
+      - name: Publish checked image (no deployment)
+        env:
+          TAGS: ${{ needs.check-image.outputs.tags }}
+        run: |
+          docker load -i "$RUNNER_TEMP/image/megasthenes-web.tar"
+          while IFS= read -r tag; do
+            docker tag "$LOCAL_IMAGE" "$tag"
+            docker push "$tag"
+          done <<< "$TAGS"
